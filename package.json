@@ -1,0 +1,29 @@
+{ "name" : "ntk"
+, "author": "Andrey Sidorov <sidorares@yandex.ru>"
+, "description": "Desktop UI tollkit/widgets set"
+, "keywords": ["ui", "gui", "widgets", "desktop"]
+, "homepage": "https://github.com/sidorares/node-ntk"
+, "version" : "0.1.0"
+, "maintainers" :
+  [ { "name": "Andrey Sidorov"
+    , "email": "sidoares@yandex.ru"
+    }
+  ]
+, "bugs" : { "url" : "http://github.com/sidorares/node-ntk/issues" }
+, "licenses" : [ { "type" : "MIT" } ]
+, "repository" : { "type" : "git", "url" : "http://github.com/sidorares/node-ntk.git" }
+
+, "main" : "./lib/index.js"
+, "engines" : { "node" : "*" }
+, "devDependencies": {
+    "mocha": "*",
+    "should": "*"
+  }
+, "dependencies": {
+    "x11": "0.1.2"
+}
+, "scripts": {
+    "test": "mocha",
+    "prepublish" : "npm prune"
+  }
+}
