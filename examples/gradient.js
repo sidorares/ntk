@@ -31,26 +31,13 @@ ntk.createClient(main);
 function main(err, app) {
   var wnd = app.createWindow({title: "Close me!", x: 100, y: 100, width: 300, height: 300});
   wnd.map();
-  var gl = wnd.getContext('opengl');
+  var gl = wnd.getContext('opengl', function(err, gl) {
   gl.Enable(gl.POINT_SMOOTH);
-
-  function drawAndFinish() {
-    draw(gl);
-    gl.SwapBuffers();
-    gl.Finish(drawAndFinish);
-  }
-  drawAndFinish();
-
-  wnd.setMouseHintOnly(true);
   wnd.on('resize', function(ev) {
        width = ev.width;
        height = ev.height;
        draw(gl);
        gl.SwapBuffers();
-  }).on('mousemove', function(ev) {
-     console.log(ev.x, ev.y);
-     wnd.queryPointer(function(err, pt) {
-         console.log(pt);
-     });
+  });
   });
 }
