@@ -3,7 +3,7 @@
 , "description": "Desktop UI tollkit/widgets set"
 , "keywords": ["ui", "gui", "widgets", "desktop"]
 , "homepage": "https://github.com/sidorares/ntk"
-, "version" : "0.1.0"
+, "version" : "0.1.1"
 , "maintainers" :
   [ { "name": "Andrey Sidorov"
     , "email": "sidoares@yandex.ru"
