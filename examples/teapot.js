@@ -18,7 +18,7 @@ function makeList(gl, callback)
               var x = model.vertexNormals[tr*3 + 0];
               var y = model.vertexNormals[tr*3 + 1];
               var z = model.vertexNormals[tr*3 + 2];
-              gl.Normal3v(x, y, z);
+              gl.Normal3f(x, y, z);
               var x = model.vertexPositions[tr*3 + 0];
               var y = model.vertexPositions[tr*3 + 1];
               var z = model.vertexPositions[tr*3 + 2];
