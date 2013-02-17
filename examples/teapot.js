@@ -15,30 +15,14 @@ function makeList(gl, callback)
         for (var i=0; i < model.indices.length; i+=3) {
             for (var t=i; t < i+3; t++) {
               tr = model.indices[t];
-              var x = model.vertexPositions[tr*3 + 0];
-              var y = model.vertexPositions[tr*3 + 1];
-              var z = model.vertexPositions[tr*3 + 2];
-              gl.Vertex3f(x, y, z);
               var x = model.vertexNormals[tr*3 + 0];
               var y = model.vertexNormals[tr*3 + 1];
               var z = model.vertexNormals[tr*3 + 2];
-              gl.Normal3f(x, y, z);
-            }
-        }
-        gl.End();
-        gl.Begin(gl.LINES);
-        for (var i=0; i < model.indices.length; i+=3) {
-            for (var t=i; t < i+3; t++) {
-              tr = model.indices[t];
+              gl.Normal3v(x, y, z);
               var x = model.vertexPositions[tr*3 + 0];
               var y = model.vertexPositions[tr*3 + 1];
               var z = model.vertexPositions[tr*3 + 2];
               gl.Vertex3f(x, y, z);
-              var nx = model.vertexNormals[tr*3 + 0];
-              var ny = model.vertexNormals[tr*3 + 1];
-              var nz = model.vertexNormals[tr*3 + 2];
-              console.log(nx, ny, nz);
-              gl.Vertex3f(x+nx, y+ny, z+nz);
             }
         }
         gl.End();
