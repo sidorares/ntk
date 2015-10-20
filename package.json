@@ -1,29 +1,50 @@
-{ "name" : "ntk"
-, "author": "Andrey Sidorov <sidorares@yandex.ru>"
-, "description": "Desktop UI tollkit/widgets set"
-, "keywords": ["ui", "gui", "widgets", "desktop"]
-, "homepage": "https://github.com/sidorares/ntk"
-, "version" : "0.1.1"
-, "maintainers" :
-  [ { "name": "Andrey Sidorov"
-    , "email": "sidoares@yandex.ru"
+{
+  "name": "ntk",
+  "author": "Andrey Sidorov <sidorares@yandex.ru>",
+  "description": "Desktop UI tollkit/widgets set",
+  "keywords": [
+    "ui",
+    "gui",
+    "widgets",
+    "desktop"
+  ],
+  "homepage": "https://github.com/sidorares/ntk",
+  "version": "1.0.0",
+  "maintainers": [
+    {
+      "name": "Andrey Sidorov",
+      "email": "sidoares@yandex.ru"
     }
-  ]
-, "bugs" : { "url" : "http://github.com/sidorares/ntk/issues" }
-, "licenses" : [ { "type" : "MIT" } ]
-, "repository" : { "type" : "git", "url" : "http://github.com/sidorares/ntk.git" }
-
-, "main" : "./lib/index.js"
-, "engines" : { "node" : "*" }
-, "devDependencies": {
+  ],
+  "bugs": {
+    "url": "http://github.com/sidorares/ntk/issues"
+  },
+  "licenses": [
+    {
+      "type": "MIT"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/sidorares/ntk.git"
+  },
+  "main": "./lib/index.js",
+  "engines": {
+    "node": "*"
+  },
+  "devDependencies": {
     "mocha": "*",
     "should": "*"
-  }
-, "dependencies": {
-    "x11": "0.1.2"
-}
-, "scripts": {
+  },
+  "dependencies": {
+    "es6-promise": "^3.0.2",
+    "freetype2": "^0.3.0",
+    "parse-css": "^0.1.0",
+    "weak": "^1.0.0",
+    "x11": "^1.0.3"
+  },
+  "scripts": {
     "test": "mocha",
-    "prepublish" : "npm prune"
+    "prepublish": "npm prune"
   }
 }
