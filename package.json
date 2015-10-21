@@ -40,6 +40,7 @@
     "es6-promise": "^3.0.2",
     "freetype2": "^0.3.0",
     "parse-css": "^0.1.0",
+    "triangulate-polyline": "^1.0.3",
     "weak": "^1.0.0",
     "x11": "^1.0.3"
   },

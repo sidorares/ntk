@@ -11,7 +11,7 @@ function main(err, app) {
   var ctx1 = wnd.getContext('2d');
 
   var shadow  = ctx.createSolidPicture(0, 0, 0, 0.1);
-  var black  = ctx.createSolidPicture(0, 0, 0, 0.9);
+  var black   = ctx.createSolidPicture(0, 0, 0, 0.9);
 
   /*
   //TODO
@@ -25,14 +25,28 @@ function main(err, app) {
   var glyphs = ctx.loadFont('/Library/Fonts/Times New Roman Italic.ttf', 92, 96, 96);
   ctx.setFont(glyphs);
 
+  var pts = [{x: 120, y: 100}];
+  wnd.on('mousedown', function(ev) {
+    pts.push({ x: ev.x, y: ev.y});
+  });
+
   wnd.on('mousemove', function(ev) {
     console.log(ev.x, ev.y);
+    /*
     ctx.fillRect(0, 0, 1000, 1000, 1, 1, 1, 1)
     ctx.setBackground(shadow);
     ctx.fillText(process.argv[2], ev.x - 2, ev.y + 5);
     ctx.setBackground(black);
     ctx.fillText(process.argv[2], ev.x, ev.y);
-
+    */
+    ctx.setBackground(black);
+    ctx.beginPath();
+    ctx.moveTo(100, 100);
+    pts.forEach(function(pt) {
+       ctx.lineTo(pt.x, pt.y);
+    });
+    ctx.closePath();
+    ctx.fill();
     ctx1.draw(ctx);
   });
 }
