@@ -77,26 +77,24 @@ function draw(gl) {
 }
 
 ntk.createClient(function(err, app) {
-  var wnd = app.createWindow({title: "Close me!", x: 100, y: 100, width: 300, height: 300});
+
+  var wnd = app.createWindow({title: "GL clock", x: 100, y: 100, width: 300, height: 300});
   wnd.map();
-  wnd.getContext('opengl', function(err, gl) {
-    console.log(gl);
-    gl.Enable(gl.POINT_SMOOTH);
+  var gl = wnd.getContext('opengl');
 
-    function drawAndFinish() {
-      draw(gl);
-      gl.SwapBuffers();
-      gl.Finish(drawAndFinish);
-    }
-    drawAndFinish();
+  gl.Enable(gl.POINT_SMOOTH);
 
-    wnd.on('resize', function(ev) {
-       width = ev.width;
-       height = ev.height;
-       draw(gl);
-       gl.SwapBuffers();
-    }).on('mousemove', function(ev) {
-      console.log(ev.x, ev.y);
-    });
+  function drawAndFinish() {
+    draw(gl);
+    gl.SwapBuffers();
+    gl.Finish(drawAndFinish);
+  }
+  drawAndFinish();
+
+  wnd.on('resize', function(ev) {
+     width = ev.width;
+     height = ev.height;
+     draw(gl);
+     gl.SwapBuffers();
   });
 });
