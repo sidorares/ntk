@@ -1,5 +1,7 @@
 var ntk = require('../lib');
 var Pixmap   = require('../lib/pixmap.js');
+//var Picture  = require('../lib/picture.js');
+
 
 ntk.createClient(main);
 
@@ -9,8 +11,22 @@ function main(err, app) {
   var ctx  = pixmap.getContext('2d');
   var ctx1 = wnd.getContext('2d');
 
-  var shadow  = ctx.createSolidPicture(0, 0, 0, 0.1);
-  var black   = ctx.createSolidPicture(0, 0, 0, 0.6);
+  //var shadow  = ctx.createSolidPicture(0, 0, 0, 0.1);
+  //var shadow = ctx.createRadialGradient(400, 200, 400, 200, 800, 100);
+  var shadow = ctx.createConicalGradient(100, 100, 45);
+
+  shadow.addColorStop(0,    [1, 0, 0, 1]);
+//  shadow.addColorStop(0.25, [1, 0, 1, 1]);
+  shadow.addColorStop(0.5,  [1, 1, 0, 1]);
+//  shadow.addColorStop(0.75, [1, 1, 0, 1]);
+  shadow.addColorStop(1,    [1, 0, 0, 1]);
+
+  //var black   = ctx.createSolidPicture1();
+  //var black = ctx.createRadialGradient(0, 0, 10, 10, 0, 400);
+  var black = ctx.createLinearGradient(0, 0, 100, 500);
+  black.addColorStop(0,   [1, 0, 0, 0.1]);
+  black.addColorStop(0.5, [0, 1, 0, 0.5]);
+  black.addColorStop(1,   [0, 0, 1, 0.5]);
 
   //var glyphs = ctx.loadFont('/Library/Fonts/Times New Roman Italic.ttf', 120, 96, 96);
   //ctx.setFont(glyphs);
@@ -20,10 +36,10 @@ function main(err, app) {
     ctx.fillRect(0, 0, 1000, 1000, 1, 1, 1, 1)
     ctx.setBackground(shadow);
     ctx.font = 'bold italic 40mm TimesNewRoman';
-    ctx.fillText(process.argv[2], ev.x - 2, ev.y + 5);
-    ctx.setBackground(black);
-    ctx.font = 'bold italic 50mm CourierNew';
-    ctx.fillText(process.argv[2], ev.x + 100, ev.y);
+    ctx.fillText(process.argv[2], ev.x - 2, ev.y);
+    //ctx.setBackground(black);
+    //ctx.font = 'bold italic 40mm CourierNew';
+    //ctx.fillText(process.argv[2], ev.x - 2, ev.y);
     ctx1.draw(ctx);
   });
 }
