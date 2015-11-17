@@ -39,7 +39,8 @@
   "dependencies": {
     "es6-promise": "^3.0.2",
     "freetype2": "^0.3.0",
-    "parse-css": "^0.1.0",
+    "keysym": "0.0.6",
+    "parse-color": "^1.0.0",
     "weak": "^1.0.0",
     "x11": "^2.0.1"
   },
