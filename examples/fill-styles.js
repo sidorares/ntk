@@ -11,7 +11,7 @@ ntk.createClient( (err, app) => {
 
   wnd.on('expose', (ev) => {
     ctx.fillRect(ev.x, ev.y, ev.width, ev.height, 1, 0.5, 0.5, 1);
-    ctx.font = '42pt DroidSansHebrew';
+    ctx.font = "12px 'Times New Roman'";
     var w = ctx.measureText(text).width;
     ctx.fillStyle = ctx.createLinearGradient(0, 0, w, 0)
       .addColorStop(0, 'red')
@@ -24,7 +24,7 @@ ntk.createClient( (err, app) => {
       text = text.slice(0, -1);
     else if (ev.codepoint)
       text = text + String.fromCodePoint(ev.codepoint);
-    
+
     wnd.emit('expose', { x: 0, y: 0, width: 1000, height: 1000});
   });
   wnd.on('mousemove', function(ev) {
