@@ -45,6 +45,33 @@ ntk.createClient( (err, app) => {
 });
 ```
 
+`ctx.drawImage()` also accepts [node-canvas](https://github.com/Automattic/node-canvas) as a source, for images with lot's of drawing calls it might be more efficient to perform all drawing locally and transfer pixels to server when ready:
+
+```js
+var ntk = require('ntk');
+var Canvas = require('canvas');
+
+var canvas = new Canvas(800, 800);
+var canvasCtx = canvas.getContext('2d');
+
+function drawSomething(ctx) {
+  // ...
+}
+
+ntk.createClient( (err, app) => {
+  var wnd = app.createWindow({ width: 800, height: 800});
+
+  var ctx = wnd.getContext('2d');
+
+  setInterval(function() {
+    drawSomething(canvasCtx);
+    ctx.drawImage(canvas);
+  }, 20);
+
+  wnd.map();
+});
+```
+
 ## 3d graphics
 
 At the moment only indirect GLX is supported with most of OpenGL 1.4 api implemented
