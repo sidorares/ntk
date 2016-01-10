@@ -42,6 +42,7 @@
     "es6-promise": "^3.0.2",
     "font-manager": "^0.2.0",
     "freetype2": "^0.3.0",
+    "gaussian-convolution-kernel": "^1.0.0",
     "keysym": "0.0.6",
     "parse-color": "^1.0.0",
     "pnltri": "^2.1.1",
