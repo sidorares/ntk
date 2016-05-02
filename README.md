@@ -74,7 +74,7 @@ ntk.createClient( (err, app) => {
 
 ## 3d graphics
 
-At the moment only indirect GLX is supported with most of OpenGL 1.4 api implemented
+At the moment only indirect GLX is supported with most of OpenGL 1.4 api implemented. Note that on some systems indirect GLX might be disabled by default, [you'll need to enable it for gl to work](https://github.com/sidorares/node-x11/issues/117#issuecomment-214762185).
 
 ```js
 var ntk = require('ntk');
