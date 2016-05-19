@@ -117,20 +117,19 @@ function draw(gl) {
     gl.SwapBuffers();
 }
 
-var lena = require('lena');
+var texture = require('baboon-image');
 
 ntk.createClient(function(err, app) {
 
   var wnd = app.createWindow({width: width, height: height});
   wnd.map();
-  var visual = parseInt(require('child_process').execSync('glxinfo -i -b').toString());
-  var gl = wnd.getContext('opengl', visual);
+  var gl = wnd.getContext('opengl');
   gl.Enable(gl.TEXTURE_2D);
   gl.GenTextures(1, function(err, textures) {
     gl.BindTexture(gl.TEXTURE_2D, textures[0]);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, 512, 512, 0, gl.RGB, gl.UNSIGNED_BYTE, lena.data);
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, 512, 512, 0, gl.RGB, gl.UNSIGNED_BYTE, texture.data);
     draw(gl);
 
     wnd.on('resize', function(ev) {
