@@ -10,12 +10,14 @@ ntk.createClient( (err, app) => {
   var lasty = 0;
 
   wnd.on('expose', (ev) => {
+    ctx.fillStyle = 'white';
     ctx.fillRect(ev.x, ev.y, ev.width, ev.height, 1, 0.5, 0.5, 1);
-    ctx.font = "12px 'Times New Roman'";
+    ctx.font = "190px 'Times New Roman'";
     var w = ctx.measureText(text).width;
-    ctx.fillStyle = ctx.createLinearGradient(0, 0, w, 0)
+    ctx.fillStyle = ctx.createLinearGradient(0, 0, w, 100)
       .addColorStop(0, 'red')
-      .addColorStop(1, 'blue');
+      .addColorStop(1, 'blue'); 
+    ctx.fillStyle = 'rgba(200, 200, 180, 0.7)';
     ctx.fillText(text, 750 - w, 250);
   });
   var shift = 0;
@@ -34,3 +36,4 @@ ntk.createClient( (err, app) => {
   });
   wnd.map();
 });
+

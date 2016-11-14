@@ -77,7 +77,7 @@ function draw(gl, list) {
 ntk.createClient(function(err, app) {
   var wnd = app.createWindow({title: "Close me!", x: 100, y: 100, width: 300, height: 300});
   wnd.map();
-  var gl = wnd.getContext('opengl', visual);
+  var gl = wnd.getContext('opengl');
   gl.Enable(gl.POINT_SMOOTH);
   makeList(gl, function(list) {
     draw(gl, list);

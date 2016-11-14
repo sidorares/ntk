@@ -33,13 +33,12 @@ function main(err, app) {
 
 
   wnd.on('mousemove', function(ev) {
+    console.log(ev.x, ev.y);
+    ctx.fillStyle = 'white'
     ctx.fillRect(0, 0, 1000, 1000, 1, 1, 1, 1)
-    ctx.setBackground(shadow);
-    ctx.font = 'bold italic 40mm TimesNewRoman';
-    ctx.fillText(process.argv[2], ev.x - 2, ev.y);
-    //ctx.setBackground(black);
-    //ctx.font = 'bold italic 40mm CourierNew';
-    //ctx.fillText(process.argv[2], ev.x - 2, ev.y);
-    ctx1.draw(ctx);
+    ctx.fillStyle = 'black'
+    ctx.font = `bold italic 40pt "${process.argv[2]}"`;
+    ctx.fillText(process.argv[3], ev.x - 2, ev.y);
+    ctx1.drawImage(ctx, 0, 0);
   });
 }
