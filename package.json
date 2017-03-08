@@ -47,7 +47,8 @@
     "parse-color": "^1.0.0",
     "pnltri": "^2.1.1",
     "weak": "^1.0.0",
-    "x11": "^2.0.2"
+    "x11": "^2.0.2",
+    "extrude-polyline": "^1.0.0"
   },
   "scripts": {
     "test": "mocha",
