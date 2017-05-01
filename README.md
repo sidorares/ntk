@@ -1,6 +1,8 @@
 ntk
 ===
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/sidorares/ntk.svg)](https://greenkeeper.io/)
+
 node.js desktop UI toolkit
 
 A set of wrappers around low level [node-x11](https://github.com/sidorares/node-x11) module to simplify X Window UI progamming - windows creation, event handling, 2d/3d graphics etc.
