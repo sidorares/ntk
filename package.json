@@ -40,7 +40,7 @@
     "bezier": "^0.1.0",
     "canvas-fontstyle": "^1.0.1",
     "es6-promise": "^3.0.2",
-    "font-manager": "^0.2.0",
+    "font-manager": "^0.3.0",
     "freetype2": "^0.3.0",
     "gaussian-convolution-kernel": "^1.0.0",
     "keysym": "0.0.6",
