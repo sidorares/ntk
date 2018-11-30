@@ -46,8 +46,10 @@
     "keysym": "0.0.6",
     "parse-color": "^1.0.0",
     "pnltri": "^2.1.1",
+    "rbush": "^2.0.2",
     "weak-napi": "^1.0.2",
-    "x11": "^2.3.0"
+    "x11": "^2.3.0",
+    "yoga-layout-prebuilt": "^1.9.3"
   },
   "scripts": {
     "test": "mocha",
