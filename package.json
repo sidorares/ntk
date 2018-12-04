@@ -41,6 +41,7 @@
     "canvas-fontstyle": "^1.0.1",
     "extrude-polyline": "^1.0.6",
     "font-scanner": "^0.1.1",
+    "fontkit": "^1.7.7",
     "freetype2": "^0.3.1",
     "gaussian-convolution-kernel": "^1.0.0",
     "keysym": "0.0.6",
@@ -50,6 +51,7 @@
     "rbush": "^2.0.2",
     "weak-napi": "^1.0.2",
     "x11": "^2.3.0",
+    "x11-prop": "^0.4.3",
     "yoga-layout-prebuilt": "^1.9.3"
   },
   "scripts": {
