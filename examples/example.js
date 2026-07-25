@@ -1,14 +1,14 @@
-var ntk = require('../lib');
+import { createClient } from '../lib/index.js';
 
-ntk.createClient(main);
+const app = await createClient();
 
-function main(err, app) {
-  var mainwnd = app.createWindow({title: "Close me!"})
-   .on('mouseout', function(ev) { console.log('Out'); })
-   .on('mouseover', function(ev) { console.log('In'); })
-   .on('mousedown', function(ev) {
-       ev.window.unmap();
-       setTimeout(function() { ev.window.map(); }, 1000);
-    })
-   .map();
-}
+const wnd = app.createWindow({ title: 'Click me!', x: 100, y: 100, width: 300, height: 300 });
+wnd
+  .on('mouseover', () => console.log('In'))
+  .on('mouseout', () => console.log('Out'))
+  .on('mousedown', (ev) => {
+    wnd.setTitle(`click: ${ev.x},${ev.y}`);
+    wnd.unmap();
+    setTimeout(() => wnd.map(), 1000);
+  })
+  .map();

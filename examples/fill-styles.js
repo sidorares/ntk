@@ -1,39 +1,30 @@
-var ntk = require('../lib');
+// usage: node fill-styles.js "DejaVu Sans" "Hello"
+import { createClient } from '../lib/index.js';
 
-ntk.createClient( (err, app) => {
-  var wnd = app.createWindow({ width: 800, height: 600});
-  var ctx = wnd.getContext('2d');
+const app = await createClient();
+const wnd = app.createWindow({}).map();
+const pixmap = wnd.createPixmap({ width: 1800, height: 1800 });
+const ctx = pixmap.getContext('2d');
+const wndCtx = wnd.getContext('2d');
 
-  var text = 'This is Test test';
+const conical = ctx.createConicalGradient(100, 100, 45);
+conical.addColorStop(0, [1, 0, 0, 1]);
+conical.addColorStop(0.5, [1, 1, 0, 1]);
+conical.addColorStop(1, [1, 0, 0, 1]);
 
-  var lastx = 0;
-  var lasty = 0;
+const linear = ctx.createLinearGradient(0, 0, 100, 500);
+linear.addColorStop(0, [1, 0, 0, 0.1]);
+linear.addColorStop(0.5, [0, 1, 0, 0.5]);
+linear.addColorStop(1, [0, 0, 1, 0.5]);
 
-  wnd.on('expose', (ev) => {
-    ctx.fillStyle = 'white';
-    ctx.fillRect(ev.x, ev.y, ev.width, ev.height, 1, 0.5, 0.5, 1);
-    ctx.font = "50px 'Times New Roman'";
-    var w = ctx.measureText(text).width;
-    ctx.fillStyle = ctx.createLinearGradient(0, 0, w, 100)
-      .addColorStop(0, 'red')
-      .addColorStop(1, 'blue');
-    ctx.fillStyle = 'red'; //'rgba(200, 200, 180, 0.7)';
-    ctx.fillText(text, 100, 100);// 750 - w, 250);
-  });
-  var shift = 0;
-  wnd.on('keydown', function(ev) {
-    if (ev.codepoint == 8)
-      text = text.slice(0, -1);
-    else if (ev.codepoint)
-      text = text + String.fromCodePoint(ev.codepoint);
+const family = process.argv[2] || 'sans-serif';
+const message = process.argv[3] || 'ntk';
 
-    wnd.emit('expose', { x: 0, y: 0, width: 1000, height: 1000});
-  });
-  wnd.on('mousemove', function(ev) {
-    lastx = ev.x;
-    lasty = ev.y;
-    wnd.emit('expose', { x: 0, y: 0, width: 1000, height: 1000});
-  });
-  wnd.map();
+wnd.on('mousemove', (ev) => {
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 1000, 1000);
+  ctx.fillStyle = 'black';
+  ctx.font = `bold italic 40pt "${family}"`;
+  ctx.fillText(message, ev.x - 2, ev.y);
+  wndCtx.drawImage(ctx, 0, 0);
 });
-

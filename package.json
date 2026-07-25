@@ -1,56 +1,47 @@
 {
   "name": "ntk",
+  "version": "3.0.0",
+  "description": "Desktop UI toolkit for X11 with canvas-like 2d and OpenGL rendering",
   "author": "Andrey Sidorov <sidorares@yandex.ru>",
-  "description": "Desktop UI tollkit/widgets set",
+  "license": "MIT",
   "keywords": [
     "ui",
     "gui",
     "widgets",
-    "desktop"
+    "desktop",
+    "x11",
+    "canvas",
+    "xrender"
   ],
   "homepage": "https://github.com/sidorares/ntk",
-  "version": "2.1.2",
-  "maintainers": [
-    {
-      "name": "Andrey Sidorov",
-      "email": "sidoares@yandex.ru"
-    }
-  ],
   "bugs": {
-    "url": "http://github.com/sidorares/ntk/issues"
+    "url": "https://github.com/sidorares/ntk/issues"
   },
-  "licenses": [
-    {
-      "type": "MIT"
-    }
-  ],
   "repository": {
     "type": "git",
-    "url": "http://github.com/sidorares/ntk.git"
+    "url": "git+https://github.com/sidorares/ntk.git"
   },
+  "type": "module",
   "main": "./lib/index.js",
-  "engines": {
-    "node": "*"
+  "exports": {
+    ".": "./lib/index.js"
   },
-  "devDependencies": {
-    "mocha": "*",
-    "should": "*"
+  "files": [
+    "lib"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
   },
   "dependencies": {
-    "bezier": "^0.1.0",
     "canvas-fontstyle": "^1.0.1",
     "extrude-polyline": "^1.0.6",
-    "font-scanner": "^0.1.1",
-    "freetype2": "^0.3.1",
-    "gaussian-convolution-kernel": "^1.0.0",
     "keysym": "0.0.6",
+    "opentype.js": "^2.0.0",
     "parse-color": "^1.0.0",
     "pnltri": "^2.1.1",
-    "weak-napi": "^1.0.2",
     "x11": "^2.3.0"
   },
   "scripts": {
-    "test": "mocha",
-    "prepublish": "npm prune"
+    "test": "node --test"
   }
 }
