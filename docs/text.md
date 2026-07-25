@@ -216,8 +216,9 @@ wnd.map(); // renders on expose, re-wraps on resize
 
 Parsing is CommonMark + GFM via [marked](https://marked.js.org). Rendered
 blocks: headings, paragraphs, fenced code, blockquotes, nested
-ordered/unordered lists, `---` rules (tables fall back to their monospaced
-source for now). Inlines: `**strong**`, `*em*`, `` `code` `` (with
+ordered/unordered lists, `---` rules, and GFM tables (natural column
+widths, per-column `:--`/`:-:`/`--:` alignment, shrink-and-wrap when the
+table is wider than the window). Inlines: `**strong**`, `*em*`, `` `code` `` (with
 background), `[links](url)` (colored + underlined); images render as links
 to their source.
 All layout — wrapping, font selection per style, spacing — runs through

@@ -41,6 +41,14 @@ Fences tagged \`math\`/\`latex\` render with KaTeX:
 \\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}
 \`\`\`
 
+## Tables
+
+| Stage | What happens | Cost |
+|:------|:------------:|-----:|
+| shape | \`GSUB\`/\`GPOS\`, kerning | *cached* |
+| wrap | UAX#14 breaks | per width |
+| draw | CompositeGlyphs | **~1 byte/glyph** |
+
 ## Things that just work
 
 - Kerning pairs like AV and _To_ — compare with your browser

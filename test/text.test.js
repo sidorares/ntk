@@ -8,6 +8,7 @@ import { encodeGlyphItems } from '../lib/text/glyphs.js';
 import { TextLayout } from '../lib/text/layout.js';
 import { reorderRuns, shapeText } from '../lib/text/shape.js';
 import { parseInline, parseMarkdown } from '../lib/widgets/markdown.js';
+import MarkdownView from '../lib/widgets/markdownview.js';
 
 let hasFontconfig = true;
 try {
@@ -252,6 +253,19 @@ test('parseMarkdown: nested lists', () => {
   assert.equal(nested.items.length, 2);
 });
 
+test('parseMarkdown: tables', () => {
+  const ast = parseMarkdown('| Name | Score |\n|:-----|------:|\n| **a** | 1 |\n| b | 2 |');
+  assert.equal(ast.length, 1);
+  const table = ast[0];
+  assert.equal(table.type, 'table');
+  assert.deepEqual(table.align, ['left', 'right']);
+  assert.equal(table.header.length, 2);
+  assert.equal(table.header[0][0].text, 'Name');
+  assert.equal(table.rows.length, 2);
+  assert.equal(table.rows[0][0][0].type, 'strong');
+  assert.equal(table.rows[1][1][0].text, '2');
+});
+
 test('parseInline: emphasis, code, links, escapes', () => {
   const nodes = parseInline('a **b** *c* `d` [e](f) \\*g\\*');
   const types = nodes.map((n) => n.type);
@@ -283,4 +297,37 @@ test('parseMarkdown: snake_case survives inside styled and plain contexts', () =
   const para = ast[0];
   const flat = JSON.stringify(para);
   assert.ok(!flat.includes('"em"'), `no emphasis nodes expected: ${flat}`);
+});
+
+test('MarkdownView: table layout places cells and grid', needsFonts, () => {
+  const fonts = new FontManager();
+  const view = new MarkdownView(null, { fonts });
+  view.setMarkdown('| Name | Score |\n|:-----|------:|\n| alpha | 1 |\n| beta | 22 |');
+  const height = view.layout(400);
+  assert.ok(height > 0);
+  const items = view._items;
+  const texts = items.filter((i) => i.kind === 'text');
+  const rects = items.filter((i) => i.kind === 'rect');
+  assert.equal(texts.length, 6, '2 cols x 3 rows of cell text');
+  // header background + 4 horizontal + 3 vertical grid lines
+  assert.equal(rects.length, 8);
+  // header cells are bold
+  const header = texts[0];
+  assert.equal(header.layout.lines[0].runs[0].span.weight, 700);
+  // right-aligned numeric column: the two body cells share a right edge
+  const right = (i) => i.x + i.layout.lines[0].x + i.layout.lines[0].width;
+  assert.ok(Math.abs(right(texts[3]) - right(texts[5])) < 0.5, 'right-aligned column');
+});
+
+test('MarkdownView: wide table shrinks columns to the container', needsFonts, () => {
+  const fonts = new FontManager();
+  const view = new MarkdownView(null, { fonts });
+  const long = 'a very long cell that will definitely not fit unwrapped in a narrow container';
+  view.setMarkdown(`| One | Two |\n|-----|-----|\n| ${long} | ${long} |`);
+  view.layout(300);
+  const gridTop = view._items.filter((i) => i.kind === 'rect' && i.height === 1)[0];
+  assert.ok(gridTop.width <= 300 - 16 * 2 + 1, `table width ${gridTop.width} fits container`);
+  // cells wrapped onto multiple lines
+  const body = view._items.filter((i) => i.kind === 'text');
+  assert.ok(body.some((i) => i.layout.lines.length > 1), 'long cells wrap');
 });
