@@ -36,6 +36,10 @@ in the meantime. For long-running apps, destroy what you create — or let
 Objects wrapping ids ntk did not create (`new Window(app, { id })`,
 `new Pixmap(app, { id })`) are not owned and are never freed by ntk.
 
+Cleanup — explicit or GC-driven — becomes a silent no-op once the connection
+is closing or closed: the X server frees all of a client's resources on
+disconnect, so late finalizers after `app.close()` have nothing left to do.
+
 ## The connection keeps the process alive
 
 An open X connection holds the node event loop open. Call
