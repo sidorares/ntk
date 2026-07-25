@@ -17,7 +17,9 @@ matching file here (see AGENTS.md).
 - [Window](window.md) — window creation, properties, methods and events
 - [Pixmap](pixmap.md) — offscreen drawables
 - [2d rendering context](context-2d.md) — canvas-like drawing API over XRender
-- [Fonts and text](fonts.md) — font lookup, loading, rasterization pipeline
+- [Fonts](fonts.md) — font lookup, loading, rasterization pipeline
+- [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout, MarkdownView,
+  wire-efficiency design
 - [OpenGL rendering context](context-opengl.md) — indirect GLX / OpenGL 1.4 API
 - [Raw X11 rendering context](context-x11.md) — core X drawing requests
 - [Resource management](resource-management.md) — `using` / `Symbol.dispose`, GC-based cleanup

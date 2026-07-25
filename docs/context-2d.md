@@ -6,6 +6,12 @@ API. It is backed by the XRender extension: fills, gradients, composition and
 glyph drawing are executed **on the X server**, so pixel data does not travel
 over the connection for most operations.
 
+On windows, drawing goes into an offscreen backing pixmap and is presented
+in single blits (double buffering — flicker-free by default; see
+[window.md](window.md)). On pixmaps the context draws directly.
+`getImageData` reads the backing pixmap on double-buffered windows, so it is
+valid even where the window is occluded.
+
 ```js
 const ctx = wnd.getContext('2d');
 ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
@@ -64,10 +70,23 @@ pictures on GC.
 
 ## Text
 
-- `fillText(text, x, y)` — draws with the current `font` and `fillStyle`
-- `measureText(text)` → `{ width, height }`
-- `loadFont(path, size)` → glyphset — load a `.ttf`/`.otf` directly, bypassing
-  fontconfig
-- `setFont(glyphset)` — use a glyphset returned by `loadFont`
+Text is fully shaped: OpenType kerning and ligatures, contextual forms for
+complex scripts (e.g. Arabic), bidi reordering and automatic font fallback
+all apply. Glyphs upload to the server once per (face, size); drawing costs
+about a byte per glyph afterwards.
 
-See [fonts.md](fonts.md) for how the text pipeline works.
+- `fillText(text, x, y)` — draws with the current `font` and `fillStyle`,
+  honoring `textAlign` / `textBaseline`
+- `measureText(text)` → canvas-style TextMetrics: `width`,
+  `actualBoundingBox{Left,Right,Ascent,Descent}`,
+  `fontBoundingBox{Ascent,Descent}`
+- `textAlign` — `'start' | 'end' | 'left' | 'right' | 'center'`
+- `textBaseline` — `'alphabetic' | 'top' | 'hanging' | 'middle' | 'bottom' |
+  'ideographic'`
+- `layoutText(content, options)` → `TextLayout` — ntk extension: wrap text
+  (or styled spans) to a target width without drawing, inspect lines and
+  metrics, then `layout.draw(ctx, x, y)`
+
+Custom font files: `app.fonts.load(path)`, then use the family name in
+`ctx.font`. See [text.md](text.md) for the full text API and
+[fonts.md](fonts.md) for font lookup.

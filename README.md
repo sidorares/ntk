@@ -37,9 +37,14 @@ Each window (or pixmap) can create a 2d canvas implementing the HTML
 (some features not yet supported) via the
 [XRender extension](https://www.x.org/releases/X11R7.7/doc/renderproto/renderproto.txt).
 Most operations are performed on the X server side (image composition,
-scaling, blur, text composition, gradients etc). Text is rasterized in pure
-JS (opentype.js + a built-in scanline rasterizer) and cached server-side as
-XRender glyphs; font names resolve through fontconfig (`fc-match`).
+scaling, blur, text composition, gradients etc). Text is fully shaped in
+pure JS — OpenType kerning/ligatures and complex scripts (fontkit), bidi
+(bidi-js), automatic font fallback — rasterized by a built-in scanline
+rasterizer and cached server-side as XRender glyphs, so drawing a line of
+text costs about a byte per glyph on the wire. Font names resolve through
+fontconfig (`fc-match`). A `TextLayout` engine wraps styled text to a target
+width, and a `MarkdownView` widget renders markdown on top of it — see
+[docs/text.md](docs/text.md).
 
 ```js
 import { createClient } from 'ntk';
