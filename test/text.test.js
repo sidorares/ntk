@@ -267,3 +267,20 @@ test('parseMarkdown: soft-wrapped paragraph lines join', () => {
   assert.equal(ast.length, 1);
   assert.equal(ast[0].children[0].text, 'line one line two');
 });
+
+test('parseInline: no intra-word underscore emphasis (WM_DELETE_WINDOW)', () => {
+  const nodes = parseInline('set WM_DELETE_WINDOW and _real emphasis_');
+  assert.deepEqual(
+    nodes.map((n) => n.type),
+    ['text', 'em']
+  );
+  assert.equal(nodes[0].text, 'set WM_DELETE_WINDOW and ');
+  assert.equal(nodes[1].children[0].text, 'real emphasis');
+});
+
+test('parseMarkdown: snake_case survives inside styled and plain contexts', () => {
+  const ast = parseMarkdown('`code_name` plus **bold_name_here** plus plain_name_x');
+  const para = ast[0];
+  const flat = JSON.stringify(para);
+  assert.ok(!flat.includes('"em"'), `no emphasis nodes expected: ${flat}`);
+});

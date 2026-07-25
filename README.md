@@ -42,9 +42,12 @@ pure JS — OpenType kerning/ligatures and complex scripts (fontkit), bidi
 (bidi-js), automatic font fallback — rasterized by a built-in scanline
 rasterizer and cached server-side as XRender glyphs, so drawing a line of
 text costs about a byte per glyph on the wire. Font names resolve through
-fontconfig (`fc-match`). A `TextLayout` engine wraps styled text to a target
-width, and a `MarkdownView` widget renders markdown on top of it — see
-[docs/text.md](docs/text.md).
+fontconfig (`fc-match`). Very large and continuously animated sizes render
+as server-side trapezoids instead of cached bitmaps. A `TextLayout` engine
+wraps styled text to a target width, a `MarkdownView` widget renders
+markdown (with syntax-highlighted code fences) on top of it, and a
+KaTeX-backed `TexView` renders TeX math — see [docs/text.md](docs/text.md)
+and [docs/tex.md](docs/tex.md).
 
 ```js
 import { createClient } from 'ntk';

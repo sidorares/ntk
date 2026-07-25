@@ -73,7 +73,11 @@ pictures on GC.
 Text is fully shaped: OpenType kerning and ligatures, contextual forms for
 complex scripts (e.g. Arabic), bidi reordering and automatic font fallback
 all apply. Glyphs upload to the server once per (face, size); drawing costs
-about a byte per glyph afterwards.
+about a byte per glyph afterwards. Very large (>256px by default),
+fractional or frame-to-frame-varying sizes render as trapezoids instead —
+no per-size server cache — see
+[text.md](text.md#the-vector-trapezoid-text-path); tune via
+`app.textPolicy`.
 
 - `fillText(text, x, y)` — draws with the current `font` and `fillStyle`,
   honoring `textAlign` / `textBaseline`
