@@ -15,11 +15,14 @@ The pipeline is pure JavaScript — no compiled modules:
    postscript name).
 3. **Rasterization** (`lib/rasterize.js`): glyph outlines are rasterized to
    8-bit alpha bitmaps by a small built-in scanline rasterizer (non-zero
-   winding, 4x4 supersampled antialiasing).
+   winding, 4x4 supersampled antialiasing; 2x2 above 96px where the extra
+   samples are invisible).
 4. **Upload**: bitmaps go to the X server as XRender glyphs (`AddGlyphs`) —
    once per glyph per (face, size), shared across all windows of the
    connection. Drawing afterwards is a cheap server-side `CompositeGlyphs`
-   (~1 byte per glyph).
+   (~1 byte per glyph). Very large or animated sizes skip this cache and
+   render as trapezoids instead — see
+   [text.md](text.md#the-vector-trapezoid-text-path).
 
 Glyphs are rasterized and uploaded **lazily**, as text is drawn — never a
 whole font up front.

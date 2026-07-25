@@ -41,14 +41,18 @@ lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
 lib/glyphset.js            XRender GlyphSet wrapper
 lib/rasterize.js           pure-JS glyph outline -> a8 bitmap rasterizer
+lib/trapezoid.js           polygon -> XRender trapezoids (vector text path)
 lib/fontconfig.js          font matching + fallback chain via fc-match CLI
 lib/text/font.js           Font: fontkit face — metrics, coverage, shaping
 lib/text/fontmanager.js    FontManager (app.fonts): match/load/fallback
 lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
 lib/text/layout.js         TextLayout: UAX#14 wrapping, alignment, spans
-lib/text/glyphs.js         glyph pages (compact ids) + CompositeGlyphs encoder
-lib/widgets/markdown.js    dependency-free markdown parser
-lib/widgets/markdownview.js  MarkdownView widget
+lib/text/glyphs.js         glyph pages (compact ids) + CompositeGlyphs encoder,
+                           bitmap/vector routing policy, glyph-page LRU
+lib/widgets/markdown.js    markdown parsing (adapter over marked)
+lib/widgets/markdownview.js  MarkdownView widget (highlighted + math fences)
+lib/widgets/highlight.js   fence syntax highlighting (adapter over highlight.js)
+lib/widgets/tex.js         KaTeX-based TexView widget / layoutTex
 test/                      node:test suite (see below)
 docs/                      public API documentation
 examples/                  runnable examples (own package.json, ESM)
@@ -60,12 +64,18 @@ their side effects.
 
 ## Hard constraints
 
-- **Pure-JS dependencies only.** No node-gyp/native modules. If a capability
-  seems to need a compiled module, find a JS implementation, shell out to a
-  universally-available CLI (like `fc-match`), or implement it in `lib/`
-  (like `rasterize.js`). This is why weak-napi (→ `FinalizationRegistry`),
-  freetype2 (→ fontkit + own rasterizer), harfbuzz (→ fontkit shaping),
-  fribidi (→ bidi-js) and font-scanner (→ fc-match) were removed/avoided.
+- **Dependencies:** use external dependencies if they are maintained, easy
+  to install, portable and don't add too much weight. Native (node-gyp)
+  modules fail the easy-to-install/portable bar — for those capabilities
+  find a JS implementation, shell out to a universally-available CLI (like
+  `fc-match`), or implement it in `lib/` (like `rasterize.js`); this is why
+  weak-napi (→ `FinalizationRegistry`), freetype2 (→ fontkit + own
+  rasterizer), harfbuzz (→ fontkit shaping), fribidi (→ bidi-js) and
+  font-scanner (→ fc-match) were removed/avoided. The flip side: don't
+  hand-roll what a maintained library does better — the original in-repo
+  markdown parser and syntax highlighter were subtly wrong (e.g. intra-word
+  `_` emphasis) and are now thin adapters over `marked` and `highlight.js`,
+  the same way math rendering uses `katex`.
 - **ESM**, Node >= 20.19. No TypeScript for now (a possible later migration —
   keep JSDoc accurate instead).
 - Server-side resources (windows, pixmaps, pictures, glyphsets) must offer

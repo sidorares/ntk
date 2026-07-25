@@ -12,7 +12,7 @@ lib/text/fontmanager.js  FontManager (`app.fonts`): matching, custom fonts,
 lib/text/shape.js        bidi (UAX#9) → font itemization → OpenType shaping
 lib/text/layout.js       TextLayout: UAX#14 line breaking, wrapping, alignment
 lib/text/glyphs.js       server glyph cache + CompositeGlyphs encoder
-lib/widgets/markdown.js  markdown parser (no dependencies)
+lib/widgets/markdown.js  markdown parsing (adapter over `marked`)
 lib/widgets/markdownview.js  MarkdownView widget
 ```
 
@@ -53,9 +53,14 @@ layout.draw(ctx, 16, 60);
    scripts (Arabic joining etc.). RTL runs come back in visual order.
 5. **Rasterize + upload** — new glyphs are rasterized by the built-in
    scanline rasterizer (`lib/rasterize.js`) and uploaded once per
-   (face, size) with a single batched `AddGlyphs` request.
+   (face, size) with a single batched `AddGlyphs` request. (Above 96px the
+   supersampling drops from 4×4 to 2×2 — indistinguishable at that size and
+   4× cheaper.)
 6. **Composite** — drawing sends one `CompositeGlyphs` request; the server
    does all the actual blending.
+
+Very large or continuously animated sizes take a different route — see
+[the vector text path](#the-vector-trapezoid-text-path) below.
 
 ## Wire efficiency
 
@@ -73,13 +78,54 @@ XRender glyph ids are client-assigned, and ntk exploits that:
 - Mixed faces/sizes in one draw (font fallback, styled spans) use in-request
   **glyphset switch** entries (12 bytes) instead of separate requests.
 - Uploaded bitmaps are cached per app connection (`app._glyphPages`) and
-  shared by every window and pixmap; re-drawing text costs no uploads.
+  shared by every window and pixmap; re-drawing text costs no uploads. The
+  cache is LRU-bounded (default 8MB of uploaded bitmap bytes): when the
+  budget is exceeded, the least-recently-drawn (face, size) page is freed
+  server-side with `FreeGlyphSet`, so transient sizes don't accumulate.
 - `TextLayout` memoizes shaping per word, so re-wrapping on window resize
   re-uses shaped glyphs and sends only composition requests.
 
 For scale: a 60-character line of 16px Latin text is ~70 bytes of
 `CompositeGlyphs` after warm-up. The one-time glyph upload for a full
 Latin face at 16px is a few kilobytes.
+
+## The vector (trapezoid) text path
+
+Bitmap glyph uploads scale with size² while outline complexity scales with
+roughly √size: measured on a serif face, the wire-size crossover is at
+≈96–128px for Latin and ≈130–190px for dense CJK, and at 256px a full Latin
+set costs ~2.4MB of server-side cache per face. Uploads amortize for text
+that is drawn repeatedly — but never for *continuously animated* sizes
+(zoom/pinch), where every frame is a new (face, size) page.
+
+So `drawGlyphRuns` routes each run (issue #45):
+
+- **size ≤ 128px** — cached bitmap glyphs, unconditionally (status quo);
+- **size > 256px** — trapezoids by default: the glyph outline is flattened
+  at the exact size, decomposed into trapezoids (`lib/trapezoid.js`) and
+  rendered server-side with one batched `AddTraps` + `Composite` through a
+  shared scratch a8 mask per draw. Nothing is cached server-side;
+- **in between** — bitmaps, unless the size is fractional or a small
+  per-face ring of recently drawn sizes shows no reuse (an animation in
+  flight). Both signals route to vector, and an animation that settles
+  flips back to bitmaps on the next frame.
+
+Vector-path positioning is *not* rounded to whole pixels, so fractional
+sizes and fractional pen positions animate smoothly (the bitmap path rounds
+both, which is correct for static UI text).
+
+The thresholds and the cache budget are per-app configurable:
+
+```js
+app.textPolicy = {
+  bitmapMax: 128,        // ≤ this: always bitmaps
+  vectorFrom: 256,       // > this: always trapezoids (Infinity to opt out)
+  cacheBytes: 8 << 20    // LRU budget for uploaded glyph bitmaps
+};
+```
+
+Partial objects are fine — unset keys keep their defaults
+(`DEFAULT_TEXT_POLICY` in `lib/text/glyphs.js`).
 
 ## API
 
@@ -168,14 +214,46 @@ view.setMarkdown('# Hello\n\nSome *markdown*.');
 wnd.map(); // renders on expose, re-wraps on resize
 ```
 
-Blocks: headings, paragraphs, fenced code, blockquotes, nested
-ordered/unordered lists, `---` rules. Inlines: `**strong**`, `*em*`,
-`` `code` `` (with background), `[links](url)` (colored + underlined).
+Parsing is CommonMark + GFM via [marked](https://marked.js.org). Rendered
+blocks: headings, paragraphs, fenced code, blockquotes, nested
+ordered/unordered lists, `---` rules (tables fall back to their monospaced
+source for now). Inlines: `**strong**`, `*em*`, `` `code` `` (with
+background), `[links](url)` (colored + underlined); images render as links
+to their source.
 All layout — wrapping, font selection per style, spacing — runs through
 `TextLayout`; drawing batches glyphs per color.
 
+Fenced code blocks are **syntax highlighted** through
+[highlight.js](https://highlightjs.org) (the `common` build: ~36 languages
+plus their aliases — `js`/`ts`, `json`, `python`, `shell`, `c`/`cpp`,
+`java`, `go`, `rust`, `css`, `sql`, `html`/`xml`, …), adapted to flat
+tokens by `lib/widgets/highlight.js` (exported as `highlightCode`).
+Unknown tags render plain. Colors come from `theme.codeTheme`, a map from
+token kind (`keyword`, `literal`, `string`, `number`, `comment`, `tag`,
+`attr`, `function`) to color — partial overrides merge with the defaults.
+
+Fences tagged `math`, `tex`, `latex` or `katex` render as **display-mode
+formulas** via KaTeX (centered, at 1.21× the base size like katex.css);
+a formula that fails to parse falls back to a plain code block. See
+[tex.md](tex.md).
+
+Links are clickable. Every `draw()` records the device-space rectangles of
+rendered links; `view.linkAt(x, y)` returns the href under a point (or
+null). In window mode a left-button `mousedown` is resolved automatically
+and forwarded to `view.onLink(href, event)` — set it via the `onLink`
+constructor option or assign the property; standalone embedders call
+`linkAt` from their own event handlers. Navigation semantics (opening
+files, browsers, history) are the embedder's job —
+[examples/markdown.js](../examples/markdown.js) is a small documentation
+browser built this way.
+
 Headless/embedded use: `new MarkdownView(null, { fonts })`, then
 `view.layout(width)` → content height, `view.draw(ctx, x, y)`.
+
+`TextLayout` note for widget authors: spans keep unknown fields through
+layout normalization, and line runs expose their span (`run.span`), so
+markers attached to spans (like MarkdownView's `_href`) can be read back
+per positioned run after layout.
 
 ![the markdown widget rendering examples/markdown.js](img/markdown-widget.png)
 
@@ -200,15 +278,11 @@ resolved in 2026:
   `fontkit.hasGlyphForCodePoint` confirms before use.
 - **#16 custom fonts api** — `app.fonts.load(path)`, mirroring
   node-canvas's `registerFont`.
-- **#14/#25/#34 vector outlines for large sizes** — **not implemented,
-  deliberately.** The premise (glyph upload too slow for large sizes) is
-  much weaker under this design: bitmaps upload once per face/size and are
-  shared connection-wide, so even a 100px glyph (~10KB once) beats
-  re-sending trapezoids (~1KB+ per *draw*) after the second use. Trapezoid
-  text would also lose server-side glyph caching and antialiasing
-  consistency. If one-shot huge display text ever becomes a bottleneck, the
-  `fill()` path (pnltri trapezoids) can render `Font.rasterize`'s source
-  outlines directly — the outline data is already available via
-  `font.fk.getGlyph(id).path`.
+- **#14/#25/#34 vector outlines for large sizes** — superseded by **#45**,
+  which replaced the old premise with measured crossovers and is now
+  implemented: bitmaps stay the default where reuse amortizes uploads
+  (≤128px, and any size that repeats), trapezoids take over for very large
+  and continuously animated sizes. See
+  [the vector text path](#the-vector-trapezoid-text-path).
 
 x11 dependency: already at the latest published release (2.3.0).

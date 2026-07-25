@@ -266,6 +266,250 @@ test('backing store: opt out keeps drawing direct', async (t) => {
   wnd.destroy();
 });
 
+test('vector text: sizes above vectorFrom render via trapezoids', async (t) => {
+  if (skip) return t.skip(skip);
+  try {
+    app.fonts.match('sans-serif');
+  } catch (err) {
+    return t.skip(`no usable font: ${err.message}`);
+  }
+
+  const pixmap = app.createPixmap({ width: 300, height: 300, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 300, 300);
+  ctx.fillStyle = 'black';
+  ctx.font = '280px sans-serif'; // > vectorFrom (256): routed to AddTraps
+  ctx.fillText('R', 20, 260);
+
+  const image = await readPixels(ctx, 300, 300);
+  const darkPixels = countDark(image);
+  assert.ok(darkPixels > 5000, `expected a filled 280px glyph, got ${darkPixels} dark pixels`);
+  // no glyph page must have been created for the vector size
+  for (const page of app._glyphPages?.values() ?? []) {
+    assert.notEqual(page.size, 280, 'vector draw must not create a glyph page');
+  }
+
+  pixmap.destroy();
+});
+
+test('vector text: bitmap and vector paths draw the same glyphs consistently', async (t) => {
+  if (skip) return t.skip(skip);
+  try {
+    app.fonts.match('sans-serif');
+  } catch (err) {
+    return t.skip(`no usable font: ${err.message}`);
+  }
+
+  const draw = async (policy) => {
+    app.textPolicy = policy;
+    const pixmap = app.createPixmap({ width: 300, height: 260, depth: 24 });
+    const ctx = pixmap.getContext('2d');
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, 300, 260);
+    ctx.fillStyle = 'black';
+    ctx.font = '200px sans-serif';
+    ctx.fillText('Hg', 5, 200);
+    const image = await readPixels(ctx, 300, 260);
+    pixmap.destroy();
+    return countDark(image);
+  };
+
+  const viaBitmap = await draw({ bitmapMax: 1000 });
+  const viaVector = await draw({ bitmapMax: 1, vectorFrom: 2 });
+  app.textPolicy = null;
+
+  assert.ok(viaBitmap > 5000, `bitmap draw coverage ${viaBitmap}`);
+  const ratio = viaVector / viaBitmap;
+  assert.ok(ratio > 0.9 && ratio < 1.1, `coverage should agree, bitmap=${viaBitmap} vector=${viaVector}`);
+});
+
+test('vector text: fractional sizes render without quantizing', async (t) => {
+  if (skip) return t.skip(skip);
+  try {
+    app.fonts.match('sans-serif');
+  } catch (err) {
+    return t.skip(`no usable font: ${err.message}`);
+  }
+
+  const pixmap = app.createPixmap({ width: 260, height: 260, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 260, 260);
+  ctx.fillStyle = 'black';
+  ctx.font = '200px sans-serif';
+  const style = ctx._resolvedTextStyle();
+  style.size = 200.5; // fractional: canvas shorthand parsing aside, the pipeline supports it
+  ctx.fillText('E', 20, 220);
+
+  const image = await readPixels(ctx, 260, 260);
+  let bottom = -1;
+  for (let y = 0; y < 260; y++) {
+    for (let x = 0; x < 260; x++) {
+      const i = (y * 260 + x) * 4;
+      if (image.data[i] < 128) bottom = y;
+    }
+  }
+  assert.ok(Math.abs(bottom - 220) <= 2, `glyph bottom ${bottom} should sit on the 220 baseline`);
+
+  pixmap.destroy();
+});
+
+test('glyph page LRU: transient sizes are evicted under the cache budget', async (t) => {
+  if (skip) return t.skip(skip);
+  try {
+    app.fonts.match('sans-serif');
+  } catch (err) {
+    return t.skip(`no usable font: ${err.message}`);
+  }
+
+  app.textPolicy = { cacheBytes: 200 * 1024 };
+  const pixmap = app.createPixmap({ width: 220, height: 130, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 220, 130);
+  ctx.fillStyle = 'black';
+  for (let s = 20; s <= 90; s += 2) {
+    ctx.font = `${s}px sans-serif`;
+    ctx.fillText('Hamburgefonstiv', 2, 110);
+  }
+  let bytes = 0;
+  for (const page of app._glyphPages.values()) bytes += page.bytes;
+  assert.ok(bytes <= 200 * 1024, `cache stayed under budget: ${bytes}`);
+
+  // and drawing with a previously evicted size still works (page recreated)
+  ctx.font = '20px sans-serif';
+  ctx.fillText('Hamburgefonstiv', 2, 40);
+  const darkPixels = countDark(await readPixels(ctx, 220, 130));
+  assert.ok(darkPixels > 100, `redraw after eviction, got ${darkPixels} dark pixels`);
+
+  app.textPolicy = null;
+  pixmap.destroy();
+});
+
+test('tex: formulas draw with batched runs, rules and surd paths', async (t) => {
+  if (skip) return t.skip(skip);
+  const { layoutTex } = await import('../lib/widgets/tex.js');
+
+  const pixmap = app.createPixmap({ width: 260, height: 120, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 260, 120);
+  ctx.fillStyle = 'black';
+
+  const box = layoutTex('\\sqrt{\\frac{a+b}{2}}', { size: 40, color: 'black' });
+  assert.ok(box.width > 30 && box.height > 40, `box ${box.width}x${box.height}`);
+  box.draw(ctx, 10, 10);
+
+  const image = await readPixels(ctx, 260, 120);
+  const darkPixels = countDark(image);
+  assert.ok(darkPixels > 300, `expected formula ink, got ${darkPixels} dark pixels`);
+
+  // the fraction line must be a solid horizontal dark row inside the box
+  let bestRow = 0;
+  for (let y = 10; y < 10 + box.height; y++) {
+    let run = 0;
+    let best = 0;
+    for (let x = 10; x < 10 + box.width; x++) {
+      const i = (y * 260 + x) * 4;
+      run = image.data[i] < 128 ? run + 1 : 0;
+      if (run > best) best = run;
+    }
+    if (best > bestRow) bestRow = best;
+  }
+  assert.ok(bestRow > box.width * 0.5, `longest dark row ${bestRow} vs width ${box.width}`);
+
+  pixmap.destroy();
+});
+
+test('markdown: highlighted fences and math fences render', async (t) => {
+  if (skip) return t.skip(skip);
+  try {
+    app.fonts.match('sans-serif');
+  } catch (err) {
+    return t.skip(`no usable font: ${err.message}`);
+  }
+
+  const { MarkdownView } = await import('../lib/index.js');
+  const pixmap = app.createPixmap({ width: 320, height: 300, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 320, 300);
+
+  const view = new MarkdownView(null, { fonts: app.fonts });
+  view.setMarkdown(
+    '```js\nconst x = "str"; // note\n```\n\n```math\n\\frac{a}{b}\n```\n'
+  );
+  view.layout(320);
+  const texItems = view._items.filter((i) => i.kind === 'tex');
+  assert.equal(texItems.length, 1, 'math fence became a formula');
+  view.draw(ctx, 0, 0);
+
+  const image = await readPixels(ctx, 320, 300);
+  // count colored (non-gray) pixels: syntax highlighting produces them
+  let colored = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    const [b, g, r] = [image.data[i], image.data[i + 1], image.data[i + 2]];
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 60) colored++;
+  }
+  assert.ok(colored > 50, `expected syntax colors, got ${colored} colored pixels`);
+  assert.ok(countDark(image) > 50, 'formula/code ink present');
+
+  pixmap.destroy();
+});
+
+test('markdown: invalid math falls back to a plain code block', async (t) => {
+  if (skip) return t.skip(skip);
+  try {
+    app.fonts.match('sans-serif');
+  } catch (err) {
+    return t.skip(`no usable font: ${err.message}`);
+  }
+
+  const { MarkdownView } = await import('../lib/index.js');
+  const view = new MarkdownView(null, { fonts: app.fonts });
+  view.setMarkdown('```math\n\\frac{unclosed\n```\n');
+  view.layout(300);
+  assert.equal(view._items.filter((i) => i.kind === 'tex').length, 0);
+  assert.ok(view._items.some((i) => i.kind === 'text'), 'rendered as code text instead');
+});
+
+test('markdown: links record hit rectangles and linkAt resolves them', async (t) => {
+  if (skip) return t.skip(skip);
+  try {
+    app.fonts.match('sans-serif');
+  } catch (err) {
+    return t.skip(`no usable font: ${err.message}`);
+  }
+
+  const { MarkdownView } = await import('../lib/index.js');
+  const pixmap = app.createPixmap({ width: 300, height: 120, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 300, 120);
+
+  const view = new MarkdownView(null, { fonts: app.fonts });
+  view.setMarkdown('plain [a link](target.md) more **[bold link](other.md)**');
+  view.layout(300);
+  view.draw(ctx, 10, 20);
+
+  const hrefs = new Set(view._links.map((l) => l.href));
+  assert.deepEqual([...hrefs].sort(), ['other.md', 'target.md']);
+  const l = view._links.find((x) => x.href === 'target.md');
+  assert.equal(view.linkAt(l.x + l.w / 2, l.y + l.h / 2), 'target.md');
+  assert.equal(view.linkAt(1, 1), null, 'outside any link');
+
+  // link underlines actually draw (colored pixels under the link baseline)
+  const image = await readPixels(ctx, 300, 120);
+  let blueish = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    if (image.data[i] > 140 && image.data[i + 2] < 100) blueish++; // BGRA
+  }
+  assert.ok(blueish > 20, `expected link color/underline pixels, got ${blueish}`);
+
+  pixmap.destroy();
+});
+
 test('markdown widget renders into a window-less pixmap context', async (t) => {
   if (skip) return t.skip(skip);
   try {
