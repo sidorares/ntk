@@ -17,11 +17,15 @@ matching file here (see AGENTS.md).
 - [Window](window.md) — window creation, properties, methods and events
 - [Pixmap](pixmap.md) — offscreen drawables
 - [2d rendering context](context-2d.md) — canvas-like drawing API over XRender
+- [Images](images.md) — PNG/JPEG loading (`loadImage`), the `Image` object,
+  `drawImage`
 - [Fonts](fonts.md) — font lookup, loading, rasterization pipeline
 - [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout, MarkdownView,
   wire-efficiency design, the vector (trapezoid) path for large/animated sizes
 - [TeX / math](tex.md) — KaTeX-based formula rendering: `layoutTex`, `TexView`,
   markdown math fences
+- [HTML widget](html.md) — `HtmlView`: static HTML + CSS subset, yoga-layout
+  flexbox/block layout, links, images, the resource-loading safety model
 - [OpenGL rendering context](context-opengl.md) — indirect GLX / OpenGL 1.4 API
 - [Raw X11 rendering context](context-x11.md) — core X drawing requests
 - [Resource management](resource-management.md) — `using` / `Symbol.dispose`, GC-based cleanup

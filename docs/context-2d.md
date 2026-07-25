@@ -33,9 +33,13 @@ ctx.fillRect(0, 0, 100, 100);
 
 - `fillRect(x, y, w, h)` — respects the current clip
 - `clearRect(x, y, w, h)` — resets to opaque white
-- `drawImage(source)` — source can be another ntk 2d context (server-side
-  composite, fast) or a node-canvas-like object exposing
-  `image.context.getImageData()` (pixels are uploaded)
+- `drawImage(image, dx, dy)` / `drawImage(image, dx, dy, dw, dh)` /
+  `drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)` — draws an ntk
+  [`Image`](images.md) (decoded PNG/JPEG). The image uploads to the server
+  once and is cached; scaling happens server-side with bilinear filtering.
+  Respects the current clip. `image` can also be another ntk 2d context
+  (server-side composite of the whole drawable) or a node-canvas-like
+  object exposing `image.context.getImageData()` (pixels are uploaded)
 - `createImageData(w, h)`, `putImageData(data, x, y)`
 - `getImageData(x, y, w, h, cb)` — async, `cb(err, image)`; `image.data` is
   BGRA byte order

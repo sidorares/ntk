@@ -387,6 +387,68 @@ test('glyph page LRU: transient sizes are evicted under the cache budget', async
   pixmap.destroy();
 });
 
+test('images: drawImage composites decoded PNG pixels, alpha blends', async (t) => {
+  if (skip) return t.skip(skip);
+  const { PNG } = await import('pngjs');
+  const { decodeImage } = await import('../lib/image.js');
+
+  // 2x2: red, green / blue, half-transparent black
+  const png = new PNG({ width: 2, height: 2 });
+  png.data.set([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 0, 0, 128]);
+  const img = decodeImage(PNG.sync.write(png));
+
+  const pixmap = app.createPixmap({ width: 8, height: 8, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 8, 8);
+  ctx.drawImage(img, 1, 1);
+
+  const image = await readPixels(ctx, 8, 8);
+  const px = (x, y) => {
+    const i = (y * 8 + x) * 4; // BGRA
+    return [image.data[i + 2], image.data[i + 1], image.data[i]];
+  };
+  assert.deepEqual(px(1, 1), [255, 0, 0], 'red pixel');
+  assert.deepEqual(px(2, 1), [0, 255, 0], 'green pixel');
+  assert.deepEqual(px(1, 2), [0, 0, 255], 'blue pixel');
+  const blended = px(2, 2);
+  assert.ok(blended.every((c) => c > 100 && c < 155), `half-alpha over white ≈ mid gray, got ${blended}`);
+  assert.deepEqual(px(5, 5), [255, 255, 255], 'outside image untouched');
+
+  img.destroy();
+  pixmap.destroy();
+});
+
+test('images: drawImage scales server-side with filtering', async (t) => {
+  if (skip) return t.skip(skip);
+  const { PNG } = await import('pngjs');
+  const { decodeImage } = await import('../lib/image.js');
+
+  const png = new PNG({ width: 2, height: 2 });
+  // all four pixels solid red
+  for (let i = 0; i < 16; i += 4) png.data.set([255, 0, 0, 255], i);
+  const img = decodeImage(PNG.sync.write(png));
+
+  const pixmap = app.createPixmap({ width: 32, height: 32, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 32, 32);
+  ctx.drawImage(img, 4, 4, 24, 24); // 2x2 -> 24x24
+
+  const image = await readPixels(ctx, 32, 32);
+  const at = (x, y) => (y * 32 + x) * 4;
+  assert.ok(image.data[at(16, 16) + 2] > 200, 'center scaled area red');
+  assert.ok(image.data[at(16, 16)] < 60, 'center blue channel low');
+  assert.equal(image.data[at(1, 1) + 2], 255, 'outside white');
+  assert.equal(image.data[at(1, 1)], 255, 'outside white');
+
+  // second draw reuses the cached upload (no re-upload path errors)
+  ctx.drawImage(img, 0, 0, 1, 1, 4, 4, 8, 8);
+
+  img.destroy();
+  pixmap.destroy();
+});
+
 test('tex: formulas draw with batched runs, rules and surd paths', async (t) => {
   if (skip) return t.skip(skip);
   const { layoutTex } = await import('../lib/widgets/tex.js');
@@ -507,6 +569,70 @@ test('markdown: links record hit rectangles and linkAt resolves them', async (t)
   }
   assert.ok(blueish > 20, `expected link color/underline pixels, got ${blueish}`);
 
+  pixmap.destroy();
+});
+
+test('html: HtmlView renders backgrounds, borders, text, links and images', async (t) => {
+  if (skip) return t.skip(skip);
+  try {
+    app.fonts.match('sans-serif');
+  } catch (err) {
+    return t.skip(`no usable font: ${err.message}`);
+  }
+
+  const { HtmlView } = await import('../lib/index.js');
+  const { PNG } = await import('pngjs');
+  const png = new PNG({ width: 4, height: 4 });
+  for (let i = 0; i < 64; i += 4) png.data.set([0, 180, 0, 255], i);
+  const dataUri = 'data:image/png;base64,' + PNG.sync.write(png).toString('base64');
+
+  const pixmap = app.createPixmap({ width: 320, height: 300, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 320, 300);
+
+  const view = new HtmlView(null, { fonts: app.fonts });
+  view.setHtml(`
+    <div style="background: #2244cc; height: 20px; margin: 0"></div>
+    <div style="border: 3px solid #cc2222; padding: 6px; margin: 0">
+      <p style="margin: 0">Text with <a href="go.html">a link</a> inside.</p>
+    </div>
+    <img src="${dataUri}" width="40" height="20">
+  `);
+  await new Promise((resolve) => setTimeout(resolve, 30)); // data-uri decode
+  const height = view.layout(320);
+  assert.ok(height > 40, `content height ${height}`);
+  view.draw(ctx, 0, 0);
+
+  const image = await readPixels(ctx, 320, 300);
+  const px = (x, y) => {
+    const i = (y * 320 + x) * 4; // BGRA
+    return [image.data[i + 2], image.data[i + 1], image.data[i]];
+  };
+  assert.deepEqual(px(10, 10), [0x22, 0x44, 0xcc], 'background div');
+  assert.deepEqual(px(1, 21), [0xcc, 0x22, 0x22], 'border left edge');
+  assert.ok(countDark(image) > 30, 'text ink present');
+
+  // link recorded (one rect per shaped run) and hit-testable
+  assert.ok(view._links.length >= 1);
+  assert.ok(view._links.every((x) => x.href === 'go.html'));
+  const l = view._links[0];
+  assert.equal(view.linkAt(l.x + l.w / 2, l.y + l.h / 2).href, 'go.html');
+  assert.equal(view.linkAt(0, 0), null);
+
+  // image drawn at attribute size below the bordered block
+  const imgBox = (function findImg(b) {
+    if (b.kind === 'image') return b;
+    for (const c of b.children) {
+      const r = findImg(c);
+      if (r) return r;
+    }
+    return null;
+  })(view._root);
+  assert.equal(imgBox.w, 40);
+  assert.deepEqual(px(Math.round(imgBox.x + 20), Math.round(imgBox.y + 10)), [0, 180, 0], 'image pixels');
+
+  view.destroy();
   pixmap.destroy();
 });
 
