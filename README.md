@@ -49,6 +49,12 @@ markdown (with syntax-highlighted code fences) on top of it, and a
 KaTeX-backed `TexView` renders TeX math — see [docs/text.md](docs/text.md)
 and [docs/tex.md](docs/tex.md).
 
+PNG/JPEG images decode client-side (`loadImage`) and composite server-side
+via `ctx.drawImage` ([docs/images.md](docs/images.md)). An `HtmlView`
+widget renders a static HTML + CSS subset — block flow and flexbox laid
+out by yoga-layout, no scripts, no network — with app-controlled link
+navigation ([docs/html.md](docs/html.md)).
+
 ```js
 import { createClient } from 'ntk';
 

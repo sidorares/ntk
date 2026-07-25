@@ -49,6 +49,9 @@ lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
 lib/text/layout.js         TextLayout: UAX#14 wrapping, alignment, spans
 lib/text/glyphs.js         glyph pages (compact ids) + CompositeGlyphs encoder,
                            bitmap/vector routing policy, glyph-page LRU
+lib/image.js               Image: PNG/JPEG decode (pngjs/jpeg-js), server upload cache
+lib/widgets/css.js         CSS for HtmlView: parse (postcss), cascade, computed styles
+lib/widgets/htmlview.js    HtmlView widget: htmlparser2 DOM + yoga-layout boxes
 lib/widgets/markdown.js    markdown parsing (adapter over marked)
 lib/widgets/markdownview.js  MarkdownView widget (highlighted + math fences)
 lib/widgets/highlight.js   fence syntax highlighting (adapter over highlight.js)
