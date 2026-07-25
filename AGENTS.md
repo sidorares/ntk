@@ -84,6 +84,19 @@ README.md holds only the pitch and short samples — details belong in docs/.
 - When touching rendering code, extend the smoke test with a pixel-level
   assertion — that is what caught real bugs during modernization.
 
+## Releases
+
+Releases are automated with release-please (`.github/workflows/release.yml`):
+merging to `master` maintains a release PR; merging that PR tags a GitHub
+release and publishes to npm via OIDC trusted publishing (no token secrets).
+
+- **Use conventional commit messages** (`feat:`, `fix:`, `feat!:` /
+  `BREAKING CHANGE:`, `chore:`, `docs:`) — release-please derives the next
+  version and the changelog from them. PR squash-merge titles must follow the
+  same convention.
+- `release-please-config.json` currently pins `release-as: 3.0.0` to
+  bootstrap the first modernized release — remove that key after 3.0.0 ships.
+
 ## Gotchas
 
 - node-x11's `Render.AddGlyphs` expects glyph `offX`/`offY` in 26.6 fixed
