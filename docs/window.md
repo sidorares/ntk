@@ -20,6 +20,30 @@ Constructing a window with an existing X window id (`{ id }`) returns a
 (cached) wrapper around that foreign window; its geometry is populated
 asynchronously.
 
+## Double buffering (backing store)
+
+Requesting a 2d context on a window you created enables double buffering
+automatically (opt out with `createWindow({ backingStore: false })`):
+
+- All 2d drawing lands in an offscreen **backing pixmap**; the window is
+  updated with single `CopyArea` blits — after your event handlers return,
+  or coalesced once per event-loop tick for drawing done elsewhere. No
+  clear-then-draw flicker, no partially drawn frames.
+- **Expose events are served from the backing pixmap** by the library (a
+  blit of just the damaged rect); your `expose` handler is *not* called.
+  When a real repaint is needed — first paint, or the window was resized —
+  the window emits `draw` and `expose` (once per tick, with full-window
+  geometry and `ev.synthetic = true`). Existing `wnd.on('expose', draw)`
+  code keeps working, it just runs far less often.
+- The backing pixmap grows monotonically with the window (fresh area is
+  white); `ctx.getImageData` reads it directly, so results are valid even
+  where the window is occluded on screen.
+- Windows are created with NorthWest `bit-gravity`, so the server keeps old
+  content anchored during a resize instead of clearing to background.
+
+Foreign windows (`{ id }`) and windows drawing via the `'opengl'` or
+`'x11'` contexts are not double-buffered.
+
 ## Properties
 
 - `wnd.id` — X window id
@@ -57,7 +81,8 @@ constructor arg) automatically extends the window's X event mask.
 | `mousemove` | MotionNotify | |
 | `mouseover` / `mouseout` | Enter/LeaveNotify | |
 | `keydown` / `keyup` | KeyPress/Release | `keydown` carries `ev.codepoint` (unicode) |
-| `expose` | Expose | `ev.x/y/width/height` of the damaged area |
+| `expose` | Expose | `ev.x/y/width/height` of the damaged area; on double-buffered windows only emitted when a real repaint is needed (see above) |
+| `draw` | — | synthetic repaint request on double-buffered windows (same payload as the accompanying `expose`) |
 | `resize` | ConfigureNotify | updates `wnd.width/height/x/y` first |
 | `map` / `unmap` | Map/UnmapNotify | |
 | `destroy` | DestroyNotify | wrapper is removed from the cache |

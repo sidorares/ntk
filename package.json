@@ -33,10 +33,12 @@
     "node": ">=20.19.0"
   },
   "dependencies": {
+    "bidi-js": "^1.0.3",
     "canvas-fontstyle": "^1.0.1",
     "extrude-polyline": "^1.0.6",
+    "fontkit": "^2.0.4",
     "keysym": "0.0.6",
-    "opentype.js": "^2.0.0",
+    "linebreak": "^1.1.0",
     "parse-color": "^1.0.0",
     "pnltri": "^2.1.1",
     "x11": "^2.3.0"

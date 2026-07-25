@@ -40,9 +40,15 @@ lib/renderingcontext_opengl.js  indirect GLX context
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
 lib/glyphset.js            XRender GlyphSet wrapper
-lib/fontface.js            font load + lazy glyph upload (opentype.js)
 lib/rasterize.js           pure-JS glyph outline -> a8 bitmap rasterizer
-lib/fontconfig.js          font name -> file path via fc-match CLI
+lib/fontconfig.js          font matching + fallback chain via fc-match CLI
+lib/text/font.js           Font: fontkit face — metrics, coverage, shaping
+lib/text/fontmanager.js    FontManager (app.fonts): match/load/fallback
+lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
+lib/text/layout.js         TextLayout: UAX#14 wrapping, alignment, spans
+lib/text/glyphs.js         glyph pages (compact ids) + CompositeGlyphs encoder
+lib/widgets/markdown.js    dependency-free markdown parser
+lib/widgets/markdownview.js  MarkdownView widget
 test/                      node:test suite (see below)
 docs/                      public API documentation
 examples/                  runnable examples (own package.json, ESM)
@@ -58,8 +64,8 @@ their side effects.
   seems to need a compiled module, find a JS implementation, shell out to a
   universally-available CLI (like `fc-match`), or implement it in `lib/`
   (like `rasterize.js`). This is why weak-napi (→ `FinalizationRegistry`),
-  freetype2 (→ opentype.js + own rasterizer) and font-scanner (→ fc-match)
-  were removed.
+  freetype2 (→ fontkit + own rasterizer), harfbuzz (→ fontkit shaping),
+  fribidi (→ bidi-js) and font-scanner (→ fc-match) were removed/avoided.
 - **ESM**, Node >= 20.19. No TypeScript for now (a possible later migration —
   keep JSDoc accurate instead).
 - Server-side resources (windows, pixmaps, pictures, glyphsets) must offer
@@ -101,7 +107,8 @@ release and publishes to npm via OIDC trusted publishing (no token secrets).
 
 - node-x11's `Render.AddGlyphs` expects glyph `offX`/`offY` in 26.6 fixed
   point and **mutates** the glyph objects passed to it (divides by 64, pads
-  rows) — `FontFace.ensureGlyphs` passes copies for this reason.
+  rows) — `GlyphPage.ensure` builds fresh one-shot objects for each upload
+  for this reason.
 - `getImageData` returns BGRA byte order.
 - Colors in XRender are premultiplied `[r, g, b, a]` floats 0..1.
 - A `Window` constructed with an existing `{ id }` returns a cached instance

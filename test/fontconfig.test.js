@@ -13,7 +13,7 @@ try {
 
 test('resolves sans-serif to a parseable font file', { skip: !hasFontconfig && 'fc-match not installed' }, () => {
   const match = listFontsSync({ family: 'sans-serif', style: 'normal', weight: 'normal' });
-  assert.match(match.path, /\.(ttf|otf|woff)$/i);
+  assert.match(match.path, /\.(ttf|otf|woff|woff2|ttc|dfont)$/i);
 });
 
 test('resolves bold and italic patterns', { skip: !hasFontconfig && 'fc-match not installed' }, () => {
