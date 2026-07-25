@@ -1,17 +1,10 @@
 {
-  "name": "examples",
+  "name": "ntk-examples",
+  "private": true,
   "version": "1.0.0",
-  "description": "",
-  "main": "example-await.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "description": "ntk examples; run with `node <example>.js` after `npm install` here",
+  "type": "module",
   "dependencies": {
-    "baboon-image": "^2.1.0",
-    "bunny": "^1.0.1",
-    "teapot": "^1.0.0"
+    "baboon-image": "^2.1.0"
   }
 }
