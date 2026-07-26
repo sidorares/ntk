@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.4.0](https://github.com/sidorares/ntk/compare/v3.3.0...v3.4.0) (2026-07-26)
+
+
+### Features
+
+* onInvalidate hook for async content in standalone MarkdownView/HtmlView ([#75](https://github.com/sidorares/ntk/issues/75)) ([1658669](https://github.com/sidorares/ntk/commit/16586699fa5e249c49ad80dd0ffdf25e90000258))
+
 ## [3.3.0](https://github.com/sidorares/ntk/compare/v3.2.0...v3.3.0) (2026-07-26)
 
 
