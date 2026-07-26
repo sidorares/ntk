@@ -48,11 +48,29 @@ const pages = {
         </div>
       </div>
 
-      <img src="${gradientPng(120, 60)}" alt="generated gradient">
+      <div style="display: flex; gap: 16px; align-items: center; margin: 8px 0">
+        <img src="${gradientPng(120, 60)}" alt="generated gradient">
+        <!-- inline svg renders through SvgView, sized like an image -->
+        <svg width="60" height="60" viewBox="0 0 24 24">
+          <defs>
+            <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#ffba08"/>
+              <stop offset="1" stop-color="#d00000"/>
+            </linearGradient>
+          </defs>
+          <circle cx="12" cy="12" r="10" fill="none" stroke="url(#ring)" stroke-width="3"/>
+          <path d="M8 12 l3 3 l5 -6" fill="none" stroke="#2d6a4f" stroke-width="2.5"/>
+        </svg>
+        <!-- and so do <img> elements with an svg data: URI source -->
+        <img width="60" height="60" alt="svg heart" src="data:image/svg+xml,${encodeURIComponent(
+          '<svg viewBox="0 0 32 32"><path d="M16 28 C4 19 2 12 6 8 C10 4 15 7 16 11 C17 7 22 4 26 8 C30 12 28 19 16 28 Z" fill="#e5383b"/></svg>'
+        )}">
+      </div>
 
       <h2>Pages</h2>
       <ul>
         <li><a href="page:styles">Styling showcase</a> — cascade, selectors, colors</li>
+        <li><a href="page:svg">SVG</a> — inline markup and img sources</li>
         <li><a href="page:pre">Preformatted text</a> — white-space handling</li>
         <li><a href="https://github.com/sidorares/ntk">ntk on GitHub</a> (opens in your browser)</li>
       </ul>
@@ -90,6 +108,42 @@ const pages = {
         <li>alpha markers</li>
         <li>are supported too</li>
       </ol>
+    </body>`,
+
+  svg: `
+    <body>
+      <p><a href="page:home">← back</a></p>
+      <h1>SVG in HtmlView</h1>
+      <p>Inline <code>&lt;svg&gt;</code> elements are replaced elements —
+        laid out like images (intrinsic size from
+        <code>width</code>/<code>height</code>/<code>viewBox</code>,
+        ratio-preserving shrink) and rendered by <code>SvgView</code>
+        through the same server-side 2d pipeline.</p>
+
+      <div style="display: flex; gap: 12px; align-items: flex-end">
+        <svg width="90" height="90" viewBox="0 0 24 24">
+          <rect x="2" y="2" width="20" height="20" rx="4" fill="#eef3fb" stroke="#ccd9ee"/>
+          <path d="M6 16 L10 9 L13 13 L16 7 L18 16 Z" fill="#0077b6"/>
+        </svg>
+        <svg width="70" height="70" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" fill="#ffe9a8" stroke="#c8a028"/>
+          <circle cx="9" cy="10" r="1.4" fill="#333"/>
+          <circle cx="15" cy="10" r="1.4" fill="#333"/>
+          <path d="M8 14 Q12 18 16 14" fill="none" stroke="#333" stroke-width="1.5"/>
+        </svg>
+        <svg width="50" height="90" viewBox="0 0 10 18">
+          <rect x="4" y="6" width="2" height="12" fill="#7f4f24"/>
+          <path d="M5 0 L9 8 H1 Z" fill="#2d6a4f"/>
+        </svg>
+      </div>
+
+      <p>An <code>&lt;img&gt;</code> whose source is SVG (file path,
+        <code>data:image/svg+xml</code>, or a <code>loadResource</code>
+        buffer) is sniffed and routed the same way — vector, so it stays
+        sharp at any size:</p>
+      <img width="260" alt="scene" src="data:image/svg+xml,${encodeURIComponent(
+        '<svg viewBox="0 0 60 30"><rect width="60" height="30" fill="#8ecae6"/><circle cx="50" cy="7" r="4" fill="#ffdd00"/><path d="M0 22 Q15 15 30 21 T60 20 V30 H0 Z" fill="#74c69d"/><path d="M12 24 L17 14 L22 24 Z" fill="#2d6a4f"/></svg>'
+      )}">
     </body>`,
 
   pre: `

@@ -169,3 +169,176 @@ test('setHtml twice replaces the document cleanly', needsFonts, () => {
   assert.equal(byName(view, 'h2').length, 1);
   view.destroy();
 });
+
+// ---------------------------------------------------------------------------
+// svg support: inline <svg> and <img> with an svg source
+
+// minimal recording 2d context (transform-aware) for draw() assertions
+function svgMockCtx() {
+  const calls = [];
+  const mul = (m, n) => [
+    m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
+    m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+    m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]
+  ];
+  return {
+    calls,
+    _m: [1, 0, 0, 1, 0, 0],
+    _stack: [],
+    fillStyle: null,
+    strokeStyle: null,
+    globalAlpha: 1,
+    lineWidth: 1,
+    lineCap: 'butt',
+    lineJoin: 'miter',
+    miterLimit: 10,
+    font: '',
+    textAlign: 'start',
+    save() { this._stack.push({ m: this._m.slice() }); },
+    restore() { const s = this._stack.pop(); if (s) this._m = s.m; },
+    translate(x, y) { this._m = mul(this._m, [1, 0, 0, 1, x, y]); },
+    scale(x, y = x) { this._m = mul(this._m, [x, 0, 0, y, 0, 0]); },
+    transform(...a) { this._m = mul(this._m, a); },
+    getTransform() { const [a, b, c, d, e, f] = this._m; return { a, b, c, d, e, f }; },
+    fillRect(...a) { calls.push(['fillRect', ...a]); },
+    fill(path, rule) { calls.push(['fill', path, rule, this.fillStyle, this._m.slice()]); },
+    stroke(path) { calls.push(['stroke', path, this.strokeStyle]); },
+    fillText(...a) { calls.push(['fillText', ...a]); },
+    createLinearGradient(x1, y1, x2, y2) {
+      return { type: 'linear', x1, y1, x2, y2, stops: [], addColorStop(o, c) { this.stops.push([o, c]); return this; } };
+    },
+    createRadialGradient() { return { stops: [], addColorStop(o, c) { this.stops.push([o, c]); return this; } }; }
+  };
+}
+
+test('inline svg: sized from width/height attributes, first layout pass', needsFonts, () => {
+  const view = layoutOf('<svg width="64" height="32" viewBox="0 0 8 4"><rect width="8" height="4"/></svg>');
+  const svg = byName(view, 'svg')[0];
+  assert.equal(svg.w, 64);
+  assert.equal(svg.h, 32);
+  const entry = view._images.get(svg.element);
+  assert.ok(entry.svg, 'SvgView adopted synchronously');
+});
+
+test('inline svg: viewBox ratio drives sizing when width is styled', needsFonts, () => {
+  const view = layoutOf('<svg viewBox="0 0 10 5" style="width: 200px"></svg>');
+  const svg = byName(view, 'svg')[0];
+  assert.equal(svg.w, 200);
+  assert.equal(svg.h, 100, 'height follows the 2:1 viewBox ratio');
+});
+
+test('inline svg: shrinks ratio-preserving to the container width', needsFonts, () => {
+  const view = layoutOf(
+    '<div style="width: 100px; margin: 0"><svg width="200" height="100"><rect width="1" height="1"/></svg></div>'
+  );
+  const svg = byName(view, 'svg')[0];
+  assert.equal(Math.round(svg.w), 100);
+  assert.equal(Math.round(svg.h), 50);
+});
+
+test('inline svg: draws shapes through the context, scaled to the box', needsFonts, () => {
+  const view = layoutOf(
+    '<div style="margin: 0; padding: 0"><svg width="40" height="40" viewBox="0 0 4 4"><rect width="4" height="4" fill="#ff0000"/></svg></div>'
+  );
+  const ctx = svgMockCtx();
+  view.draw(ctx, 0, 0);
+  const fills = ctx.calls.filter((c) => c[0] === 'fill');
+  assert.equal(fills.length, 1);
+  assert.equal(fills[0][3], '#ff0000');
+  const m = fills[0][4];
+  assert.equal(m[0], 10, 'viewBox unit scaled 10x into the 40px box');
+});
+
+test('inline svg: html-lowercased camelCase (viewBox, linearGradient) still works', needsFonts, () => {
+  const view = layoutOf(
+    `<svg width="40" height="40" viewBox="0 0 4 4">
+       <defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="4" y2="0">
+         <stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#fff"/>
+       </linearGradient></defs>
+       <rect width="4" height="4" fill="url(#g)"/>
+     </svg>`
+  );
+  const ctx = svgMockCtx();
+  view.draw(ctx, 0, 0);
+  const fill = ctx.calls.find((c) => c[0] === 'fill');
+  assert.ok(fill, 'gradient-filled rect drew');
+  assert.equal(fill[3].type, 'linear');
+  assert.equal(fill[3].stops.length, 2);
+  assert.equal(fill[3].x2, 40, 'userSpaceOnUse coords mapped through the 10x scale');
+});
+
+test('inline svg: display none hides it; children never join text flow', needsFonts, () => {
+  const view = layoutOf(
+    '<p style="margin:0">before<svg style="display: none" width="50" height="50"><title>tooltip text</title></svg>after</p>'
+  );
+  assert.equal(byName(view, 'svg').length, 0, 'display:none svg produces no box');
+  const texts = find(view._root, (b) => b.kind === 'text');
+  const spans = texts.flatMap((t) => t.spans ?? []).map((s) => s.text).join('');
+  assert.ok(!spans.includes('tooltip'), 'svg children do not leak into text');
+});
+
+test('img: svg source via loadResource buffer is sniffed and adopted', needsFonts, async () => {
+  const view = new HtmlView(null, {
+    fonts,
+    loadResource: async () => Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="30" height="60"><circle r="5"/></svg>')
+  });
+  view.setHtml('<img src="pic.svg">');
+  await new Promise((r) => setTimeout(r, 20));
+  view.layout(400);
+  const img = byName(view, 'img')[0];
+  const entry = view._images.get(img.element);
+  assert.ok(entry.svg, 'sniffed as svg');
+  assert.equal(entry.image, null);
+  assert.equal(img.w, 30);
+  assert.equal(img.h, 60);
+});
+
+test('img: data:image/svg+xml URI (utf8 and base64) loads', needsFonts, async () => {
+  const svgText = '<svg width="24" height="24"><rect width="24" height="24" fill="#00ff00"/></svg>';
+  const utf8 = 'data:image/svg+xml,' + encodeURIComponent(svgText);
+  const b64 = 'data:image/svg+xml;base64,' + Buffer.from(svgText).toString('base64');
+  for (const uri of [utf8, b64]) {
+    const view = new HtmlView(null, { fonts });
+    view.setHtml(`<img src="${uri}">`);
+    await new Promise((r) => setTimeout(r, 20));
+    view.layout(400);
+    const img = byName(view, 'img')[0];
+    assert.equal(img.w, 24, uri.slice(0, 30));
+    assert.ok(view._images.get(img.element).svg);
+  }
+});
+
+test('img: svg file loads through baseUrl and draws', needsFonts, async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'ntk-svg-'));
+  await writeFile(join(dir, 'icon.svg'), '<svg viewBox="0 0 2 2" width="20" height="20"><rect width="2" height="2" fill="#0000ff"/></svg>');
+  try {
+    const view = new HtmlView(null, { fonts, baseUrl: dir });
+    view.setHtml('<div style="margin:0;padding:0"><img src="icon.svg"></div>');
+    await new Promise((r) => setTimeout(r, 30));
+    view.layout(400);
+    const img = byName(view, 'img')[0];
+    assert.equal(img.w, 20);
+    const ctx = svgMockCtx();
+    view.draw(ctx, 0, 0);
+    const fill = ctx.calls.find((c) => c[0] === 'fill');
+    assert.equal(fill[3], '#0000ff');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('img: raster decoding is untouched by svg sniffing', needsFonts, async () => {
+  const { PNG } = await import('pngjs');
+  const png = new PNG({ width: 12, height: 8 });
+  const view = new HtmlView(null, { fonts, loadResource: async () => PNG.sync.write(png) });
+  view.setHtml('<img src="x.png">');
+  await new Promise((r) => setTimeout(r, 20));
+  view.layout(400);
+  const entry = view._images.values().next().value;
+  assert.ok(entry.image, 'decoded as raster');
+  assert.equal(entry.svg, null);
+  assert.equal(entry.image.width, 12);
+});

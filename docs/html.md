@@ -33,7 +33,8 @@ native modules); inline runs are shaped and wrapped by the ntk text pipeline
 uses [htmlparser2](https://www.npmjs.com/package/htmlparser2), selector
 matching [css-select](https://www.npmjs.com/package/css-select), stylesheet
 parsing [postcss](https://www.npmjs.com/package/postcss). PNG/JPEG images
-render through the [image pipeline](images.md).
+render through the [image pipeline](images.md); SVG — inline or as an
+`<img>` source — through the [SVG widget](svg.md).
 
 ## The safety / responsibility model
 
@@ -97,10 +98,17 @@ plus a `fonts` manager, then drive `layout()`/`draw()` yourself.
   lower/upper-alpha` markers
 - tables: `table thead tbody tfoot tr td th` — approximated as flex rows
   with equal-width cells (no content-based column sizing)
-- images: `img` with `src` (PNG/JPEG), `width`/`height` attributes, `alt`
-  placeholder text while loading / on failure
+- images: `img` with `src` (PNG/JPEG/SVG), `width`/`height` attributes,
+  `alt` placeholder text while loading / on failure. SVG sources are
+  detected by content sniffing (any of: file bytes, a `loadResource`
+  buffer, `data:image/svg+xml` URIs — base64 or percent-encoded) and
+  rendered as vectors via [SvgView](svg.md)
+- inline `<svg>`: a replaced element, laid out like an image — intrinsic
+  size from `width`/`height`/`viewBox` (ratio-preserving shrink to the
+  container), rendered by [SvgView](svg.md) with its supported subset;
+  adopted synchronously, so sizing is right on the first layout pass
 - dropped: `head style script title meta link template noscript iframe
-  object embed audio video canvas svg input select textarea button`
+  object embed audio video canvas input select textarea button`
 
 ## Supported CSS
 
@@ -147,4 +155,6 @@ Image loading is asynchronous. Boxes with `width`/`height` (attributes or
 CSS) reserve space immediately; unsized images occupy 0×0 until decoded,
 then the widget invalidates layout and re-renders automatically (window
 mode). Decoded images upload to the X server once and are freed on
-`setHtml`/`destroy`.
+`setHtml`/`destroy`. Inline `<svg>` needs no loading at all; `<img>` SVG
+sources go through the same asynchronous resolution as rasters but hold no
+server-side resources (they redraw as vectors).
