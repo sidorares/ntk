@@ -151,12 +151,54 @@ All return `this` unless noted.
   `cancelAnimationFrame(id)` (see above)
 - `createWindow(params)` — child window (`parent` preset to this window)
 - `createPixmap(params)` — pixmap defaulting to this window's size, depth 32
+- `setCursor(nameOrShapeId)` — mouse cursor shown over the window (see
+  [Cursor](#cursor) below); `setCursor(null)` restores the parent's cursor
 - `queryPointer(cb)`, `grabPointer()`, `setMouseHintOnly(isOn)`
 - `queryTree(cb)` — `cb(err, { parent, root, children })`, all as `Window`s
 - `reparentTo(newParent, x, y)`
 - `setActions()` — opt in to the WM_DELETE_WINDOW protocol (window manager
   sends a `message` event instead of killing the connection on close)
 - `destroy()` — destroy the window server-side (also `Symbol.dispose`)
+
+## Cursor
+
+`wnd.setCursor(name)` sets the mouse cursor shown while the pointer is over
+the window:
+
+```js
+input.setCursor('text'); // I-beam over a text input
+button.setCursor('pointer'); // hand over a button or link
+wnd.setCursor(null); // back to inheriting the parent's cursor
+```
+
+Cursors come from the standard X11 `cursor` font. Names are CSS-like and
+resolve to cursorfont.h glyph indices; a raw glyph index (any `XC_*`
+constant) is accepted too. Unknown names throw synchronously, listing the
+valid names. Created cursors are server-side resources, cached per
+connection on `app.cursors` and freed on `app.close()`.
+
+| name | cursor font glyph |
+|---|---|
+| `default`, `arrow` | `XC_left_ptr` (68) |
+| `text` | `XC_xterm` (152) |
+| `pointer`, `hand` | `XC_hand2` (60) |
+| `wait` | `XC_watch` (150) |
+| `move` | `XC_fleur` (52) |
+| `crosshair` | `XC_crosshair` (34) |
+| `ew-resize`, `col-resize` | `XC_sb_h_double_arrow` (108) |
+| `ns-resize`, `row-resize` | `XC_sb_v_double_arrow` (116) |
+| `nwse-resize` | `XC_bottom_right_corner` (14) |
+| `nesw-resize` | `XC_bottom_left_corner` (12) |
+| `grab` | `XC_hand1` (58) |
+| `help` | `XC_question_arrow` (92) |
+| `not-allowed` | `XC_X_cursor` (0) |
+
+`createWindow({ cursor })` still accepts a raw X cursor id at creation time;
+`app.cursors.get(name)` supplies one if you need it there:
+
+```js
+const wnd = app.createWindow({ width: 300, height: 200, cursor: app.cursors.get('crosshair') });
+```
 
 ## Events
 
