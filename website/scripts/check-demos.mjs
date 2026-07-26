@@ -47,7 +47,7 @@ fontSource.alias('serif', 'DejaVu Serif');
 fontSource.alias('monospace', 'DejaVu Sans Mono');
 ntk.setDefaultFontSource(fontSource);
 
-// same wiring as static/demo/runner.html
+// same wiring as static/demo/runner/index.html
 process.env.DISPLAY = 'demo/local:0';
 
 let current = null; // { server, streams }

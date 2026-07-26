@@ -18,7 +18,9 @@ export default function LiveDemoImpl({
   screenHeight = 480,
 }) {
   const { colorMode } = useColorMode();
-  const runnerBase = useBaseUrl('/demo/runner.html');
+  // directory-index URL: a bare `runner.html` gets clean-URL-redirected by
+  // `docusaurus serve` (losing the base path), breaking local previews
+  const runnerBase = useBaseUrl('/demo/runner/');
   const runnerSrc = `${runnerBase}?width=${screenWidth}&height=${screenHeight}`;
 
   const iframeRef = useRef(null);

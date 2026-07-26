@@ -15,9 +15,24 @@
 </style>
 </head>
 <body>
-<script src="./ntk-demo-runtime.js"></script>
 <script>
+// Load the bundle relative to .../demo/ computed from the page URL. Static
+// servers disagree on this page's canonical path (GitHub Pages serves
+// /demo/runner/, `docusaurus serve` clean-URLs it to /demo/runner), so a
+// fixed relative src can't work for both.
 (function () {
+  var s = document.createElement('script');
+  s.src = location.pathname.replace(/\/demo\/.*$/, '/demo/') + 'ntk-demo-runtime.js';
+  s.onload = function () { window.__ntkRunnerMain(); };
+  s.onerror = function () {
+    window.parent.postMessage(
+      { type: 'console', level: 'error', text: 'failed to load ' + s.src }, '*');
+  };
+  document.head.appendChild(s);
+})();
+</script>
+<script>
+window.__ntkRunnerMain = function () {
   'use strict';
 
   // The whole demo stack (ntk, the x11 client, the RENDER-enabled JS X
@@ -161,7 +176,7 @@
 
   boot();
   post({ type: 'ready', render: !!NtkDemo.hasRenderServer });
-})();
+};
 </script>
 </body>
 </html>
