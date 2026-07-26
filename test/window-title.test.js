@@ -82,3 +82,19 @@ test('setTitle after creation updates both properties', async () => {
   }
   assert.fail('_NET_WM_NAME was not updated');
 });
+
+// the _NET_WM_NAME write trails setTitle by two InternAtom round-trips; if
+// the window dies first, the stale ChangeProperty must be dropped — on a
+// real server it would BadWindow, and an unhandled X error wedges the
+// whole connection (this hung CI: sidorares/ntk#60)
+test('destroying a window right after setTitle leaves the connection usable', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30, title: 'ephemeral' });
+  wnd.destroy(); // before the InternAtom replies arrive
+
+  // connection must still round-trip and serve new windows afterwards
+  const survivor = app.createWindow({ width: 40, height: 30, title: 'survivor' });
+  const netWmName = await internAtom('_NET_WM_NAME');
+  const net = await waitForProperty(survivor.id, netWmName);
+  assert.deepEqual(net.data, Buffer.from('survivor', 'utf8'));
+  survivor.destroy();
+});
