@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.2.0](https://github.com/sidorares/ntk/compare/v3.1.0...v3.2.0) (2026-07-26)
+
+
+### Features
+
+* clipboard/selection API (app.clipboard.read/write) ([#69](https://github.com/sidorares/ntk/issues/69)) ([b6fe113](https://github.com/sidorares/ntk/commit/b6fe1132609a65f96e4c5028eba0beb8c8db112d))
+* line dashes and round caps/joins in the 2d stroke pipeline ([#70](https://github.com/sidorares/ntk/issues/70)) ([084977b](https://github.com/sidorares/ntk/commit/084977b77850e1482a54265eaaaa0b13b0ba7399))
+* mouse cursor support via the X11 cursor font ([#68](https://github.com/sidorares/ntk/issues/68)) ([df9407e](https://github.com/sidorares/ntk/commit/df9407ee0194d22dfba141c3b8a803f1f9b83f45))
+
+
+### Bug Fixes
+
+* bump x11 to ^3.1.1 ([#71](https://github.com/sidorares/ntk/issues/71)) ([24eadfa](https://github.com/sidorares/ntk/commit/24eadfa627a7a426653b56259eb5f7437e0f3b0e))
+* guard setTitle/setActions request chains against a closing client ([#63](https://github.com/sidorares/ntk/issues/63)) ([1cfe9f9](https://github.com/sidorares/ntk/commit/1cfe9f9332112a8cbc098341913de916ad391673))
+
 ## [3.1.0](https://github.com/sidorares/ntk/compare/v3.0.0...v3.1.0) (2026-07-26)
 
 
