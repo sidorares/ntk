@@ -48,6 +48,9 @@ lib/rasterize.js           pure-JS glyph outline -> a8 bitmap rasterizer
 lib/trapezoid.js           polygon -> XRender trapezoids (non-zero/even-odd;
                            vector text and all 2d path fills)
 lib/fontconfig.js          font matching + fallback chain via fc-match CLI
+lib/text/fontsource.js     pluggable FontSource seam: FontconfigFontSource
+                           (default), StaticFontSource (data-based, browser-
+                           safe), process-wide default override
 lib/text/font.js           Font: fontkit face — metrics, coverage, shaping
 lib/text/fontmanager.js    FontManager (app.fonts): match/load/fallback
 lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
@@ -89,6 +92,12 @@ their side effects.
   the same way math rendering uses `katex`.
 - **ESM**, Node >= 20.19. No TypeScript for now (a possible later migration —
   keep JSDoc accurate instead).
+- **Browser-bundleable lib/**: never statically import node builtins in
+  `lib/` — fetch them lazily via `process.getBuiltinModule('node:...')`
+  behind a capability check, and route environment-dependent behavior
+  through the pluggable hooks (FontSource for font lookup, `configureTex`
+  for KaTeX assets, HtmlView's `loadResource`, `createClient({ glxVisual })`)
+  so browser playgrounds can substitute implementations.
 - Server-side resources (windows, pixmaps, pictures, glyphsets) must offer
   `destroy()`, `Symbol.dispose` and a `FinalizationRegistry` GC fallback.
 

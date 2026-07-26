@@ -12,6 +12,12 @@ const app2 = await createClient({ display: ':1' });
 ```
 
 - `options` is passed through to `x11.createClient` (e.g. `{ display: ':1' }`).
+  ntk additionally understands:
+  - `fontSource` — pluggable system-font lookup for `app.fonts`
+    (see [fonts.md](fonts.md#pluggable-font-sources));
+  - `glxVisual` — visual id used by `getContext('opengl')` in environments
+    where `glxinfo` cannot be shelled out to
+    (see [context-opengl.md](context-opengl.md)).
 - The XRender extension is preloaded (required for the 2d context). GLX is
   preloaded when available; `app.display.GLX` is `null` when the server has no
   GLX support.

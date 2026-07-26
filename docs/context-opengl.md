@@ -26,8 +26,10 @@ gl.SwapBuffers();
 
 - Method names follow the GL C API without the `gl` prefix (`gl.Vertex3f`,
   `gl.MatrixMode`, …); constants likewise (`gl.TRIANGLES`).
-- If `visual` is not passed, it is currently discovered by running
-  `glxinfo -i -b` (requires `glxinfo`/mesa-utils installed).
+- If `visual` is not passed, it defaults to `createClient({ glxVisual })`
+  when given, else it is discovered by running `glxinfo -i -b` (requires
+  `glxinfo`/mesa-utils installed). Environments that cannot shell out must
+  supply the visual one of those two ways.
 - Queries with replies take a node-style callback:
   `gl.GenTextures(1, (err, textures) => ...)`, `gl.Finish(cb)`.
 - `gl.SwapBuffers()` swaps the owning window.

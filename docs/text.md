@@ -131,10 +131,12 @@ Partial objects are fine — unset keys keep their defaults
 
 ### `app.fonts` → FontManager
 
-- `match(family, { weight, style })` → `Font` — fontconfig resolution with
-  registered fonts first. `family` may be a comma-separated list.
-- `load(path, { postscriptName, family, weight, style })` → `Font` —
-  register a font file (bundled/custom fonts; issue-16-style usage):
+- `match(family, { weight, style })` → `Font` — system-font resolution
+  (fontconfig by default) with registered fonts first. `family` may be a
+  comma-separated list.
+- `load(pathOrData, { postscriptName, family, weight, style })` → `Font` —
+  register a font file, given a path or its bytes (bundled/custom fonts;
+  issue-16-style usage):
 
   ```js
   app.fonts.load('./assets/Inter.ttf');
@@ -146,7 +148,9 @@ Partial objects are fine — unset keys keep their defaults
 - `layout(content, style, options)` → `TextLayout`
 
 `FontManager` is exported from the package root and works without an X
-connection — measurement and layout are fully headless.
+connection — measurement and layout are fully headless. System lookup goes
+through a pluggable FontSource (`new FontManager({ source })`) — see
+[fonts.md](fonts.md#pluggable-font-sources).
 
 ### `Font`
 
