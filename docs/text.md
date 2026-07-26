@@ -290,4 +290,5 @@ resolved in 2026:
   and continuously animated sizes. See
   [the vector text path](#the-vector-trapezoid-text-path).
 
-x11 dependency: already at the latest published release (2.3.0).
+x11 dependency: already at the latest published release (3.0.0 — brings the
+pure-JS X server used by [ntk/xserver](xserver.md) and the playground).
