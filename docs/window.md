@@ -23,6 +23,16 @@ asynchronously.
 Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 
 - `backingStore: false` — opt out of double buffering (below)
+- X window attributes, forwarded into the `CreateWindow` value list under
+  their node-x11 names: `backgroundPixmap`, `backgroundPixel`,
+  `borderPixmap`, `borderPixel`, `bitGravity`, `winGravity`,
+  `backingPlanes`, `backingPixel`, `overrideRedirect`, `saveUnder`,
+  `doNotPropagateMask`, `colormap`, `cursor`. Defaults stay in effect
+  unless overridden: NorthWest `bitGravity` (`1`) and the event mask
+  computed from the `onXxx` handlers (an explicit `eventMask` is OR-ed into
+  the computed mask). Note the X *backing-store* attribute is **not**
+  forwarded: the `backingStore` option name is taken by ntk's double
+  buffering opt-out above, which is an unrelated client-side concept.
 - `coalesceEvents: false` — deliver every noisy event individually (see
   [Frames, coalescing and slow connections](#frames-coalescing-and-slow-connections))
 - `frameSync: false` — don't pace frames with a server round-trip fence
