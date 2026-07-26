@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ntk demo runner</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14161a; overflow: hidden; }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+</style>
+</head>
+<body>
+<script src="./ntk-demo-runtime.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // The whole demo stack (ntk, the x11 client, the RENDER-enabled JS X
+  // server, the canvas presenter and the embedded DejaVu fonts) is the
+  // NtkDemo global from ntk-demo-runtime.js. Demo code arrives from the
+  // parent frame via postMessage and runs against a fresh in-page server,
+  // connecting exactly like a node program would: through DISPLAY.
+
+  var params = new URLSearchParams(location.search);
+  var WIDTH = parseInt(params.get('width'), 10) || 640;
+  var HEIGHT = parseInt(params.get('height'), 10) || 480;
+
+  // process.env.DISPLAY is what x11.createClient() (inside ntk's
+  // createClient) consults, same as node. The 'demo' display protocol
+  // connects straight to the in-page server.
+  if (!window.process) window.process = { env: {} };
+  if (!window.process.env) window.process.env = {};
+  window.process.env.DISPLAY = 'demo/local:0';
+
+  // The browser has no fontconfig: install the bundled DejaVu faces as the
+  // process-wide default font source before any demo code runs, so
+  // ctx.font = '16px sans-serif' resolves exactly like on a desktop.
+  NtkDemo.setupFonts();
+
+  var current = null; // { server, presenter, canvas, streams, timers }
+
+  NtkDemo.x11.registerDisplayProtocol('demo', function () {
+    if (!current)
+      throw new Error('demo server is not running');
+    var pair = NtkDemo.createStreamPair();
+    current.server.addClientStream(pair[1]);
+    current.streams.push(pair[0]);
+    return pair[0];
+  });
+
+  function post(msg) {
+    window.parent.postMessage(msg, '*');
+  }
+
+  function stringify(arg) {
+    if (typeof arg === 'string') return arg;
+    if (arg instanceof Error) return String(arg.stack || arg);
+    try {
+      return JSON.stringify(arg);
+    } catch (e) {
+      return String(arg);
+    }
+  }
+
+  function makeConsole() {
+    function emit(level) {
+      return function () {
+        var text = Array.prototype.map.call(arguments, stringify).join(' ');
+        post({ type: 'console', level: level, text: text });
+      };
+    }
+    return { log: emit('log'), info: emit('log'), warn: emit('warn'), error: emit('error') };
+  }
+
+  function teardown() {
+    if (!current)
+      return;
+    var old = current;
+    current = null;
+    old.timers.intervals.forEach(clearInterval);
+    old.timers.timeouts.forEach(clearTimeout);
+    old.streams.forEach(function (s) {
+      try { s.destroy(); } catch (e) { /* already gone */ }
+    });
+    // removing the canvas drops the presenter's DOM listeners with it
+    if (old.canvas.parentNode)
+      old.canvas.parentNode.removeChild(old.canvas);
+  }
+
+  function boot() {
+    var canvas = document.createElement('canvas');
+    document.body.appendChild(canvas);
+    // createServer comes from the repo's lib/xserver: a node-x11 XServer
+    // with the RENDER extension installed (ntk's 2d context requires it)
+    var server = NtkDemo.xserver.createServer({ width: WIDTH, height: HEIGHT });
+    var presenter = new NtkDemo.CanvasPresenter(server, canvas);
+    current = {
+      server: server,
+      presenter: presenter,
+      canvas: canvas,
+      streams: [],
+      timers: { intervals: [], timeouts: [] }
+    };
+    canvas.focus();
+  }
+
+  function demoRequire(name) {
+    if (name === 'ntk')
+      return NtkDemo.ntk;
+    if (name === 'x11')
+      return NtkDemo.x11;
+    throw new Error('module not available in the playground: ' + name);
+  }
+
+  function runCode(code) {
+    teardown();
+    boot();
+    var timers = current.timers;
+    var demoConsole = makeConsole();
+    var demoSetInterval = function (fn, ms) {
+      var id = setInterval(fn, ms);
+      timers.intervals.push(id);
+      return id;
+    };
+    var demoSetTimeout = function (fn, ms) {
+      var id = setTimeout(fn, ms);
+      timers.timeouts.push(id);
+      return id;
+    };
+    try {
+      var fn = new Function(
+        'require', 'process', 'console',
+        'setInterval', 'setTimeout', 'clearInterval', 'clearTimeout',
+        code);
+      fn(demoRequire, window.process, demoConsole,
+        demoSetInterval, demoSetTimeout, clearInterval, clearTimeout);
+    } catch (e) {
+      post({ type: 'console', level: 'error', text: stringify(e) });
+    }
+  }
+
+  // async errors from demo callbacks land here
+  window.addEventListener('error', function (ev) {
+    post({ type: 'console', level: 'error',
+           text: stringify(ev.error || ev.message) });
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    post({ type: 'console', level: 'error', text: stringify(ev.reason) });
+  });
+
+  window.addEventListener('message', function (ev) {
+    var msg = ev.data;
+    if (msg && msg.type === 'run-code')
+      runCode(String(msg.code || ''));
+  });
+
+  boot();
+  post({ type: 'ready', render: !!NtkDemo.hasRenderServer });
+})();
+</script>
+</body>
+</html>
