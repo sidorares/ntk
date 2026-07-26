@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
-import { createClient, HtmlView, Path2D, SvgView } from '../lib/index.js';
+import { createClient, HtmlView, MarkdownView, Path2D, SvgView } from '../lib/index.js';
 
 const withTimeout = (promise, ms, what) =>
   Promise.race([
@@ -257,6 +257,36 @@ test('HtmlView: inline <svg> and svg <img> render as vectors', async (t) => {
   assert.deepEqual(px(image, 64, 10, 10), [255, 0, 0], 'inline svg rect');
   assert.deepEqual(px(image, 64, 8, 36), [0, 0, 255], 'svg img below it');
   assert.deepEqual(px(image, 64, 50, 50), [255, 255, 255], 'background untouched');
+  pixmap.destroy();
+});
+
+test('MarkdownView: mermaid fence renders diagram pixels', async (t) => {
+  if (skip) return t.skip(skip);
+  const pixmap = app.createPixmap({ width: 300, height: 200, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 300, 200);
+
+  const view = new MarkdownView(null, { fonts: app.fonts });
+  view.setMarkdown('```mermaid\nflowchart LR\n A[Hello] --> B[World]\n```');
+  view.layout(280);
+  await withTimeout(
+    (async () => {
+      while (![...view._mermaid.values()][0]?.model) await new Promise((r) => setTimeout(r, 50));
+    })(),
+    10000,
+    'mermaid parse'
+  );
+  view.layout(280);
+  view.draw(ctx, 10, 10);
+
+  const image = await readPixels(ctx, 300, 200);
+  // scan for the node fill color #ececff (BGRA readback)
+  let filled = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    if (image.data[i + 2] === 0xec && image.data[i + 1] === 0xec && image.data[i] === 0xff) filled++;
+  }
+  assert.ok(filled > 200, `node fill pixels present (${filled})`);
   pixmap.destroy();
 });
 

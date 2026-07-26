@@ -48,9 +48,10 @@ text costs about a byte per glyph on the wire. Font names resolve through
 fontconfig (`fc-match`). Very large and continuously animated sizes render
 as server-side trapezoids instead of cached bitmaps. A `TextLayout` engine
 wraps styled text to a target width, a `MarkdownView` widget renders
-markdown (with syntax-highlighted code fences) on top of it, and a
-KaTeX-backed `TexView` renders TeX math — see [docs/text.md](docs/text.md)
-and [docs/tex.md](docs/tex.md).
+markdown (with syntax-highlighted code fences, mermaid flowchart/sequence
+diagrams, and KaTeX math via `TexView`) on top of it — see
+[docs/text.md](docs/text.md), [docs/mermaid.md](docs/mermaid.md) and
+[docs/tex.md](docs/tex.md).
 
 PNG/JPEG images decode client-side (`loadImage`) and composite server-side
 via `ctx.drawImage` ([docs/images.md](docs/images.md)). An `HtmlView`

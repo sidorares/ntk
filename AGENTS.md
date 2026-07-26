@@ -58,6 +58,8 @@ lib/image.js               Image: PNG/JPEG decode (pngjs/jpeg-js), server upload
 lib/widgets/css.js         CSS for HtmlView: parse (postcss), cascade, computed styles
 lib/widgets/htmlview.js    HtmlView widget: htmlparser2 DOM + yoga-layout boxes
 lib/widgets/markdown.js    markdown parsing (adapter over marked)
+lib/widgets/mermaid.js     mermaid fences: mermaid-package parser (headless,
+                           lazy) + native dagre/sequence layout and drawing
 lib/widgets/markdownview.js  MarkdownView widget (highlighted + math fences)
 lib/widgets/highlight.js   fence syntax highlighting (adapter over highlight.js)
 lib/widgets/svgview.js     SvgView widget: static SVG via Path2D + 2d context

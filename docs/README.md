@@ -25,6 +25,9 @@ matching file here (see AGENTS.md).
   wire-efficiency design, the vector (trapezoid) path for large/animated sizes
 - [TeX / math](tex.md) — KaTeX-based formula rendering: `layoutTex`, `TexView`,
   markdown math fences
+- [Mermaid diagrams](mermaid.md) — ```` ```mermaid ```` fences in MarkdownView:
+  flowcharts (dagre) and sequence diagrams, parsed by mermaid's own grammar,
+  drawn natively
 - [HTML widget](html.md) — `HtmlView`: static HTML + CSS subset, yoga-layout
   flexbox/block layout, links, images, the resource-loading safety model
 - [SVG widget](svg.md) — `SvgView`: static SVG rendering through the 2d
