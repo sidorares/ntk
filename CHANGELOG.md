@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.0](https://github.com/sidorares/ntk/compare/v3.2.0...v3.3.0) (2026-07-26)
+
+
+### Features
+
+* **text:** caret positioning and hit-testing API on TextLayout ([#73](https://github.com/sidorares/ntk/issues/73)) ([7c6579d](https://github.com/sidorares/ntk/commit/7c6579d2833bf70ab5febc392987220b45ae37a3))
+
 ## [3.2.0](https://github.com/sidorares/ntk/compare/v3.1.0...v3.2.0) (2026-07-26)
 
 
