@@ -137,9 +137,8 @@ release and publishes to npm via OIDC trusted publishing (no token secrets).
 - **Use conventional commit messages** (`feat:`, `fix:`, `feat!:` /
   `BREAKING CHANGE:`, `chore:`, `docs:`) — release-please derives the next
   version and the changelog from them. PR squash-merge titles must follow the
-  same convention.
-- `release-please-config.json` currently pins `release-as: 3.0.0` to
-  bootstrap the first modernized release — remove that key after 3.0.0 ships.
+  same convention (repo settings enforce squash-merge; GitHub merge commits
+  would double-count entries in release-please's changelog).
 
 ## Gotchas
 
