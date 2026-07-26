@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { eventName, mask, maskCamelCase, toSnake } from '../lib/events_map.js';
+import { coalesce, eventName, mask, maskCamelCase, toSnake } from '../lib/events_map.js';
 
 test('every camelCase handler name maps to a snake event with a mask entry', () => {
   for (const [camel, snake] of Object.entries(toSnake)) {
@@ -16,6 +16,17 @@ test('every maskable event name is emitted by some X event type', () => {
     if (name === 'selection_clear') continue;
     assert.ok(emitted.has(name), `${name} never emitted`);
   }
+});
+
+test('coalescible events are known event names with known strategies', () => {
+  const emitted = new Set(eventName.filter(Boolean));
+  for (const [name, strategy] of Object.entries(coalesce)) {
+    assert.ok(emitted.has(name), `${name} never emitted`);
+    assert.ok(['last', 'union'].includes(strategy), `unknown strategy ${strategy}`);
+  }
+  assert.equal(coalesce.mousemove, 'last');
+  assert.equal(coalesce.resize, 'last');
+  assert.equal(coalesce.expose, 'union');
 });
 
 test('core event codes map to browser-like names', () => {
