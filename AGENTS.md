@@ -128,6 +128,17 @@ README.md holds only the pitch and short samples — details belong in docs/.
 - When touching rendering code, extend the smoke test with a pixel-level
   assertion — that is what caught real bugs during modernization.
 
+## Pull requests
+
+- When a PR contains changes that can be easily detected by eye (rendering,
+  widgets, layout), try to include screenshots/pictures **rendered by the
+  PR's own code** in the PR description. Commit the images under `docs/img/`
+  on the PR branch and reference them with
+  `https://raw.githubusercontent.com/sidorares/ntk/<commit-sha>/docs/img/…`
+  URLs (SHA-pinned links survive squash-merge branch deletion). Headless
+  recipe: draw into a pixmap, read back with `getImageData` (BGRA order) and
+  save with `pngjs` — same pattern as `test/smoke-canvas.test.js`.
+
 ## Releases
 
 Releases are automated with release-please (`.github/workflows/release.yml`):
