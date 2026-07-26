@@ -265,6 +265,189 @@ test('clip + globalAlpha through the a8 mask pipeline', async () => {
   wnd.destroy();
 });
 
+test('line dash API: normalization, validation and save/restore', async () => {
+  const { wnd, ctx } = freshWindow(32, 32);
+
+  assert.deepEqual(ctx.getLineDash(), [], 'default is solid');
+  assert.equal(ctx.lineDashOffset, 0, 'default offset');
+
+  ctx.setLineDash([4, 2, 1]);
+  assert.deepEqual(ctx.getLineDash(), [4, 2, 1, 4, 2, 1], 'odd-length list doubles');
+  const copy = ctx.getLineDash();
+  copy.push(99);
+  assert.deepEqual(ctx.getLineDash(), [4, 2, 1, 4, 2, 1], 'getLineDash returns a copy');
+
+  ctx.setLineDash([5, -1]);
+  assert.deepEqual(ctx.getLineDash(), [4, 2, 1, 4, 2, 1], 'negative value invalidates the call');
+  ctx.setLineDash([5, NaN]);
+  assert.deepEqual(ctx.getLineDash(), [4, 2, 1, 4, 2, 1], 'non-finite value invalidates the call');
+
+  ctx.lineDashOffset = 3;
+  ctx.lineDashOffset = NaN;
+  assert.equal(ctx.lineDashOffset, 3, 'non-finite offset assignment ignored');
+
+  ctx.save();
+  ctx.setLineDash([10, 10]);
+  ctx.lineDashOffset = 7;
+  ctx.restore();
+  assert.deepEqual(ctx.getLineDash(), [4, 2, 1, 4, 2, 1], 'restore() brings the dash list back');
+  assert.equal(ctx.lineDashOffset, 3, 'restore() brings the offset back');
+
+  ctx.setLineDash([]);
+  assert.deepEqual(ctx.getLineDash(), [], 'empty list resets to solid');
+  wnd.destroy();
+});
+
+test('stroke: dashed line alternates on/gap and lineDashOffset shifts it', async () => {
+  const { wnd, ctx } = freshWindow();
+
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 4;
+  ctx.setLineDash([10, 10]);
+
+  // pattern anchored at x=10: on [10,20), gap [20,30), on [30,40), ...
+  ctx.beginPath();
+  ctx.moveTo(10, 20);
+  ctx.lineTo(150, 20);
+  ctx.stroke();
+
+  // offset 10 starts inside the gap: gap [10,20), on [20,30), ...
+  ctx.lineDashOffset = 10;
+  ctx.beginPath();
+  ctx.moveTo(10, 60);
+  ctx.lineTo(150, 60);
+  ctx.stroke();
+
+  const image = await readPixels(ctx, 160, 120);
+  const ink = (x, y) => px(image, 160, x, y)[0] < 100;
+  for (const x of [14, 34, 54]) assert.ok(ink(x, 20), `dash ink at x=${x}`);
+  for (const x of [24, 44, 64]) assert.ok(!ink(x, 20), `gap at x=${x}`);
+  // offset by 10: the pattern is inverted
+  for (const x of [14, 34, 54]) assert.ok(!ink(x, 60), `offset line gap at x=${x}`);
+  for (const x of [24, 44, 64]) assert.ok(ink(x, 60), `offset line ink at x=${x}`);
+  // gaps do not leak outside the stroke width
+  assert.ok(!ink(14, 30), 'no ink between the two lines');
+  wnd.destroy();
+});
+
+test("stroke: lineCap 'round' inks beyond the endpoint where butt does not", async () => {
+  const { wnd, ctx } = freshWindow();
+
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(30, 30);
+  ctx.lineTo(80, 30);
+  ctx.stroke();
+
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.moveTo(30, 80);
+  ctx.lineTo(80, 80);
+  ctx.stroke();
+
+  const image = await readPixels(ctx, 160, 120);
+  const ink = (x, y) => px(image, 160, x, y)[0] < 100;
+  // (82, 32): ~3.5px diagonally past the endpoint, well inside the r=5 cap
+  assert.ok(ink(82, 32), 'round cap ink at ~45 degrees past the endpoint');
+  assert.ok(ink(83, 30), 'round cap ink straight past the endpoint');
+  assert.ok(!ink(86, 30), 'no ink beyond the cap radius');
+  assert.ok(ink(79, 30), 'stroke body inked');
+  // butt cap: same probes past the endpoint stay white
+  assert.ok(!ink(82, 82), 'butt cap has no ink past the endpoint');
+  assert.ok(!ink(83, 80), 'butt cap ends at the endpoint');
+  assert.ok(ink(79, 80), 'butt stroke body inked');
+  wnd.destroy();
+});
+
+test("stroke: lineJoin 'round' fills the outer corner arc, unlike bevel/miter", async () => {
+  const probe = async (join) => {
+    const { wnd, ctx } = freshWindow();
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 20;
+    ctx.lineJoin = join;
+    ctx.beginPath();
+    ctx.moveTo(30, 80);
+    ctx.lineTo(80, 80);
+    ctx.lineTo(80, 105);
+    ctx.stroke();
+    const image = await readPixels(ctx, 160, 120);
+    wnd.destroy();
+    const ink = (x, y) => px(image, 160, x, y)[0] < 100;
+    return {
+      body: ink(60, 80) && ink(80, 95),
+      // (86, 74): inside the r=10 arc at the outer corner, but outside the
+      // bevel chord (from (80,70) to (90,80)) — where round and bevel differ
+      arc: ink(86, 74),
+      // (89, 71): inside the square miter tip, outside the arc
+      tip: ink(89, 71)
+    };
+  };
+
+  const round = await probe('round');
+  assert.ok(round.body, 'round: stroke body inked');
+  assert.ok(round.arc, 'round: arc region at the outer corner is inked');
+  assert.ok(!round.tip, 'round: square miter tip stays empty');
+
+  const bevel = await probe('bevel');
+  assert.ok(bevel.body, 'bevel: stroke body inked');
+  assert.ok(!bevel.arc, 'bevel: arc region beyond the chord stays empty');
+
+  const miter = await probe('miter');
+  assert.ok(miter.arc && miter.tip, 'miter: fills the full square corner');
+});
+
+test('stroke: dash pattern continues around a closed rect with no seam cap', async () => {
+  const { wnd, ctx } = freshWindow();
+
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 4;
+  ctx.setLineDash([8, 8]);
+  // perimeter 256 is a whole number of patterns; offset 4 makes the last
+  // dash straddle the seam: it runs up the left edge from (20, 24), around
+  // the (20, 20) corner and along the top edge to (24, 20)
+  ctx.lineDashOffset = 4;
+  ctx.beginPath();
+  ctx.rect(20, 20, 64, 64);
+  ctx.stroke();
+
+  const image = await readPixels(ctx, 160, 120);
+  const ink = (x, y) => px(image, 160, x, y)[0] < 100;
+  // top edge: on [20,24), gap [24,32), on [32,40), gap [40,48), ...
+  assert.ok(!ink(26, 20), 'first gap on the top edge');
+  assert.ok(ink(34, 20), 'first full dash on the top edge');
+  assert.ok(!ink(42, 20), 'second gap on the top edge');
+  assert.ok(ink(50, 20), 'second full dash on the top edge');
+  // the merged seam-straddling run covers both sides of the corner
+  assert.ok(ink(20, 22), 'seam corner covered on the left edge');
+  assert.ok(ink(22, 20), 'seam corner covered on the top edge');
+  assert.ok(!ink(52, 52), 'interior of the rect untouched');
+  wnd.destroy();
+});
+
+test('stroke: round caps with globalAlpha < 1 do not double-darken the overlap', async () => {
+  const { wnd, ctx } = freshWindow();
+
+  ctx.strokeStyle = 'black';
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(30, 60);
+  ctx.lineTo(90, 60);
+  ctx.stroke();
+
+  const image = await readPixels(ctx, 160, 120);
+  // the cap disk overlaps the stroke body around (85..90, 60); coverage is
+  // accumulated in a clamped a8 mask, so the result is a single 50% blend
+  const body = px(image, 160, 60, 60)[0];
+  const overlap = px(image, 160, 87, 60)[0];
+  near(body, 127, 12, 'stroke body at 50% alpha');
+  near(overlap, 127, 12, 'cap/body overlap stays at 50% alpha');
+  wnd.destroy();
+});
+
 test('protocol: FillRectangles Src/In on an a8 picture, verified via GetImage', async () => {
   const X = app.X;
   const Render = app.display.Render;
