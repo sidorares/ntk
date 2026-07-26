@@ -50,6 +50,49 @@ app.fonts.shape('Hello', { font, size: 24 });
 face, `{ family }` to register under an alias, and `{ weight, style }` to
 override what the file reports.
 
+## Pluggable font sources
+
+Step 1 (lookup) is pluggable. All system-font resolution goes through a
+**FontSource** — by default `FontconfigFontSource`, the `fc-match` behavior
+described above. Environments without a shell or filesystem (a browser
+bundle, a hermetic test) swap in another source; steps 2–4 are pure JS and
+work unchanged.
+
+```js
+import { createClient, StaticFontSource, setDefaultFontSource } from 'ntk';
+
+const source = new StaticFontSource();
+source.add(dejavuSansBytes);                          // Uint8Array of a .ttf/.otf/.woff
+source.add(dejavuBoldBytes, { weight: 700 });         // metadata overrides are optional
+source.alias('sans-serif', 'DejaVu Sans');
+
+const app = await createClient({ fontSource: source });   // per-app
+// or per-manager:            new FontManager({ source })
+// or process-wide (also covers widget-internal managers):
+setDefaultFontSource(source);
+```
+
+`StaticFontSource` matches with fontconfig-like semantics: requested
+families first (in list order), then closest weight and style; every added
+face doubles as a fallback candidate with real coverage data, so
+per-codepoint fallback behaves exactly like the system path.
+
+A source is any object with:
+
+- `matchSorted({ family, weight, style })` → non-empty array of candidates,
+  best first — the fallback chain. `family` may be a comma-separated list.
+  A candidate is `{ key?, path?, data?, font?, postscriptName? }` — one of
+  `path` (font file, node only), `data` (font file bytes) or `font` (an
+  open `Font`).
+- `covers(candidate, codepoint)` → boolean *(optional)* — cheap coverage
+  pre-filter for fallback; when absent, candidates are opened and checked
+  with `hasGlyph()`.
+
+Related environment hooks: `app.fonts.load()` accepts font bytes as well as
+a path, `loadImage()` accepts encoded bytes, `HtmlView` takes a
+`loadResource` callback, and TeX rendering accepts injected KaTeX assets
+via `configureTex({ katex, fonts })` ([tex.md](tex.md)).
+
 ## Font objects and matching
 
 - `app.fonts.match(family, { weight, style })` → `Font`

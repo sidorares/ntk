@@ -48,6 +48,9 @@ lib/rasterize.js           pure-JS glyph outline -> a8 bitmap rasterizer
 lib/trapezoid.js           polygon -> XRender trapezoids (non-zero/even-odd;
                            vector text and all 2d path fills)
 lib/fontconfig.js          font matching + fallback chain via fc-match CLI
+lib/text/fontsource.js     pluggable FontSource seam: FontconfigFontSource
+                           (default), StaticFontSource (data-based, browser-
+                           safe), process-wide default override
 lib/text/font.js           Font: fontkit face — metrics, coverage, shaping
 lib/text/fontmanager.js    FontManager (app.fonts): match/load/fallback
 lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
@@ -67,6 +70,11 @@ lib/widgets/tex.js         KaTeX-based TexView widget / layoutTex
 test/                      node:test suite (see below)
 docs/                      public API documentation
 examples/                  runnable examples (own package.json, ESM)
+website/                   Docusaurus docs site + browser playground
+                           (self-contained package; syncs docs/ at build,
+                           bundles ntk + the JS X server with esbuild,
+                           deployed by .github/workflows/deploy-docs.yml;
+                           `cd website && npm test` pixel-checks all demos)
 ```
 
 Rendering contexts self-register on import:
@@ -89,6 +97,12 @@ their side effects.
   the same way math rendering uses `katex`.
 - **ESM**, Node >= 20.19. No TypeScript for now (a possible later migration —
   keep JSDoc accurate instead).
+- **Browser-bundleable lib/**: never statically import node builtins in
+  `lib/` — fetch them lazily via `process.getBuiltinModule('node:...')`
+  behind a capability check, and route environment-dependent behavior
+  through the pluggable hooks (FontSource for font lookup, `configureTex`
+  for KaTeX assets, HtmlView's `loadResource`, `createClient({ glxVisual })`)
+  so browser playgrounds can substitute implementations.
 - Server-side resources (windows, pixmaps, pictures, glyphsets) must offer
   `destroy()`, `Symbol.dispose` and a `FinalizationRegistry` GC fallback.
 
@@ -104,7 +118,10 @@ README.md holds only the pitch and short samples — details belong in docs/.
 
 - `npm test` — `node --test`; pure unit tests (rasterizer, event maps,
   fontconfig) plus an end-to-end smoke suite (`test/smoke.test.js`) that
-  talks to a real X server and verifies pixels via `GetImage`.
+  talks to a real X server and verifies pixels via `GetImage`, and a fully
+  hermetic suite (`test/xserver.test.js`) that runs ntk against node-x11's
+  pure-JS X server (RENDER built in since x11 3.1.0) — no display, no
+  fontconfig (docs/xserver.md).
 - X-dependent tests skip automatically when `$DISPLAY` is absent/unreachable.
   Locally: any X server (XQuartz works). CI runs `xvfb-run -a npm test`
   (`.github/workflows/ci.yml`).

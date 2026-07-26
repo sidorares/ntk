@@ -1,0 +1,28 @@
+/**
+ * Global overrides on top of Docusaurus' Infima defaults.
+ * The palette is generated from #1c4e80 (a deep window-title blue).
+ */
+
+:root {
+  --ifm-color-primary: #1c4e80;
+  --ifm-color-primary-dark: #194673;
+  --ifm-color-primary-darker: #18426d;
+  --ifm-color-primary-darkest: #13375a;
+  --ifm-color-primary-light: #1f568d;
+  --ifm-color-primary-lighter: #205a93;
+  --ifm-color-primary-lightest: #2565a6;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+/* For readability concerns, you should choose a lighter palette in dark mode. */
+[data-theme='dark'] {
+  --ifm-color-primary: #64a4e0;
+  --ifm-color-primary-dark: #4c96db;
+  --ifm-color-primary-darker: #408fd9;
+  --ifm-color-primary-darkest: #2678c4;
+  --ifm-color-primary-light: #7cb2e5;
+  --ifm-color-primary-lighter: #88b9e7;
+  --ifm-color-primary-lightest: #accfef;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}

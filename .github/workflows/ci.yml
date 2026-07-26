@@ -25,3 +25,24 @@ jobs:
       - run: npm ci
       - name: Run tests under Xvfb
         run: xvfb-run -a npm test
+
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            website/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: website
+      - name: Playground demos (pixel-verified) + bundle checks
+        run: npm test
+        working-directory: website
+      - name: Build site
+        run: npm run build
+        working-directory: website

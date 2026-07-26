@@ -41,6 +41,20 @@ KaTeX parse errors throw (`katex.ParseError`) — callers choose the
 fallback. `MarkdownView` falls back to rendering the source as a plain
 code block.
 
+### `configureTex({ katex, fonts })`
+
+By default the katex package and its `.ttf` fonts are resolved from
+`node_modules` at first use. Environments without node builtins (browser
+bundles) inject them instead:
+
+```js
+import { configureTex } from 'ntk'; // also exported from lib/widgets/tex.js
+configureTex({
+  katex: katexModule,                              // the imported katex module
+  fonts: { 'KaTeX_Main-Regular.ttf': bytes, ... }  // a subset is fine
+});
+```
+
 ## `TexBox`
 
 - `width`, `height` — layout box in px (`height` includes the depth below

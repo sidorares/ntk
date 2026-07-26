@@ -35,3 +35,5 @@ matching file here (see AGENTS.md).
 - [OpenGL rendering context](context-opengl.md) — indirect GLX / OpenGL 1.4 API
 - [Raw X11 rendering context](context-x11.md) — core X drawing requests
 - [Resource management](resource-management.md) — `using` / `Symbol.dispose`, GC-based cleanup
+- [Headless X server](xserver.md) — run ntk against node-x11's pure-JS X
+  server (XRender built in since x11 3.1.0) — no DISPLAY needed
