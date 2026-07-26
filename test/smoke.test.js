@@ -50,6 +50,27 @@ test('creates, maps and destroys a window', async (t) => {
   wnd.destroy();
 });
 
+test('requestAnimationFrame paces frames against the server', async (t) => {
+  if (skip) return t.skip(skip);
+  const wnd = app.createWindow({ width: 60, height: 40, frameInterval: 0 });
+  const stamps = [];
+  await withTimeout(
+    new Promise((resolve) => {
+      const loop = (now) => {
+        stamps.push(now);
+        if (stamps.length >= 3) return resolve();
+        wnd.requestAnimationFrame(loop);
+      };
+      wnd.requestAnimationFrame(loop);
+    }),
+    5000,
+    'three animation frames'
+  );
+  assert.ok(stamps[0] <= stamps[1] && stamps[1] <= stamps[2], 'monotonic frame timestamps');
+  assert.ok(typeof wnd.frameLatency === 'number' && wnd.frameLatency >= 0, 'fence round-trip measured');
+  wnd.destroy();
+});
+
 test('2d context: fillRect pixels round-trip through the server', async (t) => {
   if (skip) return t.skip(skip);
   const pixmap = app.createPixmap({ width: 64, height: 64, depth: 24 });
@@ -246,11 +267,13 @@ test('backing store: resize invalidates and requests one coalesced redraw', asyn
     draws.push([ev.width, ev.height]);
     ctx.fillRect(0, 0, wnd.width, wnd.height);
   });
-  // a storm of ConfigureNotify events in one tick → a single redraw
+  // a storm of ConfigureNotify events in one tick → a single redraw on the
+  // next paced frame (which waits out the fence of the initial present)
+  const redrawn = withTimeout(once(wnd, 'expose'), 5000, 'coalesced redraw');
   wnd.emit('event', { type: 22, x: 0, y: 0, width: 100, height: 80 });
   wnd.emit('event', { type: 22, x: 0, y: 0, width: 120, height: 90 });
   wnd.emit('event', { type: 22, x: 0, y: 0, width: 140, height: 100 });
-  await new Promise((resolve) => setImmediate(resolve));
+  await redrawn;
   assert.deepEqual(draws, [[140, 100]], 'one redraw at the final size');
   assert.ok(wnd._backing.width >= 140 && wnd._backing.height >= 100, 'backing grew');
 

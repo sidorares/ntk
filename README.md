@@ -78,6 +78,26 @@ wnd.map();
 canvas as a source — for images with lots of drawing calls it might be more
 efficient to draw locally and transfer pixels to the server when ready.
 
+## Frame pacing & networked displays
+
+Noisy events (`resize`, `mousemove`, `expose`) are coalesced into paced
+frames — the latest state wins, nothing queues up — and each frame is
+fenced with a server round-trip, so rendering automatically slows to the
+connection's real throughput instead of drawing a trail of stale updates
+over ssh-forwarded displays. Animation uses the DOM-style
+`requestAnimationFrame`:
+
+```js
+function frame(now) {
+  // ... draw ...
+  wnd.requestAnimationFrame(frame); // ~60fps locally, RTT-paced remotely
+}
+wnd.requestAnimationFrame(frame);
+```
+
+See [docs/window.md](docs/window.md) for the knobs (`frameInterval`,
+`frameSync`, `coalesceEvents`) and the raw uncoalesced event stream.
+
 ## Resource management
 
 Server-side resources support `using` / `await using` (Node 24+):

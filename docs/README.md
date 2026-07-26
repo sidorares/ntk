@@ -14,7 +14,8 @@ matching file here (see AGENTS.md).
 
 - [Getting started](getting-started.md) — installation, requirements, first window
 - [App](app.md) — connecting to the X server, the `App` factory object
-- [Window](window.md) — window creation, properties, methods and events
+- [Window](window.md) — window creation, properties, methods, events,
+  frame pacing / event coalescing, `requestAnimationFrame`
 - [Pixmap](pixmap.md) — offscreen drawables
 - [2d rendering context](context-2d.md) — canvas-like drawing API over XRender
 - [Images](images.md) — PNG/JPEG loading (`loadImage`), the `Image` object,
