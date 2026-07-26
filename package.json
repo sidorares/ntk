@@ -33,6 +33,7 @@
     "node": ">=20.19.0"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "bidi-js": "^1.0.3",
     "canvas-fontstyle": "^1.0.1",
     "css-select": "^7.0.0",
@@ -46,6 +47,7 @@
     "keysym": "0.0.6",
     "linebreak": "^1.1.0",
     "marked": "^18.0.7",
+    "mermaid": "^11.16.0",
     "parse-color": "^1.0.0",
     "pngjs": "^7.0.0",
     "postcss": "^8.5.23",

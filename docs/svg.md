@@ -27,6 +27,11 @@ view.draw(ctx, x, y, width, height);
 See `examples/svg-viewer.js` for a small viewer
 (`node svg-viewer.js file.svg`).
 
+[HtmlView](html.md) uses this widget for SVG inside HTML documents: inline
+`<svg>` elements and `<img>` sources that sniff as SVG (files, buffers,
+`data:image/svg+xml` URIs) are laid out like images and drawn through
+`SvgView`.
+
 ## API
 
 - `new SvgView(window[, opts])` — `window` may be `null` for standalone use.
@@ -36,6 +41,9 @@ See `examples/svg-viewer.js` for a small viewer
     preserving aspect ratio) or `'fill'` (stretch)
 - `view.setSvg(svgText)` — parse and adopt a document (a string containing
   an `<svg>` element). Re-renders in window mode
+- `view.setSvgDom(element)` — adopt an already-parsed htmlparser2 `<svg>`
+  element. Used by [HtmlView](html.md) for inline SVG; tolerates HTML-mode
+  parses (lowercased tag/attribute names like `viewbox`, `lineargradient`)
 - `view.draw(ctx, x, y[, w, h])` — draw into any 2d context; `w`/`h` default
   to the natural size. The `viewBox` (when present) is scaled to the target
   box

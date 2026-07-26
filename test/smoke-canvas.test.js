@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
-import { createClient, Path2D, SvgView } from '../lib/index.js';
+import { createClient, HtmlView, MarkdownView, Path2D, SvgView } from '../lib/index.js';
 
 const withTimeout = (promise, ms, what) =>
   Promise.race([
@@ -193,6 +193,28 @@ test('stroke: lineWidth and clipped strokes honor the mask path', async (t) => {
   pixmap.destroy();
 });
 
+test('stroke: closed subpaths do not spike to the origin', async (t) => {
+  // regression: a closed path whose flattened points end exactly on the
+  // start point fed a zero-length segment to extrude-polyline, producing
+  // NaN joins rendered as triangles at (0,0)
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx } = freshCtx();
+
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(40, 40, 15, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.stroke();
+
+  const image = await readPixels(ctx, 64, 64);
+  assert.deepEqual(px(image, 64, 40, 25), [0, 0, 0], 'circle outline drew');
+  for (const [x, y] of [[2, 2], [10, 10], [20, 20]]) {
+    assert.deepEqual(px(image, 64, x, y), [255, 255, 255], `no spike at ${x},${y}`);
+  }
+  pixmap.destroy();
+});
+
 test('strokeRect and quadraticCurveTo render', async (t) => {
   if (skip) return t.skip(skip);
   const { pixmap, ctx } = freshCtx();
@@ -210,6 +232,61 @@ test('strokeRect and quadraticCurveTo render', async (t) => {
   const image = await readPixels(ctx, 64, 64);
   assert.deepEqual(px(image, 64, 32, 8), [0, 0, 255], 'strokeRect top edge');
   assert.deepEqual(px(image, 64, 32, 30), [0, 0, 0], 'quad curve interior');
+  pixmap.destroy();
+});
+
+test('HtmlView: inline <svg> and svg <img> render as vectors', async (t) => {
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx } = freshCtx();
+
+  const uri =
+    'data:image/svg+xml,' +
+    encodeURIComponent('<svg viewBox="0 0 4 4"><rect width="4" height="4" fill="#0000ff"/></svg>');
+  const view = new HtmlView(null);
+  view.setHtml(
+    `<div style="margin:0;padding:0">
+       <svg width="32" height="32" viewBox="0 0 4 4"><rect width="4" height="4" fill="#ff0000"/></svg>
+       <img width="16" height="16" src="${uri}">
+     </div>`
+  );
+  await new Promise((r) => setTimeout(r, 20)); // let the data: URI resolve
+  view.layout(64);
+  view.draw(ctx, 0, 0);
+
+  const image = await readPixels(ctx, 64, 64);
+  assert.deepEqual(px(image, 64, 10, 10), [255, 0, 0], 'inline svg rect');
+  assert.deepEqual(px(image, 64, 8, 36), [0, 0, 255], 'svg img below it');
+  assert.deepEqual(px(image, 64, 50, 50), [255, 255, 255], 'background untouched');
+  pixmap.destroy();
+});
+
+test('MarkdownView: mermaid fence renders diagram pixels', async (t) => {
+  if (skip) return t.skip(skip);
+  const pixmap = app.createPixmap({ width: 300, height: 200, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, 300, 200);
+
+  const view = new MarkdownView(null, { fonts: app.fonts });
+  view.setMarkdown('```mermaid\nflowchart LR\n A[Hello] --> B[World]\n```');
+  view.layout(280);
+  await withTimeout(
+    (async () => {
+      while (![...view._mermaid.values()][0]?.model) await new Promise((r) => setTimeout(r, 50));
+    })(),
+    10000,
+    'mermaid parse'
+  );
+  view.layout(280);
+  view.draw(ctx, 10, 10);
+
+  const image = await readPixels(ctx, 300, 200);
+  // scan for the node fill color #ececff (BGRA readback)
+  let filled = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    if (image.data[i + 2] === 0xec && image.data[i + 1] === 0xec && image.data[i] === 0xff) filled++;
+  }
+  assert.ok(filled > 200, `node fill pixels present (${filled})`);
   pixmap.destroy();
 });
 
