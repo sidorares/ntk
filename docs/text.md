@@ -192,14 +192,67 @@ app.fonts.layout([
 ```
 
 Results are inspectable before drawing: `layout.width`, `layout.height`,
-`layout.lines[] = { x, y, baseline, width, ascent, descent, runs }` where
-`runs[] = { x, width, run, span }` in visual order. `layout.draw(ctx, x, y)`
-draws, batching consecutive same-color runs into single requests.
+`layout.lines[] = { x, y, baseline, width, ascent, descent, runs, start,
+end }` where `runs[] = { x, width, run, span, start, end }` in visual order
+(`start`/`end` are the logical UTF-16 ranges the line/run covers).
+`layout.draw(ctx, x, y)` draws, batching consecutive same-color runs into
+single requests.
 
 Line breaking is UAX#14 (`linebreak` package); `\n` forces breaks; a word
 wider than `maxWidth` force-breaks at the widest cluster prefix that fits;
 trailing whitespace at line ends is stripped (and doesn't count against
 `maxWidth` during fitting, CSS-style).
+
+#### Caret positioning and hit testing
+
+For editors and text inputs, `TextLayout` maps logical text positions to
+visual caret geometry and back — bidi-, ligature- and trailing-whitespace-
+aware, so there is no need to measure `text.slice(0, caret)` prefixes
+(which drifts across kerning/shaping boundaries and breaks in mixed-
+direction text):
+
+```js
+const layout = app.fonts.layout(text, { family: 'sans-serif', size: 16 });
+
+// logical code-point index -> visual caret geometry
+const { x, y, height, line } = layout.caretPosition(caretIndex);
+ctx.fillRect(x, y, 1, height); // draw the caret
+
+// click-to-caret: layout-box coordinates -> code-point index
+const index = layout.indexAt(clickX, clickY);
+```
+
+- `caretPosition(index)` → `{ x, y, height, line }`. `index` is a logical
+  **code-point** index in `[0, codePointCount]` (out of range clamps —
+  count code points with `Array.from(text).length`, not `text.length`).
+  `x` is the caret's visual x within the layout box (alignment included),
+  `y` the top of the line box, `height` its `ascent + descent`, `line` the
+  line index.
+- `indexAt(x, y)` → logical code-point index of the caret boundary nearest
+  to layout-box coordinates: the line is picked by `y` (clamping above the
+  first / below the last line), then the nearest boundary by `x` in visual
+  order — a click past the midpoint of a glyph cluster snaps to its far
+  edge. Inverse of `caretPosition` up to the bidi boundary ambiguity below.
+
+Conventions:
+
+- **Mixed-direction lines** use the bidi levels and visual run order the
+  layout already computed for drawing. At a direction boundary a single
+  caret is reported, at the trailing edge of the character logically
+  *before* the index (at a line start: the leading edge of the following
+  character). The indices on either side of a direction boundary may
+  therefore map to the same x — the standard single-caret compromise.
+- **Ligature/cluster interiors** (one glyph carrying several code points)
+  interpolate proportionally by code-point count across the cluster's
+  advance; `indexAt` rounds to the nearest interpolated boundary.
+- **Trailing whitespace** stripped from a line end still advances the
+  caret: positions inside it extend past the visual line edge on the
+  paragraph-direction side (`caretPosition(i + 1).x > caretPosition(i).x`
+  holds for `'a   '` in LTR).
+- **Line breaks**: the index of a `\n` itself sits at the end of its line;
+  the index after it belongs to the next line. An index at a soft-wrap
+  boundary maps to the start of the wrapped line. (A final `\n` does not
+  create a trailing empty line — the layout has none.)
 
 ### 2d context
 
