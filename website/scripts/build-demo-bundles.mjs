@@ -4,9 +4,8 @@
 // The bundle contains:
 //   - ntk itself (../lib/index.js) — exported as NtkDemo.ntk
 //   - node-x11 (the repo's node_modules/x11) — exported as NtkDemo.x11
-//   - the RENDER-enabled JS X server (../lib/xserver) — NtkDemo.xserver;
-//     until that lands, a plain node-x11 XServer fallback keeps the build
-//     green (scripts/xserver-fallback.js)
+//   - x11's pure-JS X server (RENDER included since x11 3.1.0) —
+//     NtkDemo.xserver
 //   - x11's browser presentation layer (CanvasPresenter, DOM key mapping)
 //   - setupFonts(): a StaticFontSource preloaded with embedded DejaVu TTFs
 //
@@ -30,8 +29,6 @@ const stubsDir = path.join(scriptsDir, 'stubs');
 const outFile = path.join(websiteDir, 'static', 'demo', 'ntk-demo-runtime.js');
 
 const x11Dir = path.join(repoRoot, 'node_modules', 'x11');
-const ntkXserver = path.join(repoRoot, 'lib', 'xserver', 'index.js');
-const hasNtkXserver = fs.existsSync(ntkXserver);
 
 // Virtual entry (resolveDir = website/scripts so ./demo-fonts.js and the
 // dejavu-fonts-ttf devDependency resolve from the website's node_modules,
@@ -39,9 +36,7 @@ const hasNtkXserver = fs.existsSync(ntkXserver);
 const entrySource = [
   "const ntk = require('ntk');",
   "const x11 = require('x11');",
-  hasNtkXserver
-    ? `const xserver = require(${JSON.stringify(ntkXserver)});`
-    : "const xserver = require('./xserver-fallback.js'); // lib/xserver not built yet",
+  "const xserver = require('x11/lib/xserver/index.js');",
   "const { CanvasPresenter } = require('x11/browser/compositor.js');",
   "const { keyboardEventToKeysym } = require('x11/browser/domkeys.js');",
   "const { setupFonts } = require('./demo-fonts.js');",
@@ -53,7 +48,6 @@ const entrySource = [
   '  keyboardEventToKeysym,',
   '  createStreamPair: xserver.createStreamPair,',
   '  setupFonts,',
-  `  hasRenderServer: ${hasNtkXserver},`,
   '};',
 ].join('\n');
 
@@ -111,7 +105,4 @@ await esbuild.build({
 });
 
 const kb = (fs.statSync(outFile).size / 1024).toFixed(0);
-console.log(
-  `built ${path.relative(websiteDir, outFile)} (${kb} KB, ` +
-    `xserver: ${hasNtkXserver ? 'lib/xserver (RENDER)' : 'node-x11 fallback — no RENDER yet'})`
-);
+console.log(`built ${path.relative(websiteDir, outFile)} (${kb} KB, xserver: x11 (RENDER))`);

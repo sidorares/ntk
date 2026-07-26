@@ -1,6 +1,7 @@
-// ntk end-to-end against the pure-JS X server (lib/xserver): fully hermetic
-// — no $DISPLAY, no fontconfig. An ntk client connects over an in-process
-// stream pair and every assertion reads pixels back through GetImage.
+// ntk end-to-end against node-x11's pure-JS X server (RENDER included since
+// x11 3.1.0): fully hermetic — no $DISPLAY, no fontconfig. An ntk client
+// connects over an in-process stream pair and every assertion reads pixels
+// back through GetImage.
 //
 // Tolerances are deliberately loose where antialiasing/filtering is
 // involved: the JS rasterizer is not (and does not try to be) pixel-exact
@@ -11,8 +12,11 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { after, before, test } from 'node:test';
 
+import xserver from 'x11/lib/xserver/index.js';
+
 import { createClient, Image, StaticFontSource } from '../lib/index.js';
-import { createServer, createStreamPair } from '../lib/xserver/index.js';
+
+const { createServer, createStreamPair } = xserver;
 
 const require = createRequire(import.meta.url);
 const fontDir = join(dirname(require.resolve('katex/package.json')), 'dist', 'fonts');
@@ -274,12 +278,12 @@ test('protocol: FillRectangles Src/In on an a8 picture, verified via GetImage', 
   Render.FillRectangles(Render.PictOp.Src, picId, [0, 0, 0, 0.5], [0, 0, 16, 16]);
   Render.FillRectangles(Render.PictOp.In, picId, [0, 0, 0, 0.5], [0, 0, 8, 16]);
 
-  // this server returns depth-8 rasters as 32bpp LE words (alpha in the low
-  // byte), matching its universal GetImage packing
+  // depth-8 GetImage packs one byte per pixel, rows padded to 4 bytes
+  // (width 16 is already aligned)
   const img = await new Promise((resolve, reject) =>
     X.GetImage(2, pid, 0, 0, 16, 16, 0xffffffff, (err, res) => (err ? reject(err) : resolve(res)))
   );
-  const alphaAt = (x, y) => img.data.readUInt32LE((y * 16 + x) * 4) & 0xff;
+  const alphaAt = (x, y) => img.data[y * 16 + x];
   near(alphaAt(12, 8), 128, 2, 'Src wrote coverage 0.5');
   near(alphaAt(3, 8), 64, 2, 'In multiplied coverage down to 0.25');
 
@@ -306,7 +310,8 @@ test('protocol: AddTraps accumulates antialiased coverage', async () => {
   const one = await new Promise((resolve, reject) =>
     X.GetImage(2, pid, 0, 0, 8, 8, 0xffffffff, (err, res) => (err ? reject(err) : resolve(res)))
   );
-  const alphaAt = (img, x, y) => img.data.readUInt32LE((y * 8 + x) * 4) & 0xff;
+  // depth-8 GetImage: one byte per pixel, rows padded to 4 (8 is aligned)
+  const alphaAt = (img, x, y) => img.data[y * 8 + x];
   near(alphaAt(one, 4, 2), 128, 6, 'half-covered row');
   assert.equal(alphaAt(one, 4, 3), 0, 'row below untouched');
 

@@ -67,12 +67,6 @@ lib/widgets/markdownview.js  MarkdownView widget (highlighted + math fences)
 lib/widgets/highlight.js   fence syntax highlighting (adapter over highlight.js)
 lib/widgets/svgview.js     SvgView widget: static SVG via Path2D + 2d context
 lib/widgets/tex.js         KaTeX-based TexView widget / layoutTex
-lib/xserver/render.js      XRender extension for node-x11's pure-JS X server
-                           (zero imports; premultiplied-ARGB compositing,
-                           AddTraps/Triangles coverage, glyphs, gradients)
-lib/xserver/index.js       `ntk/xserver` entry: installRender(server) +
-                           createServer() — headless/browser X server with
-                           RENDER, no Xvfb needed (docs/xserver.md)
 test/                      node:test suite (see below)
 docs/                      public API documentation
 examples/                  runnable examples (own package.json, ESM)
@@ -125,8 +119,9 @@ README.md holds only the pitch and short samples — details belong in docs/.
 - `npm test` — `node --test`; pure unit tests (rasterizer, event maps,
   fontconfig) plus an end-to-end smoke suite (`test/smoke.test.js`) that
   talks to a real X server and verifies pixels via `GetImage`, and a fully
-  hermetic suite (`test/xserver.test.js`) that runs ntk against the
-  in-package JS X server + RENDER extension — no display, no fontconfig.
+  hermetic suite (`test/xserver.test.js`) that runs ntk against node-x11's
+  pure-JS X server (RENDER built in since x11 3.1.0) — no display, no
+  fontconfig (docs/xserver.md).
 - X-dependent tests skip automatically when `$DISPLAY` is absent/unreachable.
   Locally: any X server (XQuartz works). CI runs `xvfb-run -a npm test`
   (`.github/workflows/ci.yml`).

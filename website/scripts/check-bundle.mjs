@@ -49,12 +49,11 @@ assert.ok(context.Buffer, 'Buffer global installed by the bundle');
 assert.ok(context.process && context.process.env, 'process global installed by the bundle');
 
 // the server itself must boot DOM-free (only the presenter needs a canvas)
+// and carry the RENDER extension ntk requires (built into x11 >= 3.1.0)
 const server = g.xserver.createServer({ width: 64, height: 48 });
 assert.strictEqual(server.width, 64);
 assert.ok(server.root && server.root.raster && server.root.raster.data.length === 64 * 48);
-if (g.hasRenderServer) {
-  assert.strictEqual(typeof g.xserver.installRender, 'function', 'xserver.installRender');
-}
+assert.ok(server.extensions && server.extensions.get('RENDER'), 'server has RENDER');
 
 // fonts: the embedded DejaVu faces must open and cover basic latin
 const source = context.NtkDemo.setupFonts();
@@ -70,5 +69,5 @@ for (const family of ['serif', 'monospace']) {
 
 console.log(
   `bundle ok (${(fs.statSync(bundle).size / 1024).toFixed(0)} KB, ` +
-    `xserver: ${g.hasRenderServer ? 'lib/xserver (RENDER)' : 'node-x11 fallback — no RENDER yet'})`
+    'xserver: x11 (RENDER))'
 );

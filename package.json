@@ -24,8 +24,7 @@
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
-    ".": "./lib/index.js",
-    "./xserver": "./lib/xserver/index.js"
+    ".": "./lib/index.js"
   },
   "files": [
     "lib"
@@ -52,7 +51,7 @@
     "parse-color": "^1.0.0",
     "pngjs": "^7.0.0",
     "postcss": "^8.5.23",
-    "x11": "^3.0.0",
+    "x11": "^3.1.0",
     "yoga-layout": "^3.2.1"
   },
   "scripts": {

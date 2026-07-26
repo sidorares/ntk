@@ -1,14 +1,11 @@
 // Correctness gate for the playground demos: runs every demo string from
-// website/src/demos against the repo's RENDER-enabled JS X server
-// (lib/xserver) in node, exactly the way the browser runner does (require
+// website/src/demos against x11's pure-JS X server (RENDER built in since
+// x11 3.1.0) in node, exactly the way the browser runner does (require
 // shim + DISPLAY protocol + StaticFontSource with the bundled DejaVu
 // faces), injects input where relevant, and asserts nothing threw and
 // pixels changed.
 //
 //   node scripts/check-demos.mjs
-//
-// NOTE: depends on lib/xserver (built separately). Until it exists this
-// script fails fast with a clear message.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -19,19 +16,12 @@ const websiteDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 const repoRoot = path.resolve(websiteDir, '..');
 const demosDir = path.join(websiteDir, 'src', 'demos');
 
-const xserverPath = path.join(repoRoot, 'lib', 'xserver', 'index.js');
-if (!fs.existsSync(xserverPath)) {
-  console.error(
-    'check-demos: lib/xserver/index.js does not exist yet (the RENDER-enabled\n' +
-    'JS X server is built separately). The demos cannot be verified without\n' +
-    'it — re-run once lib/xserver lands.'
-  );
-  process.exit(1);
-}
-
 const ntk = await import(pathToFileURL(path.join(repoRoot, 'lib', 'index.js')));
 const x11 = require(path.join(repoRoot, 'node_modules', 'x11'));
-const { createServer, createStreamPair } = await import(pathToFileURL(xserverPath));
+// x11's pure-JS X server; RENDER is built in since x11 3.1.0
+const { createServer, createStreamPair } = require(
+  path.join(repoRoot, 'node_modules', 'x11', 'lib', 'xserver')
+);
 
 // same fonts as the browser bundle: no fontconfig dependency, hermetic runs
 const dejavu = (file) =>

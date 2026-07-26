@@ -11,9 +11,8 @@ Everything, including font rasterization, is pure JavaScript: `npm install`
 never compiles anything.
 
 **Docs & live playground:** <https://sidorares.github.io/ntk/> — the
-playground runs ordinary ntk code in your browser against an in-browser
-pure-JS X server (node-x11's server plus ntk's XRender extension) with
-bundled fonts. The same server also works headless in node — see
+playground runs ordinary ntk code in your browser against node-x11's
+in-browser pure-JS X server (XRender included) with bundled fonts. The same server also works headless in node — see
 [docs/xserver.md](docs/xserver.md) — so ntk apps and tests can run with no
 real X server at all.
 

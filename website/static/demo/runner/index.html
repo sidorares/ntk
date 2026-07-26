@@ -110,8 +110,8 @@ window.__ntkRunnerMain = function () {
   function boot() {
     var canvas = document.createElement('canvas');
     document.body.appendChild(canvas);
-    // createServer comes from the repo's lib/xserver: a node-x11 XServer
-    // with the RENDER extension installed (ntk's 2d context requires it)
+    // node-x11's pure-JS XServer; RENDER (which ntk's 2d context
+    // requires) is built in since x11 3.1.0
     var server = NtkDemo.xserver.createServer({ width: WIDTH, height: HEIGHT });
     var presenter = new NtkDemo.CanvasPresenter(server, canvas);
     current = {
@@ -175,7 +175,7 @@ window.__ntkRunnerMain = function () {
   });
 
   boot();
-  post({ type: 'ready', render: !!NtkDemo.hasRenderServer });
+  post({ type: 'ready' });
 };
 </script>
 </body>
