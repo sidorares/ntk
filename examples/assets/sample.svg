@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="480" height="360">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8ecae6"/>
+      <stop offset="100%" stop-color="#e0fbfc"/>
+    </linearGradient>
+    <radialGradient id="sun">
+      <stop offset="0%" stop-color="#ffdd00"/>
+      <stop offset="100%" stop-color="#ffba08" stop-opacity="0.9"/>
+    </radialGradient>
+    <g id="tree">
+      <rect x="-3" y="0" width="6" height="18" fill="#7f4f24"/>
+      <path d="M0 -34 L16 2 H-16 Z" fill="#2d6a4f"/>
+      <path d="M0 -22 L13 8 H-13 Z" fill="#40916c"/>
+    </g>
+  </defs>
+
+  <rect width="240" height="180" fill="url(#sky)"/>
+  <circle cx="196" cy="36" r="22" fill="url(#sun)"/>
+
+  <!-- rolling hills -->
+  <path d="M0 120 Q 60 90 120 118 T 240 116 V180 H0 Z" fill="#95d5b2"/>
+  <path d="M0 140 Q 80 118 160 142 T 240 138 V180 H0 Z" fill="#74c69d" fill-opacity="0.9"/>
+
+  <!-- winding road: quadratic + arc segments, stroked -->
+  <path d="M8 178 Q 60 150 104 156 A 30 30 0 0 0 150 170" fill="none"
+        stroke="#6c757d" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- trees via use/transform -->
+  <use href="#tree" x="52" y="128"/>
+  <use href="#tree" x="86" y="140" transform="scale(0.8)"/>
+  <use href="#tree" x="205" y="120" transform="rotate(-4 205 120)"/>
+
+  <!-- windmill with rotated blades -->
+  <g transform="translate(150 96)">
+    <rect x="-4" y="0" width="8" height="34" fill="#adb5bd"/>
+    <g fill="#f8f9fa" stroke="#adb5bd" stroke-width="1">
+      <path d="M0 0 L4 -26 H-4 Z"/>
+      <path d="M0 0 L4 -26 H-4 Z" transform="rotate(120)"/>
+      <path d="M0 0 L4 -26 H-4 Z" transform="rotate(240)"/>
+    </g>
+    <circle r="3" fill="#495057"/>
+  </g>
+
+  <!-- even-odd donut cloud -->
+  <g fill="#ffffff" fill-opacity="0.9">
+    <ellipse cx="60" cy="34" rx="26" ry="12"/>
+    <ellipse cx="82" cy="28" rx="18" ry="10"/>
+  </g>
+
+  <text x="120" y="20" font-size="12" text-anchor="middle" fill="#023047">ntk svg viewer</text>
+</svg>

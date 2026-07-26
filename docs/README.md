@@ -27,6 +27,8 @@ matching file here (see AGENTS.md).
   markdown math fences
 - [HTML widget](html.md) — `HtmlView`: static HTML + CSS subset, yoga-layout
   flexbox/block layout, links, images, the resource-loading safety model
+- [SVG widget](svg.md) — `SvgView`: static SVG rendering through the 2d
+  context (shapes, gradients, transforms, `use`), plus `Path2D`/SVG path data
 - [OpenGL rendering context](context-opengl.md) — indirect GLX / OpenGL 1.4 API
 - [Raw X11 rendering context](context-x11.md) — core X drawing requests
 - [Resource management](resource-management.md) — `using` / `Symbol.dispose`, GC-based cleanup

@@ -34,8 +34,11 @@ wnd.map();
 
 Each window (or pixmap) can create a 2d canvas implementing the HTML
 [context2d api](https://html.spec.whatwg.org/multipage/canvas.html#2dcontext)
-(some features not yet supported) via the
-[XRender extension](https://www.x.org/releases/X11R7.7/doc/renderproto/renderproto.txt).
+via the
+[XRender extension](https://www.x.org/releases/X11R7.7/doc/renderproto/renderproto.txt) —
+paths (arcs, beziers, `Path2D` with SVG path data, non-zero/even-odd fill
+rules), transforms with `save()`/`restore()`, clipping, `globalAlpha` and
+Porter-Duff composite ops ([docs/context-2d.md](docs/context-2d.md)).
 Most operations are performed on the X server side (image composition,
 scaling, blur, text composition, gradients etc). Text is fully shaped in
 pure JS — OpenType kerning/ligatures and complex scripts (fontkit), bidi
@@ -53,7 +56,9 @@ PNG/JPEG images decode client-side (`loadImage`) and composite server-side
 via `ctx.drawImage` ([docs/images.md](docs/images.md)). An `HtmlView`
 widget renders a static HTML + CSS subset — block flow and flexbox laid
 out by yoga-layout, no scripts, no network — with app-controlled link
-navigation ([docs/html.md](docs/html.md)).
+navigation ([docs/html.md](docs/html.md)). An `SvgView` widget renders
+static SVG (shapes, gradients, transforms, `use`) through the same 2d
+pipeline ([docs/svg.md](docs/svg.md)).
 
 ```js
 import { createClient } from 'ntk';
