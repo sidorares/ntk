@@ -33,6 +33,9 @@ const app2 = await createClient({ display: ':1' });
 
 - `app.display` — the node-x11 display object (`screen`, `Render`, `GLX`, …)
 - `app.X` — the raw node-x11 client, for direct protocol requests
+- `app.fonts` — lazy [FontManager](fonts.md): font matching/loading, shaping
+- `app.clipboard` — lazy [Clipboard](clipboard.md): selection/clipboard
+  text transfer (`write()`/`read()`)
 
 ## Methods
 
