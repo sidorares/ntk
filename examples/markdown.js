@@ -41,6 +41,17 @@ Fences tagged \`math\`/\`latex\` render with KaTeX:
 \\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}
 \`\`\`
 
+## Mermaid
+
+Fences tagged \`mermaid\` draw as diagrams (flowchart / sequence):
+
+\`\`\`mermaid
+flowchart LR
+  A[shape] --> B[wrap]
+  B --> C[draw]
+  C --> D((glyphs on wire))
+\`\`\`
+
 ## Tables
 
 | Stage | What happens | Cost |
@@ -68,7 +79,14 @@ Fences tagged \`math\`/\`latex\` render with KaTeX:
 const app = await createClient();
 const wnd = app.createWindow({ width: 640, height: 720, title: 'ntk markdown' });
 const ctx = wnd.getContext('2d');
-const view = new MarkdownView(null, { fonts: app.fonts });
+const view = new MarkdownView(null, {
+  fonts: app.fonts,
+  // mermaid fences parse asynchronously; re-layout when the model arrives
+  onInvalidate: () => {
+    layoutWidth = -1;
+    render();
+  }
+});
 
 let currentPath = null; // null = home page, else absolute path of the .md
 const history = [];

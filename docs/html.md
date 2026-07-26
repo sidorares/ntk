@@ -66,6 +66,7 @@ new HtmlView(window, {
   theme,            // { family, size, color, background } base look
   stylesheet,       // string | string[] — extra author CSS (after <style>s)
   onLink,           // (href, event, element) => void
+  onInvalidate,     // () => void — async content (an image) arrived
   baseUrl,          // path / file URL for relative image src resolution
   loadResource,     // custom resource loader, or null to disable
   fonts             // FontManager — only for windowless (standalone) use
@@ -75,7 +76,9 @@ new HtmlView(window, {
 In window mode the widget wires itself: renders on `expose`, re-wraps on
 `resize`, scrolls with the wheel (X11 buttons 4/5), fires `onLink` on left
 click. Standalone mode mirrors `MarkdownView`: pass `null` for the window
-plus a `fonts` manager, then drive `layout()`/`draw()` yourself.
+plus a `fonts` manager, then drive `layout()`/`draw()` yourself; pass
+`onInvalidate` to re-layout/redraw when async content (an image) arrives —
+window mode repaints on its own.
 
 ## Methods
 

@@ -152,6 +152,20 @@ test('markdown: mermaid fence becomes a diagram box after async parse', needsFon
   assert.ok(diagram.box.width > 100);
 });
 
+test('markdown: standalone view fires onInvalidate when the model arrives', needsFonts, async () => {
+  let invalidated;
+  const done = new Promise((r) => (invalidated = r));
+  const view = new MarkdownView(null, { fonts, onInvalidate: invalidated });
+  view.setMarkdown('```mermaid\nflowchart LR\n A[Hello] --> B[World]\n```');
+  view.layout(500); // fence is a code block; parse resolves in the background
+  await done;
+  view.layout(500);
+  assert.ok(
+    view._items.some((i) => i.kind === 'tex' && i.box.type === 'flowchart'),
+    'diagram item present after onInvalidate'
+  );
+});
+
 test('markdown: unsupported mermaid stays a code block', needsFonts, async () => {
   const view = new MarkdownView(null, { fonts });
   view.setMarkdown('```mermaid\ngantt\n title x\n```');
