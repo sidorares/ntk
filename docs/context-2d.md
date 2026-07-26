@@ -26,8 +26,15 @@ ctx.fillRect(0, 0, 100, 100);
   [parse-color](https://www.npmjs.com/package/parse-color)), a premultiplied
   `[r, g, b, a]` array (0..1 floats), a `CanvasGradient`, or a `Picture`
 - `ctx.lineWidth`, `ctx.lineCap`, `ctx.lineJoin`, `ctx.miterLimit` — stroke
-  geometry. `'round'` caps/joins are approximated (`square`/`bevel`); line
-  dashes are not supported
+  geometry, including `'round'` caps and joins (rendered as triangle-fan
+  disks unioned with the stroke mesh)
+- `ctx.setLineDash(segments)`, `ctx.getLineDash()`, `ctx.lineDashOffset` —
+  canvas-spec dashes: an empty list is solid, an odd-length list doubles,
+  negative/non-finite values invalidate the call, `getLineDash()` returns a
+  copy, and the state participates in `save()`/`restore()`. Dashing splits
+  the flattened polyline by arc length, so caps apply to each dash; on
+  closed subpaths the pattern continues around the loop (no cap at the seam
+  unless a gap lands there)
 - `ctx.globalAlpha` — multiplies fills, strokes, `fillRect` and `drawImage`
   (not text)
 - `ctx.globalCompositeOperation` — Porter-Duff subset mapped to XRender ops:
@@ -85,7 +92,11 @@ Full canvas path surface:
 - `fill([path][, fillRule])` — `'nonzero'` (default) or `'evenodd'`;
   trapezoidated client-side (`lib/trapezoid.js`), composited server-side
 - `stroke([path])` — extrudes the polyline (extrude-polyline) and renders
-  triangles; honors clip, `globalAlpha` and the composite op
+  triangles; honors line dashes, round caps/joins, clip, `globalAlpha` and
+  the composite op. Round-cap/join disks overlap the stroke body, so their
+  coverage is accumulated in a clamped a8 mask and composited in a single
+  pass — semi-transparent strokes (`globalAlpha < 1` or an alpha stroke
+  style) do not double-darken at the overlaps
 - `clip([path][, fillRule])` — intersects the clip region; restored by
   `restore()`
 - `isPointInPath([path, ]x, y[, fillRule])` — hit test in canvas (device)
