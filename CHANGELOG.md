@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.1.0](https://github.com/sidorares/ntk/compare/v3.0.0...v3.1.0) (2026-07-26)
+
+
+### Features
+
+* re-export the yoga-layout instance as Yoga ([#58](https://github.com/sidorares/ntk/issues/58)) ([cf1f3b9](https://github.com/sidorares/ntk/commit/cf1f3b9124666650bd6567d9c1a43e57e8efb195))
+* set UTF-8 window titles via EWMH _NET_WM_NAME ([#60](https://github.com/sidorares/ntk/issues/60)) ([a260dbe](https://github.com/sidorares/ntk/commit/a260dbebcc2b9e2a8ac68f4fed8d291f106993bf))
+
+
+### Bug Fixes
+
+* forward X window attributes from createWindow args to CreateWindow ([#56](https://github.com/sidorares/ntk/issues/56)) ([f353723](https://github.com/sidorares/ntk/commit/f353723c34c3e84f569a032653395d03435618ff))
+
 ## [3.0.0](https://github.com/sidorares/ntk/compare/v2.2.0...v3.0.0) (2026-07-26)
 
 
