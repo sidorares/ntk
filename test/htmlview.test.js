@@ -342,3 +342,21 @@ test('img: raster decoding is untouched by svg sniffing', needsFonts, async () =
   assert.equal(entry.svg, null);
   assert.equal(entry.image.width, 12);
 });
+
+test('standalone view fires onInvalidate when an image arrives', needsFonts, async () => {
+  const { PNG } = await import('pngjs');
+  const png = new PNG({ width: 16, height: 4 });
+  let invalidated;
+  const done = new Promise((r) => (invalidated = r));
+  const view = new HtmlView(null, {
+    fonts,
+    loadResource: async () => PNG.sync.write(png),
+    onInvalidate: invalidated
+  });
+  view.setHtml('<img src="x.png">');
+  view.layout(400); // image still loading: no intrinsic size yet
+  await done;
+  view.layout(400);
+  const img = byName(view, 'img')[0];
+  assert.equal(img.w, 16, 'natural width after onInvalidate re-layout');
+});
