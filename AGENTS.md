@@ -17,9 +17,11 @@ client) with familiar, modern API concepts:
 ### Direction
 
 1. Keep growing toward "write simple X11 UIs with the APIs you know from the
-   web" — canvas 2d parity first (missing: `arc`, `save`/`restore`,
-   transforms, `globalAlpha`, `globalCompositeOperation`), webgl-like ideas
-   where they fit.
+   web" — canvas 2d parity first (paths/Path2D, transforms, save/restore,
+   clip, `globalAlpha` and Porter-Duff `globalCompositeOperation` are done;
+   still missing: line dashes, round caps/joins, shadows, text under
+   rotation/scale, blend-mode composite ops), webgl-like ideas where they
+   fit.
 2. This library is intended to become the host for a **separate react
    renderer** project (react-x11). Do not add react integration here, but
    keep the architecture renderer-friendly: retained `Window` objects with
@@ -36,12 +38,15 @@ lib/pixmap.js              offscreen drawable
 lib/drawable.js            EventEmitter base + getContext() registry
 lib/events_map.js          X event code <-> browser-ish event name tables
 lib/renderingcontext_2d.js canvas-like context (XRender); CanvasGradient
+lib/path.js                Path2D, SVG path-data parser, affine matrices,
+                           adaptive bezier flattening
 lib/renderingcontext_opengl.js  indirect GLX context
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
 lib/glyphset.js            XRender GlyphSet wrapper
 lib/rasterize.js           pure-JS glyph outline -> a8 bitmap rasterizer
-lib/trapezoid.js           polygon -> XRender trapezoids (vector text path)
+lib/trapezoid.js           polygon -> XRender trapezoids (non-zero/even-odd;
+                           vector text and all 2d path fills)
 lib/fontconfig.js          font matching + fallback chain via fc-match CLI
 lib/text/font.js           Font: fontkit face — metrics, coverage, shaping
 lib/text/fontmanager.js    FontManager (app.fonts): match/load/fallback
@@ -55,6 +60,7 @@ lib/widgets/htmlview.js    HtmlView widget: htmlparser2 DOM + yoga-layout boxes
 lib/widgets/markdown.js    markdown parsing (adapter over marked)
 lib/widgets/markdownview.js  MarkdownView widget (highlighted + math fences)
 lib/widgets/highlight.js   fence syntax highlighting (adapter over highlight.js)
+lib/widgets/svgview.js     SvgView widget: static SVG via Path2D + 2d context
 lib/widgets/tex.js         KaTeX-based TexView widget / layoutTex
 test/                      node:test suite (see below)
 docs/                      public API documentation

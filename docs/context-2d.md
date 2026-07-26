@@ -25,35 +25,95 @@ ctx.fillRect(0, 0, 100, 100);
 - `ctx.fillStyle`, `ctx.strokeStyle` — CSS color string (via
   [parse-color](https://www.npmjs.com/package/parse-color)), a premultiplied
   `[r, g, b, a]` array (0..1 floats), a `CanvasGradient`, or a `Picture`
-- `ctx.lineWidth` — stroke thickness
+- `ctx.lineWidth`, `ctx.lineCap`, `ctx.lineJoin`, `ctx.miterLimit` — stroke
+  geometry. `'round'` caps/joins are approximated (`square`/`bevel`); line
+  dashes are not supported
+- `ctx.globalAlpha` — multiplies fills, strokes, `fillRect` and `drawImage`
+  (not text)
+- `ctx.globalCompositeOperation` — Porter-Duff subset mapped to XRender ops:
+  `source-over` (default), `copy`, `destination-over`, `source-in`,
+  `destination-in`, `source-out`, `destination-out`, `source-atop`,
+  `destination-atop`, `xor`, `lighter`. With a shape/clip mask the op only
+  applies inside the mask coverage
 - `ctx.font` — CSS-ish font string (`'bold italic 40px "DejaVu Sans"'`),
   resolved through fontconfig; see [fonts.md](fonts.md)
 
+## State and transforms
+
+- `save()` / `restore()` — full state stack: styles, line settings, font,
+  text alignment, `globalAlpha`, composite op, transform and clip
+- `translate(x, y)`, `rotate(angle)`, `scale(x[, y])`,
+  `transform(a, b, c, d, e, f)`, `setTransform(...)`, `resetTransform()`,
+  `getTransform()` → `{a, b, c, d, e, f}`
+
+The transform applies to path commands as they are recorded, to
+`fillRect`/`strokeRect`/`clearRect`, and to `drawImage` (server-side, via
+the picture transform). **Text is the exception**: the translation applies
+to the anchor point, but glyphs are not rotated/scaled — size text via
+`ctx.font`.
+
 ## Rectangles and images
 
-- `fillRect(x, y, w, h)` — respects the current clip
-- `clearRect(x, y, w, h)` — resets to opaque white
+- `fillRect(x, y, w, h)` — respects clip, transform, `globalAlpha` and the
+  composite op
+- `strokeRect(x, y, w, h)` — outlines a rect without touching the current path
+- `clearRect(x, y, w, h)` — resets to opaque white (honors clip + transform)
 - `drawImage(image, dx, dy)` / `drawImage(image, dx, dy, dw, dh)` /
   `drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)` — draws an ntk
   [`Image`](images.md) (decoded PNG/JPEG). The image uploads to the server
-  once and is cached; scaling happens server-side with bilinear filtering.
-  Respects the current clip. `image` can also be another ntk 2d context
-  (server-side composite of the whole drawable) or a node-canvas-like
-  object exposing `image.context.getImageData()` (pixels are uploaded)
+  once and is cached; scaling (and any affine transform) happens server-side
+  with bilinear filtering. Respects clip and `globalAlpha`. `image` can also
+  be another ntk 2d context (server-side composite of the whole drawable) or
+  a node-canvas-like object exposing `image.context.getImageData()` (pixels
+  are uploaded)
 - `createImageData(w, h)`, `putImageData(data, x, y)`
 - `getImageData(x, y, w, h, cb)` — async, `cb(err, image)`; `image.data` is
   BGRA byte order
 
 ## Paths
 
-- `beginPath()`, `moveTo()`, `lineTo()`, `bezierCurveTo()`, `closePath()`
-- `fill()` — non-zero winding fill of the current path (trapezoidated
-  client-side via pnltri, composited server-side)
-- `stroke()` — extrudes the polyline (extrude-polyline) and renders triangles
-- `clip()` — uses the current path as clip mask for subsequent `fillRect` /
-  `fill` / `drawImage`
-- `arc()`, `save()`, `restore()`, `translate()` — **not implemented yet** (no-ops)
-- `scale(s)` — sets a picture transform on the target (experimental)
+Full canvas path surface:
+
+- `beginPath()`, `moveTo()`, `lineTo()`, `closePath()`
+- `bezierCurveTo()`, `quadraticCurveTo()` — flattened adaptively
+  (error-bounded subdivision in device pixels, so curves stay smooth at any
+  transform scale)
+- `arc(x, y, r, a0, a1[, ccw])`, `ellipse(x, y, rx, ry, rot, a0, a1[, ccw])`,
+  `arcTo(x1, y1, x2, y2, r)`
+- `rect(x, y, w, h)`, `roundRect(x, y, w, h, radii)` — radii like the spec:
+  a number, or an array of 1–4 numbers / `{x, y}` pairs
+- `fill([path][, fillRule])` — `'nonzero'` (default) or `'evenodd'`;
+  trapezoidated client-side (`lib/trapezoid.js`), composited server-side
+- `stroke([path])` — extrudes the polyline (extrude-polyline) and renders
+  triangles; honors clip, `globalAlpha` and the composite op
+- `clip([path][, fillRule])` — intersects the clip region; restored by
+  `restore()`
+- `isPointInPath([path, ]x, y[, fillRule])` — hit test in canvas (device)
+  coordinates
+
+## Path2D
+
+`Path2D` is exported from the package root and matches the browser class:
+
+```js
+import { Path2D } from 'ntk';
+
+const p = new Path2D('M8 8 H56 V56 H8 Z M24 24 H40 V40 H24 Z');
+ctx.fill(p, 'evenodd');
+
+const copy = new Path2D(p);          // copy constructor
+copy.addPath(p, [2, 0, 0, 2, 0, 0]); // append with an affine transform
+```
+
+- constructors: `new Path2D()`, `new Path2D(otherPath)`, `new Path2D(svgPathData)`
+- all context path-segment methods (`moveTo` … `roundRect`) plus
+  `addPath(path[, transform])` (`[a,b,c,d,e,f]` array or `{a..f}` object)
+- SVG path data supports the full grammar — `M L H V C S Q T A Z`, relative
+  forms, implicit repeats, compact arc flags; elliptical arcs are converted
+  to cubics. The parser is also exported as `parseSvgPath(d)`
+- per the canvas spec, a `Path2D` is transformed by the **current** transform
+  at `fill`/`stroke`/`clip` time, while the default path records points as
+  commands are issued
 
 ## Gradients
 
