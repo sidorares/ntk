@@ -143,7 +143,9 @@ All return `this` unless noted.
 - `setState({ visible, x, y, width, height })` — declarative variant; only
   sends requests for properties that changed (intended for future
   react-renderer use)
-- `setTitle(title)`
+- `setTitle(title)` — sets both the legacy latin-1 `WM_NAME` and the EWMH
+  UTF-8 `_NET_WM_NAME`, so non-latin titles display correctly under modern
+  window managers
 - `getContext(name)` — `'2d'`, `'opengl'` or `'x11'`; see the context docs
 - `requestAnimationFrame(cb)` — returns an id, does not return `this`;
   `cancelAnimationFrame(id)` (see above)

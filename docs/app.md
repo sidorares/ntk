@@ -17,7 +17,11 @@ const app2 = await createClient({ display: ':1' });
     (see [fonts.md](fonts.md#pluggable-font-sources));
   - `glxVisual` — visual id used by `getContext('opengl')` in environments
     where `glxinfo` cannot be shelled out to
-    (see [context-opengl.md](context-opengl.md)).
+    (see [context-opengl.md](context-opengl.md));
+  - `onXError` — called with X protocol errors that no request callback
+    claimed (races like a request landing after its window was destroyed).
+    Defaults to a `console.warn`; without any listener node-x11's error
+    emit would throw inside its packet parser and wedge the connection.
 - The XRender extension is preloaded (required for the 2d context). GLX is
   preloaded when available; `app.display.GLX` is `null` when the server has no
   GLX support.
