@@ -36,6 +36,11 @@ parsing [postcss](https://www.npmjs.com/package/postcss). PNG/JPEG images
 render through the [image pipeline](images.md); SVG — inline or as an
 `<img>` source — through the [SVG widget](svg.md).
 
+The yoga-layout instance ntk uses is re-exported as `Yoga`
+(`import { Yoga } from 'ntk'`) so downstream layout consumers — e.g. the
+react-x11 renderer — share the same WASM module and enum values instead of
+loading a second, possibly version-mismatched copy.
+
 ## The safety / responsibility model
 
 The API is deliberately split so that a document can never act on its own:
