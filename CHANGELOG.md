@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.6.0](https://github.com/sidorares/ntk/compare/v3.5.3...v3.6.0) (2026-07-27)
+
+
+### Features
+
+* **css:** export cssColor and cssLength ([#87](https://github.com/sidorares/ntk/issues/87)) ([2b49fc7](https://github.com/sidorares/ntk/commit/2b49fc77edd131bebd4ecfa373467a8d4cded8cc))
+* **glx:** context tag, GLX visuals for windows, server-side visual discovery ([e523667](https://github.com/sidorares/ntk/commit/e52366708fb5d08c7b298544fec24d93ad811ed5))
+
 ## [3.5.3](https://github.com/sidorares/ntk/compare/v3.5.2...v3.5.3) (2026-07-27)
 
 
