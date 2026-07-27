@@ -170,7 +170,17 @@ All return `this` unless noted.
   focus back, so the authority is the `focus`/`blur` events, not the request
 - `queryFocus(cb)` — `cb(err, { focus, revertTo })`: which window the server
   currently sends key events to
-- `queryPointer(cb)`, `grabPointer()`, `setMouseHintOnly(isOn)`
+- `grabPointer(options, cb)` / `ungrabPointer(time)` — a pointer grab is how
+  menus work on X: while it is held, presses anywhere on the screen are
+  reported to this window instead of the window under the pointer — the
+  window manager's frames included — so a click outside can dismiss the
+  menu. `options`: `{ ownerEvents = true, events = ButtonPress|
+  ButtonRelease|PointerMotion, pointerMode, keyboardMode, confineTo,
+  cursor, time }`; `cb(err, status)` where 0 is Success and 1
+  AlreadyGrabbed. With `ownerEvents` the client's own windows still get
+  their events normally, so a submenu keeps working
+- `grabKeyboard(options, cb)` / `ungrabKeyboard(time)` — the same for keys
+- `queryPointer(cb)`, `setMouseHintOnly(isOn)`
 - `queryTree(cb)` — `cb(err, { parent, root, children })`, all as `Window`s
 - `reparentTo(newParent, x, y)`
 - `setActions()` — opt in to the WM_DELETE_WINDOW protocol (window manager

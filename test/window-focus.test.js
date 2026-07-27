@@ -81,3 +81,45 @@ test('queryFocus reports the window the server gives keys to', async () => {
   assert.equal(focus, wnd.id);
   wnd.destroy();
 });
+
+// Pointer grabs: the mechanism menus are built on. The in-process server
+// implements grab delivery, including owner-events, so this is end to end.
+test('a pointer grab redirects presses outside the client to the grabbing window', async () => {
+  const server = createServer({ width: 320, height: 240 });
+  const [serverEnd, clientEnd] = createStreamPair();
+  server.addClientStream(serverEnd);
+  const client = await createClient({ stream: clientEnd, fontSource: new StaticFontSource() });
+  try {
+    const menu = client.createWindow({ x: 10, y: 10, width: 60, height: 60 });
+    menu.map();
+    const presses = [];
+    menu.on('mousedown', (ev) => presses.push([ev.x, ev.y]));
+    await new Promise((resolve) => client.X.GetInputFocus(() => resolve()));
+
+    const status = await new Promise((resolve, reject) =>
+      menu.grabPointer({}, (err, res) => (err ? reject(err) : resolve(res)))
+    );
+    assert.equal(status, 0, 'grab succeeded');
+
+    // press far away from the menu — with no grab this would go nowhere
+    server.injectPointerMove(250, 200);
+    server.injectButton(1, true);
+    await new Promise((resolve) => client.X.GetInputFocus(() => setImmediate(resolve)));
+
+    assert.equal(presses.length, 1, 'the press was redirected to the grab window');
+    assert.deepEqual(presses[0], [240, 190], 'coordinates relative to it, outside its bounds');
+
+    // release first: a press holds an implicit grab until the button is up
+    server.injectButton(1, false);
+    menu.ungrabPointer();
+    await new Promise((resolve) => client.X.GetInputFocus(() => setImmediate(resolve)));
+
+    server.injectButton(1, true);
+    await new Promise((resolve) => client.X.GetInputFocus(() => setImmediate(resolve)));
+    assert.equal(presses.length, 1, 'nothing reaches it after the ungrab');
+
+    menu.destroy();
+  } finally {
+    await client.close();
+  }
+});
