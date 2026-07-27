@@ -158,7 +158,73 @@ All return `this` unless noted.
 - `reparentTo(newParent, x, y)`
 - `setActions()` — opt in to the WM_DELETE_WINDOW protocol (window manager
   sends a `message` event instead of killing the connection on close)
+- `setSizeHints(hints)`, `setClass(instance, class)`,
+  `setWindowType(type)`, `setAlwaysOnTop(on)` — see
+  [Window manager hints](#window-manager-hints) below
 - `destroy()` — destroy the window server-side (also `Symbol.dispose`)
+
+## Window manager hints
+
+Properties the window manager reads to decide how to treat the window.
+Each has a method and a matching creation argument.
+
+### Size limits — `setSizeHints(hints)` / `sizeHints`, `resizable`
+
+Writes ICCCM `WM_NORMAL_HINTS`. Without it a window manager lets the user
+resize a window to any size at all, so fixed-size dialogs need this.
+
+```js
+wnd.setSizeHints({ minWidth: 320, minHeight: 200, maxWidth: 1280 });
+wnd.setSizeHints({ widthInc: 8, heightInc: 16 }); // terminal-style steps
+wnd.setSizeHints({ minAspect: [4, 3], maxAspect: [16, 9] });
+wnd.setSizeHints({ resizable: false }); // pin min and max to the current size
+
+app.createWindow({ width: 400, height: 300, resizable: false });
+```
+
+Keys: `minWidth`, `minHeight`, `maxWidth`, `maxHeight`, `widthInc`,
+`heightInc`, `baseWidth`, `baseHeight`, `minAspect: [num, den]`,
+`maxAspect: [num, den]`, `gravity`, `resizable`. Only the groups you pass
+set their flag, so partial hints stay partial.
+
+### Application identity — `setClass(instance, class)` / `wmClass`
+
+Writes ICCCM `WM_CLASS`, the instance/class pair taskbars and window
+managers use to group windows, match icons and apply per-application
+rules. The class name defaults to the instance name.
+
+```js
+wnd.setClass('ntk-demo', 'Ntk-Demo');
+app.createWindow({ wmClass: ['ntk-demo', 'Ntk-Demo'] });
+```
+
+### Window kind — `setWindowType(type)` / `windowType`
+
+Writes EWMH `_NET_WM_WINDOW_TYPE`. Short names are expanded, so `'dialog'`
+becomes `_NET_WM_WINDOW_TYPE_DIALOG`. Pass an array for fallbacks, most
+preferred first.
+
+```js
+wnd.setWindowType('dialog');
+wnd.setWindowType(['dropdown_menu', 'menu']);
+```
+
+This is the window-manager-cooperative alternative to override-redirect: a
+menu marked `dropdown_menu` still gets shadows and correct stacking, while
+an override-redirect window bypasses the window manager entirely.
+
+### Always on top — `setAlwaysOnTop(on)` / `alwaysOnTop`
+
+Prefers the EWMH `_NET_WM_STATE_ABOVE` state, sent as a ClientMessage to
+the root window as the spec requires for mapped windows.
+
+quartz-wm (XQuartz) does not advertise `_NET_WM_STATE_ABOVE`, so on macOS
+this falls back to the Apple-WM extension's window levels, which are the
+only always-on-top mechanism there. The fallback addresses the frame the
+window manager created rather than our own window id — Apple-WM answers
+`BadWindow` for a reparented client.
+
+Where neither is available the call is a no-op.
 
 ## Cursor
 
