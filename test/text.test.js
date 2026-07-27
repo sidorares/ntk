@@ -162,6 +162,18 @@ test('TextLayout honors explicit newlines', needsFonts, () => {
   assert.equal(layout.lines[2].runs.length, 0); // blank paragraph
 });
 
+test('TextLayout copes with an empty span list', needsFonts, () => {
+  const fonts = new FontManager();
+  // MarkdownView hands over an empty span list for a blank block, which
+  // happens while a document is being typed — every line still needs a
+  // style to take its metrics from, and this used to throw on the first
+  // one ("undefined is not an object (evaluating 'baseSpan.font')")
+  const layout = new TextLayout(fonts, [], { family: 'sans-serif', size: 16 }, {});
+  assert.equal(layout.lines.length, 1);
+  assert.equal(layout.lines[0].runs.length, 0);
+  assert.ok(layout.height > 0, 'the empty line still has the base line height');
+});
+
 test('TextLayout strips trailing whitespace at line ends', needsFonts, () => {
   const fonts = new FontManager();
   const wrapped = new TextLayout(
