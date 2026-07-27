@@ -165,7 +165,22 @@ All return `this` unless noted.
 - `createPixmap(params)` — pixmap defaulting to this window's size, depth 32
 - `setCursor(nameOrShapeId)` — mouse cursor shown over the window (see
   [Cursor](#cursor) below); `setCursor(null)` restores the parent's cursor
-- `queryPointer(cb)`, `grabPointer()`, `setMouseHintOnly(isOn)`
+- `focus(revertTo = 2)` — take the keyboard focus (X `SetInputFocus`);
+  `revertTo` is 0 None / 1 PointerRoot / 2 Parent. A window manager may take
+  focus back, so the authority is the `focus`/`blur` events, not the request
+- `queryFocus(cb)` — `cb(err, { focus, revertTo })`: which window the server
+  currently sends key events to
+- `grabPointer(options, cb)` / `ungrabPointer(time)` — a pointer grab is how
+  menus work on X: while it is held, presses anywhere on the screen are
+  reported to this window instead of the window under the pointer — the
+  window manager's frames included — so a click outside can dismiss the
+  menu. `options`: `{ ownerEvents = true, events = ButtonPress|
+  ButtonRelease|PointerMotion, pointerMode, keyboardMode, confineTo,
+  cursor, time }`; `cb(err, status)` where 0 is Success and 1
+  AlreadyGrabbed. With `ownerEvents` the client's own windows still get
+  their events normally, so a submenu keeps working
+- `grabKeyboard(options, cb)` / `ungrabKeyboard(time)` — the same for keys
+- `queryPointer(cb)`, `setMouseHintOnly(isOn)`
 - `queryTree(cb)` — `cb(err, { parent, root, children })`, all as `Window`s
 - `reparentTo(newParent, x, y)`
 - `setActions()` — opt in to the WM_DELETE_WINDOW protocol (window manager
@@ -289,6 +304,7 @@ constructor arg) automatically extends the window's X event mask.
 | `mousemove` | MotionNotify | coalesced per frame; full trail in `ev.coalesced` |
 | `mouseover` / `mouseout` | Enter/LeaveNotify | |
 | `keydown` / `keyup` | KeyPress/Release | `keydown` carries `ev.codepoint` (unicode) |
+| `focus` / `blur` | FocusIn/FocusOut | keyboard focus arrived at or left this window — usually because the window manager moved it. `ev.detail`/`ev.mode` carry the X notify detail and mode |
 | `expose` | Expose | `ev.x/y/width/height` of the damaged area, coalesced per frame (bounding box; rect list in `ev.rects`); on double-buffered windows only emitted when a real repaint is needed (see above) |
 | `draw` | — | synthetic repaint request on double-buffered windows (same payload as the accompanying `expose`) |
 | `resize` | ConfigureNotify | coalesced per frame (last state wins); updates `wnd.width/height/x/y` first |
