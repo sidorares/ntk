@@ -154,6 +154,14 @@ release and publishes to npm via OIDC trusted publishing (no token secrets).
   version and the changelog from them. PR squash-merge titles must follow the
   same convention (repo settings enforce squash-merge; GitHub merge commits
   would double-count entries in release-please's changelog).
+- **No nested parentheses in the commit body.** release-please parses the
+  whole message with `@conventional-commits/parser`, whose grammar rejects
+  them — `foo(a, b)` is fine, `foo(a, () => {})` is not, so a code fence
+  with a callback in it is enough to break it. A commit it cannot parse is
+  **silently skipped**: the workflow goes green, `commits: 0`, and no
+  release PR appears (this happened to #85 → the empty re-record commit
+  e523667). Squash-merge puts the PR description in the body, so this
+  applies to PR descriptions too.
 
 ## Gotchas
 
