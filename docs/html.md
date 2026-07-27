@@ -41,6 +41,11 @@ The yoga-layout instance ntk uses is re-exported as `Yoga`
 react-x11 renderer — share the same WASM module and enum values instead of
 loading a second, possibly version-mismatched copy.
 
+The two value parsers the CSS layer is built on are exported for the same
+reason: `cssColor(value)` → `[r, g, b, a]` floats 0..1 (what XRender and GL
+both want) or `null`, and `cssLength(value, emBase, rootSize)` → `{ px }`,
+`{ pct }`, `'auto'` or `null`.
+
 ## The safety / responsibility model
 
 The API is deliberately split so that a document can never act on its own:
