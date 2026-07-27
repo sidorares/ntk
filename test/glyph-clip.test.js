@@ -124,3 +124,62 @@ test('without a clip, text paints where it is drawn', async () => {
   const image = await readPixels(ctx);
   assert.ok(inkInRows(image, 0, CLIP_TOP) > 0, 'unclipped text is not suppressed');
 });
+
+// The rectangular-clip fast path pushes the clip to the server instead of
+// rasterizing a mask. It must produce the same result as the mask path,
+// and must not be taken when it would change what the edge looks like.
+
+test('a fractional clip rect falls back to the mask path', async () => {
+  const ctx = freshCtx();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, CLIP_TOP + 0.5, W, CLIP_BOTTOM - CLIP_TOP);
+  ctx.clip();
+  // server clip rectangles are integers, so a fractional edge stays on the
+  // mask path rather than being silently rounded
+  assert.equal(ctx._clipRect(), null, 'fractional rect is not a fast-path rect');
+  ctx.restore();
+});
+
+test('rect fast path and mask path clip text identically', async () => {
+  const layoutOf = (c) =>
+    c.window.app.fonts.layout(
+      [{ text: 'Clipping', family: 'sans-serif', size: 20, color: 'black' }],
+      { family: 'sans-serif', size: 20 },
+    );
+
+  // integral rect -> server-side clip
+  const fast = freshCtx();
+  fast.save();
+  fast.beginPath();
+  fast.rect(0, CLIP_TOP, W, CLIP_BOTTOM - CLIP_TOP);
+  fast.clip();
+  assert.ok(fast._clipRect(), 'integral rect takes the fast path');
+  layoutOf(fast).draw(fast, 4, 4);
+  layoutOf(fast).draw(fast, 4, CLIP_TOP + 2);
+  fast.restore();
+
+  // same clip expressed as a non-rectangular path -> mask
+  const slow = freshCtx();
+  slow.save();
+  slow.beginPath();
+  slow.moveTo(0, CLIP_TOP);
+  slow.lineTo(W, CLIP_TOP);
+  slow.lineTo(W, CLIP_BOTTOM);
+  slow.lineTo(W / 2, CLIP_BOTTOM);
+  slow.lineTo(0, CLIP_BOTTOM);
+  slow.closePath();
+  slow.clip();
+  assert.equal(slow._clipRect(), null, 'five-point path is not a fast-path rect');
+  layoutOf(slow).draw(slow, 4, 4);
+  layoutOf(slow).draw(slow, 4, CLIP_TOP + 2);
+  slow.restore();
+
+  const [a, b] = await Promise.all([readPixels(fast), readPixels(slow)]);
+  let diff = 0;
+  for (let i = 0; i < a.data.length; i += 4) {
+    if (Math.abs(a.data[i] - b.data[i]) > 8) diff++;
+  }
+  assert.equal(diff, 0, 'both clip paths produce the same pixels');
+  assert.ok(inkInRows(a, CLIP_TOP, CLIP_BOTTOM) > 0, 'and both actually drew');
+});
