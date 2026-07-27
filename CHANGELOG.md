@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.2](https://github.com/sidorares/ntk/compare/v3.7.1...v3.7.2) (2026-07-27)
+
+
+### Bug Fixes
+
+* **text:** an empty span list is a layout, not a crash ([#93](https://github.com/sidorares/ntk/issues/93)) ([7cb9ca8](https://github.com/sidorares/ntk/commit/7cb9ca8145f0784686719f83af2e12f15027df69))
+
 ## [3.7.1](https://github.com/sidorares/ntk/compare/v3.7.0...v3.7.1) (2026-07-27)
 
 
