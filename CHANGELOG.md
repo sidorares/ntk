@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.1](https://github.com/sidorares/ntk/compare/v3.7.0...v3.7.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* **tex:** TeX boxes honour the 2d clip ([#91](https://github.com/sidorares/ntk/issues/91)) ([ac95ac8](https://github.com/sidorares/ntk/commit/ac95ac88a20dcf75205177612924afeaac40b138))
+
 ## [3.7.0](https://github.com/sidorares/ntk/compare/v3.6.0...v3.7.0) (2026-07-27)
 
 
