@@ -33,6 +33,18 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   the computed mask). Note the X *backing-store* attribute is **not**
   forwarded: the `backingStore` option name is taken by ntk's double
   buffering opt-out above, which is an unrelated client-side concept.
+- `visual`, `depth`, `windowClass`, `borderWidth` — `CreateWindow` header
+  fields rather than attributes. They default to `0`, i.e. CopyFromParent /
+  InputOutput. A window on a non-default visual (a GLX drawable, an ARGB
+  visual) needs all of `visual` + `depth` **and** a colormap for that visual:
+  ntk creates one with `app.createColormap(visual)` and frees it in
+  `destroy()` unless you pass your own `colormap`, and sets `borderPixel: 0`
+  because inheriting a border pixmap across depths is a `BadMatch`. See
+  [context-opengl.md](context-opengl.md) for choosing a GLX visual:
+  ```js
+  const glx = await app.chooseGLXConfig({ DEPTH_SIZE: 24 });
+  const wnd = app.createWindow({ width: 400, height: 300, visual: glx.visual, depth: glx.depth });
+  ```
 - `coalesceEvents: false` — deliver every noisy event individually (see
   [Frames, coalescing and slow connections](#frames-coalescing-and-slow-connections))
 - `frameSync: false` — don't pace frames with a server round-trip fence

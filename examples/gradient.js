@@ -24,9 +24,20 @@ function draw(gl) {
 }
 
 const app = await createClient();
-const wnd = app.createWindow({ title: 'simple opengl gradient', x: 100, y: 100, width, height });
+// a GLX drawable must use a visual the context was created for, so the
+// visual is chosen before the window exists
+const glx = await app.chooseGLXConfig({ DEPTH_SIZE: 24 });
+const wnd = app.createWindow({
+  title: 'simple opengl gradient',
+  x: 100,
+  y: 100,
+  width,
+  height,
+  visual: glx.visual,
+  depth: glx.depth
+});
 wnd.map();
-const gl = wnd.getContext('opengl');
+const gl = wnd.getContext('opengl', glx);
 gl.Enable(gl.POINT_SMOOTH);
 wnd.on('resize', (ev) => {
   width = ev.width;

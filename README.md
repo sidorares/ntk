@@ -132,10 +132,12 @@ Note that on many systems indirect GLX is disabled by default —
 import { createClient } from 'ntk';
 
 const app = await createClient();
-const wnd = app.createWindow({ width: 300, height: 300 });
+// GLX drawables need a GLX-capable visual, chosen before the window exists
+const glx = await app.chooseGLXConfig({ DEPTH_SIZE: 24 });
+const wnd = app.createWindow({ width: 300, height: 300, visual: glx.visual, depth: glx.depth });
 wnd.map();
 
-const gl = wnd.getContext('opengl');
+const gl = wnd.getContext('opengl', glx);
 gl.ClearColor(0.3, 0.3, 0.3, 0.0);
 gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 gl.Begin(gl.TRIANGLES);
