@@ -37,6 +37,7 @@ lib/window.js              Window (extends Drawable): events, geometry, WM bits
 lib/pixmap.js              offscreen drawable
 lib/drawable.js            EventEmitter base + getContext() registry
 lib/events_map.js          X event code <-> browser-ish event name tables
+                           (incl. FocusIn/FocusOut as 'focus'/'blur')
 lib/clipboard.js           app.clipboard: ICCCM selection/clipboard text
                            transfer (CLIPBOARD/PRIMARY, INCR-aware reads)
 lib/renderingcontext_2d.js canvas-like context (XRender); CanvasGradient
