@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.0](https://github.com/sidorares/ntk/compare/v3.6.0...v3.7.0) (2026-07-27)
+
+
+### Features
+
+* keyboard focus events, wnd.focus(), and pointer/keyboard grabs ([#89](https://github.com/sidorares/ntk/issues/89)) ([6fdb6a9](https://github.com/sidorares/ntk/commit/6fdb6a99649b59f93a447b312eb6327ca26c54c2))
+
 ## [3.6.0](https://github.com/sidorares/ntk/compare/v3.5.3...v3.6.0) (2026-07-27)
 
 
