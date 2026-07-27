@@ -45,6 +45,11 @@ ctx.fillRect(0, 0, 100, 100);
 - `ctx.font` — CSS-ish font string (`'bold italic 40px "DejaVu Sans"'`),
   resolved through fontconfig; see [fonts.md](fonts.md)
 
+Everything that puts ink on the surface goes through the clip: fills,
+strokes, images, text (`fillText`, `TextLayout.draw`) and the KaTeX boxes
+of [`layoutTex`](tex.md). Rectangular clips take a server-side fast path
+(`SetPictureClipRectangles`); non-rectangular ones build an a8 mask.
+
 ## State and transforms
 
 - `save()` / `restore()` — full state stack: styles, line settings, font,
