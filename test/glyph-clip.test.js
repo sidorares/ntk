@@ -183,3 +183,33 @@ test('rect fast path and mask path clip text identically', async () => {
   assert.equal(diff, 0, 'both clip paths produce the same pixels');
   assert.ok(inkInRows(a, CLIP_TOP, CLIP_BOTTOM) > 0, 'and both actually drew');
 });
+
+// KaTeX content draws its own glyph runs and trapezoidized vector shapes
+// (radicals, fraction rules) rather than going through fillText, so it had
+// to be routed through the clip separately — react-x11's rich-content demo
+// showed formulas painting outside the scrollview they were scrolled out of.
+test('a TeX box stays inside the clip', async () => {
+  const { layoutTex } = await import('../lib/widgets/tex.js');
+  const ctx = freshCtx();
+  // a radical and a fraction: glyph runs plus vector paths and rules
+  const box = layoutTex('\\sqrt{\\frac{x+1}{2}}', { size: 26, color: '#000000' });
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, CLIP_TOP, W, CLIP_BOTTOM - CLIP_TOP);
+  ctx.clip();
+  box.draw(ctx, 6, 2); // drawn high, so most of it lands above the band
+  ctx.restore();
+
+  const image = await readPixels(ctx);
+  assert.equal(inkInRows(image, 0, CLIP_TOP), 0, 'nothing above the clip band');
+  assert.equal(
+    inkInRows(image, CLIP_BOTTOM, H),
+    0,
+    'nothing below the clip band',
+  );
+  assert.ok(
+    inkInRows(image, CLIP_TOP, CLIP_BOTTOM) > 0,
+    'and the part inside the band did draw',
+  );
+});

@@ -63,7 +63,9 @@ configureTex({
   align formulas to surrounding text with `y = textBaseline - box.baseline`
 - `draw(ctx, x, y)` — draw with the top-left corner at (x, y). The context
   `fillStyle` is used for items without an explicit color and left
-  untouched.
+  untouched. Everything it draws — glyph runs, rules and the vector shapes
+  of radicals — honours the context's `clip()`, so a formula inside a
+  clipped box stays inside it.
 
 ## `TexView`
 
