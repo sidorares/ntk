@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.5.0](https://github.com/sidorares/ntk/compare/v3.4.0...v3.5.0) (2026-07-27)
+
+
+### Features
+
+* **window:** WM_NORMAL_HINTS, WM_CLASS, _NET_WM_WINDOW_TYPE, always-on-top ([#77](https://github.com/sidorares/ntk/issues/77)) ([388542f](https://github.com/sidorares/ntk/commit/388542f68293a503fe12ecb1801b34a4330fd645))
+
 ## [3.4.0](https://github.com/sidorares/ntk/compare/v3.3.0...v3.4.0) (2026-07-26)
 
 
