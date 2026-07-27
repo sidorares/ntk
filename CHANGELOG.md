@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.5.1](https://github.com/sidorares/ntk/compare/v3.5.0...v3.5.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* **2d:** glyph drawing now honours the clip mask ([#79](https://github.com/sidorares/ntk/issues/79)) ([632e896](https://github.com/sidorares/ntk/commit/632e89653ac879896ab23bc24cf33d9e1d1d7f40))
+
 ## [3.5.0](https://github.com/sidorares/ntk/compare/v3.4.0...v3.5.0) (2026-07-27)
 
 
