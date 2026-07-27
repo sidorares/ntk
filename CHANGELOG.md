@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.5.3](https://github.com/sidorares/ntk/compare/v3.5.2...v3.5.3) (2026-07-27)
+
+
+### Performance Improvements
+
+* **2d:** bound fill and stroke mask work to the shape's bounding box ([#83](https://github.com/sidorares/ntk/issues/83)) ([5b9dafe](https://github.com/sidorares/ntk/commit/5b9dafed90cca9b8e3b5840467e588a6bbbb48b8))
+
 ## [3.5.2](https://github.com/sidorares/ntk/compare/v3.5.1...v3.5.2) (2026-07-27)
 
 
