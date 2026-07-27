@@ -42,7 +42,9 @@ lib/clipboard.js           app.clipboard: ICCCM selection/clipboard text
 lib/renderingcontext_2d.js canvas-like context (XRender); CanvasGradient
 lib/path.js                Path2D, SVG path-data parser, affine matrices,
                            adaptive bezier flattening
-lib/renderingcontext_opengl.js  indirect GLX context
+lib/renderingcontext_opengl.js  indirect GLX context (queues GL commands
+                           until MakeCurrent's context tag arrives)
+lib/glx.js                 GLX visual/fbconfig discovery (app.chooseGLXConfig)
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
 lib/glyphset.js            XRender GlyphSet wrapper

@@ -15,9 +15,8 @@ const app2 = await createClient({ display: ':1' });
   ntk additionally understands:
   - `fontSource` — pluggable system-font lookup for `app.fonts`
     (see [fonts.md](fonts.md#pluggable-font-sources));
-  - `glxVisual` — visual id used by `getContext('opengl')` in environments
-    where `glxinfo` cannot be shelled out to
-    (see [context-opengl.md](context-opengl.md));
+  - `glxVisual` — visual id `getContext('opengl')` should use instead of
+    querying the server for one (see [context-opengl.md](context-opengl.md));
   - `onXError` — called with X protocol errors that no request callback
     claimed (races like a request landing after its window was destroyed).
     Defaults to a `console.warn`; without any listener node-x11's error
@@ -42,6 +41,13 @@ const app2 = await createClient({ display: ':1' });
 - `app.createWindow(args) → Window` — see [window.md](window.md)
 - `app.rootWindow() → Window` — wrapper for the first screen's root window
 - `app.createPixmap(args) → Pixmap` — see [pixmap.md](pixmap.md)
+- `app.createColormap(visual, screen = 0) → id` — allocate a colormap for a
+  visual (alloc None). Windows created with an explicit `visual` get one
+  automatically, so this is only needed to share one between windows
+- `app.chooseGLXConfig(spec) → Promise<config>` — pick a GLX-capable visual
+  by querying the server; `config.visual`/`config.depth` feed `createWindow`
+  and the whole object feeds `getContext('opengl', config)`. See
+  [context-opengl.md](context-opengl.md)
 - `app.close() → Promise` — flush pending requests, then close the connection
 
 ## Resource management
