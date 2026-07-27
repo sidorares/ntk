@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.5.2](https://github.com/sidorares/ntk/compare/v3.5.1...v3.5.2) (2026-07-27)
+
+
+### Performance Improvements
+
+* **2d:** server-side clip for glyphs, and one glyph batch per layout ([#81](https://github.com/sidorares/ntk/issues/81)) ([ba2cbff](https://github.com/sidorares/ntk/commit/ba2cbffbedd689a18db84b75b23d1ffbd078993b))
+
 ## [3.5.1](https://github.com/sidorares/ntk/compare/v3.5.0...v3.5.1) (2026-07-27)
 
 
