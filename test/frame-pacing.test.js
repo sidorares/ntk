@@ -8,7 +8,9 @@ import { setImmediate as tick, setTimeout as sleep } from 'node:timers/promises'
 
 import Window from '../lib/window.js';
 
-// ids must be unique across all mock connections: Window.cache is static
+// the wrapper cache is keyed per connection, so ids only have to be unique
+// within one mock app — keeping them unique across all of them anyway makes
+// a stray cross-connection lookup in a failing test obvious
 let nextId = 0xa000;
 
 function makeMockApp() {
