@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.0](https://github.com/sidorares/ntk/compare/v3.8.0...v3.9.0) (2026-07-29)
+
+
+### Features
+
+* setProperty, the write side of the property API ([#97](https://github.com/sidorares/ntk/issues/97)) ([075ab56](https://github.com/sidorares/ntk/commit/075ab56d549da7ba8123441091bd6072b1107826))
+
 ## [3.8.0](https://github.com/sidorares/ntk/compare/v3.7.2...v3.8.0) (2026-07-29)
 
 
