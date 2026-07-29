@@ -182,12 +182,16 @@ All return `this` unless noted.
 - `grabKeyboard(options, cb)` / `ungrabKeyboard(time)` — the same for keys
 - `queryPointer(cb)`, `setMouseHintOnly(isOn)`
 - `queryTree(cb)` — `cb(err, { parent, root, children })`, all as `Window`s
-- `reparentTo(newParent, x, y)`
+- `reparentTo(newParent, x, y)`, `raise()`, `lower()`
 - `setActions()` — opt in to the WM_DELETE_WINDOW protocol (window manager
   sends a `message` event instead of killing the connection on close)
 - `setSizeHints(hints)`, `setClass(instance, class)`,
   `setWindowType(type)`, `setAlwaysOnTop(on)` — see
   [Window manager hints](#window-manager-hints) below
+- `getProperty(name, options)`, `getTitle()`, `getSizeHints()`,
+  `getAttributes()`, `atom(name)`, `selectInput(mask)`, `addToSaveSet()`,
+  `sendConfigureNotify(geometry)`, `close()`, `grabButton(options)` — the
+  window manager side, see [Being the window manager](#being-the-window-manager)
 - `destroy()` — destroy the window server-side (also `Symbol.dispose`)
 
 ## Window manager hints
@@ -252,6 +256,147 @@ window manager created rather than our own window id — Apple-WM answers
 `BadWindow` for a reparented client.
 
 Where neither is available the call is a no-op.
+
+## Being the window manager
+
+Everything above is the application's side: hints a window *writes* about
+itself for whichever window manager happens to be running. This section is
+the other side — the API for being that window manager, which on X11 is an
+ordinary client with one special privilege.
+
+### Claiming the role
+
+A window manager is the client holding `SubstructureRedirect` on the root.
+Only one client may hold it, so claiming it is also how you discover that
+another window manager is already running:
+
+```js
+import x11 from 'x11';
+
+const root = app.rootWindow();
+try {
+  await root.selectInput(
+    x11.eventMask.SubstructureRedirect | x11.eventMask.SubstructureNotify
+  );
+} catch (err) {
+  throw new Error('another window manager is already running'); // BadAccess
+}
+```
+
+`selectInput(mask)` ORs `mask` into whatever handlers already asked for and
+resolves once the server accepts it. Handler-driven selection
+(`root.on('map_request', ...)`, or the `onMapRequest` creation argument)
+still works and covers the ordinary case; `selectInput` exists for the mask
+that can be refused, because a rejected selection is the answer rather than
+an error to log.
+
+### The requests you now answer
+
+With the redirect held, these never take effect on their own — they arrive
+as events instead, and nothing happens until you make it happen:
+
+| event | what the client asked for |
+| --- | --- |
+| `map_request` | to be shown. Frame it, then `map()` both |
+| `configure_request` | to move or resize. Honour, adjust, or refuse it |
+| `circulate_request` | to be raised or lowered |
+| `create` | a window appeared (SubstructureNotify, not a request) |
+
+Each carries the full X event — `ev.window` and `ev.parent` as `Window`
+objects, plus the raw fields. For `configure_request` those fields are the
+point:
+
+```js
+root.on('configure_request', (ev) => {
+  // ev.mask says which of x/y/width/height the client actually set; the
+  // rest hold the window's current values and mean nothing
+  const width = ev.mask & 0x0004 ? ev.width : ev.window.width;
+  const height = ev.mask & 0x0008 ? ev.height : ev.window.height;
+  ev.window.resize(width, height);
+});
+```
+
+### Framing a client
+
+Reparenting a client into a frame you own is what lets you draw
+decorations around it:
+
+```js
+root.on('map_request', async (ev) => {
+  const client = ev.window;
+  const title = (await client.getTitle()) ?? 'untitled';
+  const { minWidth = 1, minHeight = 1 } = await client.getSizeHints();
+
+  const frame = app.createWindow({
+    x: 40, y: 40,
+    width: client.width + 2 * BORDER,
+    height: client.height + TITLEBAR + 2 * BORDER
+  });
+  client.addToSaveSet();          // survive us exiting
+  client.reparentTo(frame, BORDER, TITLEBAR);
+  frame.map();
+  client.map();
+});
+```
+
+`addToSaveSet()` matters: the client is now a child of a window you own, so
+without it your frames would take every client with them if the window
+manager exits. With it the server reparents them back to the root.
+
+After moving a framed client, tell it where it really is —
+its own `ConfigureNotify` carries frame-relative coordinates, and a
+`configure_request` you refused produces no notification at all, which
+hangs clients that wait for one:
+
+```js
+client.sendConfigureNotify({ x: frameX + BORDER, y: frameY + TITLEBAR });
+```
+
+### Reading what clients declare
+
+The counterparts of the hint setters, for reading other clients' windows:
+
+- `getTitle()` — `_NET_WM_NAME` if set, else `WM_NAME`; `null` for neither
+- `getSizeHints()` — `WM_NORMAL_HINTS` shaped like `setSizeHints`' argument,
+  `{}` when unset, each key present only if the client set its flag
+- `getAttributes()` — `{ mapState, overrideRedirect, ... }`. Both matter
+  when adopting the windows that already existed at startup: skip
+  override-redirect ones, frame only the mapped ones
+- `getProperty(name, { as })` — any property. `as` is `'buffer'` (default,
+  `{ type, data }`), `'string'`, or `'numbers'` for 32-bit lists. Resolves
+  to `null` when the property is not set
+- `atom(name)` — intern an atom id, cached per connection
+
+Title changes arrive as `property` events (`PropertyChange`), so a frame
+that redraws its titlebar on those stays in sync.
+
+### Closing and focusing
+
+```js
+await client.close();   // true if asked politely, false if killed
+```
+
+`close()` sends `WM_DELETE_WINDOW` when the client advertised it in
+`WM_PROTOCOLS` — the protocol `setActions()` opts a window into — so it can
+confirm or save first. A client that never advertised it has no such path
+and is killed outright, which is what `xkill` does.
+
+Click-to-focus needs to see presses that belong to the client. Grab the
+button synchronously, then release the pointer once you have raised and
+focused the window, so the click still reaches the application:
+
+```js
+client.grabButton({ button: 1, pointerMode: 0 /* synchronous */ });
+
+client.on('mousedown', () => {
+  frame.raise();
+  client.focus();
+  app.allowEvents('replay'); // hand the click back to the client
+});
+```
+
+`app.allowEvents(mode)` takes `'replay'`, `'async'`, `'sync'`, the
+`*_keyboard` variants, or a raw X mode number.
 
 ## Cursor
 
