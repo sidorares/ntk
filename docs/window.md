@@ -188,10 +188,11 @@ All return `this` unless noted.
 - `setSizeHints(hints)`, `setClass(instance, class)`,
   `setWindowType(type)`, `setAlwaysOnTop(on)` — see
   [Window manager hints](#window-manager-hints) below
-- `getProperty(name, options)`, `getTitle()`, `getSizeHints()`,
-  `getAttributes()`, `atom(name)`, `selectInput(mask)`, `addToSaveSet()`,
-  `sendConfigureNotify(geometry)`, `close()`, `grabButton(options)` — the
-  window manager side, see [Being the window manager](#being-the-window-manager)
+- `getProperty(name, options)`, `setProperty(name, value, options)`,
+  `getTitle()`, `getSizeHints()`, `getAttributes()`, `atom(name)`,
+  `selectInput(mask)`, `addToSaveSet()`, `sendConfigureNotify(geometry)`,
+  `close()`, `grabButton(options)` — the window manager side, see
+  [Being the window manager](#being-the-window-manager)
 - `destroy()` — destroy the window server-side (also `Symbol.dispose`)
 
 ## Window manager hints
@@ -365,6 +366,16 @@ The counterparts of the hint setters, for reading other clients' windows:
 - `getProperty(name, { as })` — any property. `as` is `'buffer'` (default,
   `{ type, data }`), `'string'`, or `'numbers'` for 32-bit lists. Resolves
   to `null` when the property is not set
+- `setProperty(name, value, { type, format })` — the write side, and the
+  general form of `setTitle`/`setClass`. Strings go out as `UTF8_STRING`,
+  arrays of numbers as 32-bit lists; `type` names the property type atom,
+  which is what EWMH readers check:
+
+  ```js
+  root.setProperty('_NET_CLIENT_LIST', ids, { type: 'WINDOW' });
+  root.setProperty('_NET_SUPPORTED', atoms, { type: 'ATOM' });
+  ```
+
 - `atom(name)` — intern an atom id, cached per connection
 
 Title changes arrive as `property` events (`PropertyChange`), so a frame

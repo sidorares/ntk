@@ -206,6 +206,27 @@ test('getProperty decodes strings, numbers and raw bytes, null when unset', asyn
   assert.deepEqual(protocols, [deleteAtom]);
 });
 
+test('setProperty round-trips through getProperty', async () => {
+  const window = wm.createWindow({ width: 40, height: 30 });
+
+  await window.setProperty('_NET_WM_NAME', 'hello ✻ world');
+  assert.equal(
+    await window.getProperty('_NET_WM_NAME', { as: 'string' }),
+    'hello ✻ world'
+  );
+
+  const ids = [0x123456, 0x789abc];
+  await window.setProperty('_NET_CLIENT_LIST', ids, { type: 'WINDOW' });
+  assert.deepEqual(
+    await window.getProperty('_NET_CLIENT_LIST', { as: 'numbers' }),
+    ids
+  );
+
+  // the type atom is what EWMH readers check, so it has to be right
+  const raw = await window.getProperty('_NET_CLIENT_LIST');
+  assert.equal(raw.type, await window.atom('WINDOW'));
+});
+
 test('close asks politely when the client opted in, kills it when it did not', async () => {
   const polite = client.createWindow({ width: 40, height: 30 });
   polite.setActions();
