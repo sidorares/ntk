@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.0](https://github.com/sidorares/ntk/compare/v3.7.2...v3.8.0) (2026-07-29)
+
+
+### Features
+
+* window manager support — substructure payloads, property reads, frames ([#95](https://github.com/sidorares/ntk/issues/95)) ([277d3a1](https://github.com/sidorares/ntk/commit/277d3a1112a7a8b604d2e865589931ad360adc56))
+
 ## [3.7.2](https://github.com/sidorares/ntk/compare/v3.7.1...v3.7.2) (2026-07-27)
 
 
