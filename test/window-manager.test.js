@@ -258,6 +258,28 @@ test('create fires for windows appearing under a watched parent', async () => {
   assert.equal(ev.overrideRedirect, false);
 });
 
+test('queryTree on the root reports no parent instead of inventing one', async () => {
+  const root = wm.rootWindow();
+  const before = await new Promise((resolve, reject) =>
+    root.queryTree((err, res) => (err ? reject(err) : resolve(res)))
+  );
+  assert.equal(before.parent, null, 'the root has no parent');
+  assert.equal(before.root.id, root.id);
+
+  // QueryTree answers None (0) for the root's parent; wrapping that as a
+  // window used to create a real 800x800 one on every call
+  const after = await new Promise((resolve, reject) =>
+    root.queryTree((err, res) => (err ? reject(err) : resolve(res)))
+  );
+  assert.equal(
+    after.children.length,
+    before.children.length,
+    'querying the tree does not add to it'
+  );
+
+  assert.throws(() => wm.createWindow({ id: 0 }), /not a window id/);
+});
+
 test('an override-redirect window is never redirected', async () => {
   const root = wm.rootWindow();
   await root.selectInput(REDIRECT);
