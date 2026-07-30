@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import FontManager from '../lib/text/fontmanager.js';
 import { layoutMermaid, parseMermaid } from '../lib/widgets/mermaid.js';
 import MarkdownView from '../lib/widgets/markdownview.js';
+import { invalidation, until } from './helpers/async.js';
 
 let hasFontconfig = true;
 try {
@@ -142,10 +143,11 @@ test('layoutMermaid validates its input', needsFonts, () => {
 // markdown integration
 
 test('markdown: mermaid fence becomes a diagram box after async parse', needsFonts, async () => {
-  const view = new MarkdownView(null, { fonts });
+  const load = invalidation();
+  const view = new MarkdownView(null, { fonts, ...load.opts });
   view.setMarkdown('```mermaid\nflowchart LR\n A[Hello] --> B[World]\n```');
   view.layout(500); // kicks off the async parse; fence is a code block for now
-  await new Promise((r) => setTimeout(r, 2000));
+  await load.settled(1, 'mermaid parse');
   view.layout(500);
   const diagram = view._items.find((i) => i.kind === 'tex' && i.box.type === 'flowchart');
   assert.ok(diagram, 'diagram item present after parse resolves');
@@ -170,7 +172,13 @@ test('markdown: unsupported mermaid stays a code block', needsFonts, async () =>
   const view = new MarkdownView(null, { fonts });
   view.setMarkdown('```mermaid\ngantt\n title x\n```');
   view.layout(500);
-  await new Promise((r) => setTimeout(r, 2000));
+  // no onInvalidate to wait on here: an unsupported fence takes the rejection
+  // path, which sets entry.failed and deliberately does *not* invalidate
+  // (nothing changed on screen). So poll the flag the parse actually sets.
+  await until(
+    () => [...view._mermaid.values()].every((e) => e.failed || e.model),
+    'mermaid parse rejected'
+  );
   view.layout(500);
   assert.ok(!view._items.some((i) => i.kind === 'tex'), 'no diagram box');
   assert.ok(view._items.some((i) => i.kind === 'rect'), 'code block background present');

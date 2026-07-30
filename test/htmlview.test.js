@@ -6,6 +6,7 @@ import { test } from 'node:test';
 
 import FontManager from '../lib/text/fontmanager.js';
 import HtmlView from '../lib/widgets/htmlview.js';
+import { invalidation } from './helpers/async.js';
 
 let hasFontconfig = true;
 try {
@@ -98,9 +99,10 @@ test('img: data URI loads, natural size, shrinks to container width', needsFonts
   const { PNG } = await import('pngjs');
   const png = new PNG({ width: 200, height: 100 });
   const uri = 'data:image/png;base64,' + PNG.sync.write(png).toString('base64');
-  const view = new HtmlView(null, { fonts });
+  const load = invalidation();
+  const view = new HtmlView(null, { fonts, ...load.opts });
   view.setHtml(`<div style="width: 100px; margin: 0"><img src="${uri}"></div>`);
-  await new Promise((r) => setTimeout(r, 20));
+  await load.settled(1, 'data: URI png');
   view.layout(400);
   const img = byName(view, 'img')[0];
   assert.equal(Math.round(img.w), 100, 'clamped to container');
@@ -108,24 +110,29 @@ test('img: data URI loads, natural size, shrinks to container width', needsFonts
 });
 
 test('images: no baseUrl means relative sources do not load', needsFonts, async () => {
-  const view = new HtmlView(null, { fonts });
+  const load = invalidation();
+  const view = new HtmlView(null, { fonts, ...load.opts });
   view.setHtml('<img src="../../etc/passwd">');
-  await new Promise((r) => setTimeout(r, 20));
+  // a refused load still invalidates, so this waits for the real answer
+  // rather than for long enough to assume one
+  await load.settled(1, 'relative src refused');
   const entry = view._images.values().next().value;
   assert.equal(entry.image, null);
 });
 
 test('images: custom loadResource hook is used and can veto', needsFonts, async () => {
   const asked = [];
+  const load = invalidation();
   const view = new HtmlView(null, {
     fonts,
+    ...load.opts,
     loadResource: async (url) => {
       asked.push(url);
       return null;
     }
   });
   view.setHtml('<img src="http://example.com/x.png">');
-  await new Promise((r) => setTimeout(r, 20));
+  await load.settled(1, 'loadResource veto');
   assert.deepEqual(asked, ['http://example.com/x.png']);
 });
 
@@ -278,12 +285,14 @@ test('inline svg: display none hides it; children never join text flow', needsFo
 });
 
 test('img: svg source via loadResource buffer is sniffed and adopted', needsFonts, async () => {
+  const load = invalidation();
   const view = new HtmlView(null, {
     fonts,
+    ...load.opts,
     loadResource: async () => Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="30" height="60"><circle r="5"/></svg>')
   });
   view.setHtml('<img src="pic.svg">');
-  await new Promise((r) => setTimeout(r, 20));
+  await load.settled(1, 'svg buffer sniffed');
   view.layout(400);
   const img = byName(view, 'img')[0];
   const entry = view._images.get(img.element);
@@ -298,9 +307,10 @@ test('img: data:image/svg+xml URI (utf8 and base64) loads', needsFonts, async ()
   const utf8 = 'data:image/svg+xml,' + encodeURIComponent(svgText);
   const b64 = 'data:image/svg+xml;base64,' + Buffer.from(svgText).toString('base64');
   for (const uri of [utf8, b64]) {
-    const view = new HtmlView(null, { fonts });
+    const load = invalidation();
+    const view = new HtmlView(null, { fonts, ...load.opts });
     view.setHtml(`<img src="${uri}">`);
-    await new Promise((r) => setTimeout(r, 20));
+    await load.settled(1, `data: svg URI ${uri.slice(0, 30)}`);
     view.layout(400);
     const img = byName(view, 'img')[0];
     assert.equal(img.w, 24, uri.slice(0, 30));
@@ -315,9 +325,12 @@ test('img: svg file loads through baseUrl and draws', needsFonts, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ntk-svg-'));
   await writeFile(join(dir, 'icon.svg'), '<svg viewBox="0 0 2 2" width="20" height="20"><rect width="2" height="2" fill="#0000ff"/></svg>');
   try {
-    const view = new HtmlView(null, { fonts, baseUrl: dir });
+    const load = invalidation();
+    const view = new HtmlView(null, { fonts, baseUrl: dir, ...load.opts });
     view.setHtml('<div style="margin:0;padding:0"><img src="icon.svg"></div>');
-    await new Promise((r) => setTimeout(r, 30));
+    // this one used to sleep 30ms and lost the race under a parallel run:
+    // a file read plus an SVG parse, with img.w still 0 when it woke
+    await load.settled(1, 'svg read through baseUrl');
     view.layout(400);
     const img = byName(view, 'img')[0];
     assert.equal(img.w, 20);
@@ -333,9 +346,10 @@ test('img: svg file loads through baseUrl and draws', needsFonts, async () => {
 test('img: raster decoding is untouched by svg sniffing', needsFonts, async () => {
   const { PNG } = await import('pngjs');
   const png = new PNG({ width: 12, height: 8 });
-  const view = new HtmlView(null, { fonts, loadResource: async () => PNG.sync.write(png) });
+  const load = invalidation();
+  const view = new HtmlView(null, { fonts, ...load.opts, loadResource: async () => PNG.sync.write(png) });
   view.setHtml('<img src="x.png">');
-  await new Promise((r) => setTimeout(r, 20));
+  await load.settled(1, 'raster png decoded');
   view.layout(400);
   const entry = view._images.values().next().value;
   assert.ok(entry.image, 'decoded as raster');

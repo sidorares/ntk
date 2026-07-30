@@ -5,12 +5,7 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
 import { createClient, HtmlView, MarkdownView, Path2D, SvgView } from '../lib/index.js';
-
-const withTimeout = (promise, ms, what) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout: ${what}`)), ms).unref())
-  ]);
+import { invalidation, until, withTimeout } from './helpers/async.js';
 
 let app = null;
 let skip = false;
@@ -242,14 +237,17 @@ test('HtmlView: inline <svg> and svg <img> render as vectors', async (t) => {
   const uri =
     'data:image/svg+xml,' +
     encodeURIComponent('<svg viewBox="0 0 4 4"><rect width="4" height="4" fill="#0000ff"/></svg>');
-  const view = new HtmlView(null);
+  const load = invalidation();
+  const view = new HtmlView(null, load.opts);
   view.setHtml(
     `<div style="margin:0;padding:0">
        <svg width="32" height="32" viewBox="0 0 4 4"><rect width="4" height="4" fill="#ff0000"/></svg>
        <img width="16" height="16" src="${uri}">
      </div>`
   );
-  await new Promise((r) => setTimeout(r, 20)); // let the data: URI resolve
+  // the inline <svg> is adopted synchronously; only the <img> data: URI is
+  // async, so one invalidation is the whole wait
+  await load.settled(1, 'data: URI svg');
   view.layout(64);
   view.draw(ctx, 0, 0);
 
@@ -270,13 +268,7 @@ test('MarkdownView: mermaid fence renders diagram pixels', async (t) => {
   const view = new MarkdownView(null, { fonts: app.fonts });
   view.setMarkdown('```mermaid\nflowchart LR\n A[Hello] --> B[World]\n```');
   view.layout(280);
-  await withTimeout(
-    (async () => {
-      while (![...view._mermaid.values()][0]?.model) await new Promise((r) => setTimeout(r, 50));
-    })(),
-    10000,
-    'mermaid parse'
-  );
+  await until(() => [...view._mermaid.values()][0]?.model, 'mermaid parse');
   view.layout(280);
   view.draw(ctx, 10, 10);
 
