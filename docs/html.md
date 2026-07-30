@@ -42,9 +42,11 @@ react-x11 renderer — share the same WASM module and enum values instead of
 loading a second, possibly version-mismatched copy.
 
 The two value parsers the CSS layer is built on are exported for the same
-reason: `cssColor(value)` → `[r, g, b, a]` floats 0..1 (what XRender and GL
-both want) or `null`, and `cssLength(value, emBase, rootSize)` → `{ px }`,
-`{ pct }`, `'auto'` or `null`.
+reason: `cssColor(value)` → **premultiplied** `[r, g, b, a]` floats 0..1
+(what XRender and GL both want — see
+[context-2d.md](context-2d.md#color)) or `null`, and
+`cssLength(value, emBase, rootSize)` → `{ px }`, `{ pct }`, `'auto'` or
+`null`.
 
 ## The safety / responsibility model
 
@@ -138,8 +140,9 @@ query is a bare `screen`/`all` (conditions are not evaluated).
 | text | `color font-family font-size font-weight font-style line-height text-align text-decoration white-space` (`normal pre nowrap`) `list-style-type` |
 | background | `background-color` (and the color of a `background` shorthand) |
 
-Units: `px pt em rem %` and font-size keywords. Colors: named, hex,
-`rgb[a]()`, `hsl[a]()` (via parse-color).
+Units: `px pt em rem %` and font-size keywords. Colors: named, `rgb[a]()`,
+`hsl[a]()`, `transparent`, and hex in all four lengths including alpha
+(`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`).
 
 Not supported (silently ignored): floats, absolute/relative positioning,
 grid, background images, border-radius, shadows, transforms, transitions,

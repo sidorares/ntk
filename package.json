@@ -55,6 +55,6 @@
     "yoga-layout": "^3.2.1"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "NTK_STRICT_COLORS=1 node --test"
   }
 }

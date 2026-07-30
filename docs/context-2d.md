@@ -22,9 +22,12 @@ ctx.fillRect(0, 0, 100, 100);
 
 - `ctx.canvas` — the owning drawable (window or pixmap), like in the browser
 - `ctx.width`, `ctx.height` — drawable size
-- `ctx.fillStyle`, `ctx.strokeStyle` — CSS color string (via
-  [parse-color](https://www.npmjs.com/package/parse-color)), a premultiplied
-  `[r, g, b, a]` array (0..1 floats), a `CanvasGradient`, or a `Picture`
+- `ctx.fillStyle`, `ctx.strokeStyle` — a CSS color string, a premultiplied
+  `[r, g, b, a]` array (0..1 floats), a `CanvasGradient`, or a `Picture`.
+  Named colors, `rgb[a]()`, `hsl[a]()` and hex in all four lengths
+  (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) are accepted; anything
+  unparseable throws rather than drawing something arbitrary. See
+  **Color** below for what alpha does
 - `ctx.lineWidth`, `ctx.lineCap`, `ctx.lineJoin`, `ctx.miterLimit` — stroke
   geometry, including `'round'` caps and joins (rendered as triangle-fan
   disks unioned with the stroke mesh)
@@ -49,6 +52,35 @@ Everything that puts ink on the surface goes through the clip: fills,
 strokes, images, text (`fillText`, `TextLayout.draw`) and the KaTeX boxes
 of [`layoutTex`](tex.md). Rectangular clips take a server-side fast path
 (`SetPictureClipRectangles`); non-rectangular ones build an a8 mask.
+
+## Color
+
+XRender colors are **premultiplied**: each of `r`, `g` and `b` is already
+scaled by `a`, so all three must be `<= a`. Color *strings* are converted
+for you — `'rgba(255, 0, 0, 0.5)'` reaches the server as
+`[0.5, 0, 0, 0.5]` — but an **array is taken as already premultiplied and
+passes through untouched**:
+
+```js
+ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // half-alpha red
+ctx.fillStyle = [0.5, 0, 0, 0.5]; // the same thing
+ctx.fillStyle = [1, 0, 0, 0.5]; // NOT half-alpha red: out of gamut
+```
+
+The last line is the mistake to know about. It is not rejected — the
+protocol allows it — but it renders brighter than any real color at that
+alpha, and over a white background it clamps to the same pixels as the
+correct value, so it tends to look fine until something dark is underneath.
+White at half alpha is `[0.5, 0.5, 0.5, 0.5]`, not `[1, 1, 1, 0.5]`.
+
+`cssColor(value)` (exported from the package) does the conversion, returning
+premultiplied `[r, g, b, a]` in 0..1, or `null`. Gradient stops go through
+the same path, so `addColorStop(0, 'rgba(255, 0, 0, 0.5)')` is right too.
+
+Set `NTK_STRICT_COLORS=1` to make a component outside 0..1 throw instead of
+being clamped (it wires up x11's `Render.strictColors`); ntk's own test run
+sets it. Note what that does *not* cover: an unpremultiplied `[1, 0, 0, 0.5]`
+is inside 0..1 on every component, so only rendering catches it.
 
 ## State and transforms
 
