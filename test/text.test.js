@@ -345,10 +345,15 @@ test('MarkdownView: a squeezed column never narrows past its longest word', need
     view.setMarkdown(md);
     view.layout(width);
     const wrapped = view._items.filter((i) => i.kind === 'text' && i.layout.lines.length > 1);
+    // The message carries the split text and the widths, because the only way
+    // this fails is a font whose metrics differ from the one you ran it with.
+    const detail = wrapped
+      .map((i) => JSON.stringify(i.layout.lines.map((l) => l.runs.map((r) => r.span.text).join(''))))
+      .join(' ');
     assert.equal(
       wrapped.length,
       0,
-      `at width ${width}, ${wrapped.length} cell(s) of unbreakable words were split`
+      `at width ${width}, ${wrapped.length} cell(s) of unbreakable words were split: ${detail}`
     );
   }
 });
