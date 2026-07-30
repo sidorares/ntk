@@ -252,7 +252,12 @@ test('interactive resize drives one paced draw per frame', async () => {
 // A blit used to be the whole window however little had changed, so a repaint
 // of two tab headers copied a megapixel to move 4k of it. A drawing operation
 // reports the region it could have touched — its clip rectangle — and the
-// present copies the union of those instead.
+// present copies those instead.
+//
+// They are kept as a list of rectangles, not one box around them all, so that
+// two repaints at opposite corners do not drag everything between them along.
+// The list is capped, and collapsed back to its box when splitting would not
+// save enough to pay for the extra requests.
 
 function backedWindow() {
   const { app, fences, calls } = makeMockApp();
@@ -274,17 +279,113 @@ test('a present copies only the region the drawing reported', async () => {
   assert.deepEqual(calls.copies[0], { x: 10, y: 20, w: 30, h: 12 });
 });
 
-test('reported regions union, and the union is what gets copied', async () => {
+test('regions far apart are copied separately, not as one box', async () => {
   const { wnd, calls } = backedWindow();
   wnd._markDirty({ x: 10, y: 10, w: 10, h: 10 });
   wnd._markDirty({ x: 50, y: 40, w: 20, h: 20 });
   await tick();
-  assert.equal(calls.CopyArea, 1, 'still one blit');
-  assert.deepEqual(
-    calls.copies[0],
-    { x: 10, y: 10, w: 60, h: 50 },
-    'the bounding box of both'
-  );
+  assert.equal(calls.CopyArea, 2, 'one blit each');
+  assert.deepEqual(calls.copies, [
+    { x: 10, y: 10, w: 10, h: 10 },
+    { x: 50, y: 40, w: 20, h: 20 }
+  ]);
+  // the point of the exercise: 500px copied where the box around both is 3000
+  const copied = calls.copies.reduce((sum, r) => sum + r.w * r.h, 0);
+  assert.equal(copied, 500);
+});
+
+test('regions that nearly fill their box are copied as the box', async () => {
+  const { wnd, calls } = backedWindow();
+  // side-by-side tab headers: two 20x10 rects with a 2px gap. Splitting saves
+  // 20 of 420 pixels, which is not worth a second request.
+  wnd._markDirty({ x: 10, y: 10, w: 20, h: 10 });
+  wnd._markDirty({ x: 32, y: 10, w: 20, h: 10 });
+  await tick();
+  assert.equal(calls.CopyArea, 1, 'collapsed to one blit');
+  assert.deepEqual(calls.copies[0], { x: 10, y: 10, w: 42, h: 10 });
+});
+
+// Nesting is checked on the list itself rather than through the copies,
+// because the collapse rule would hide a redundant entry: two rectangles that
+// nest are copied as their box either way, and their box is the outer one. The
+// list length is the property that matters — the cap is a budget, and spending
+// it on rectangles that cover each other is what forces the real ones to merge.
+test('a region already covered by another does not lengthen the list', async () => {
+  const { wnd, calls } = backedWindow();
+  // the overwhelmingly common case: consecutive operations under one clip all
+  // report the same rectangle, or one nested inside it
+  wnd._markDirty({ x: 10, y: 10, w: 40, h: 40 });
+  wnd._markDirty({ x: 20, y: 20, w: 10, h: 10 });
+  // checked here rather than at the end: re-reporting the outer rectangle
+  // would collapse the list again by covering both entries, so it would hide a
+  // nested entry that had been kept
+  assert.equal(wnd._dirtyRegion.length, 1, 'the nested rectangle was dropped');
+  wnd._markDirty({ x: 10, y: 10, w: 40, h: 40 });
+  assert.equal(wnd._dirtyRegion.length, 1);
+  await tick();
+  assert.equal(calls.CopyArea, 1);
+  assert.deepEqual(calls.copies[0], { x: 10, y: 10, w: 40, h: 40 });
+});
+
+test('a region covering an earlier one replaces it', async () => {
+  const { wnd, calls } = backedWindow();
+  wnd._markDirty({ x: 20, y: 20, w: 10, h: 10 });
+  wnd._markDirty({ x: 10, y: 10, w: 40, h: 40 });
+  assert.equal(wnd._dirtyRegion.length, 1);
+  await tick();
+  assert.equal(calls.CopyArea, 1, 'not two overlapping copies');
+  assert.deepEqual(calls.copies[0], { x: 10, y: 10, w: 40, h: 40 });
+});
+
+test('a far-apart region survives a flood of nested ones', async () => {
+  const { wnd, calls } = backedWindow();
+  // What the nesting checks buy: 30 operations under one clip, plus one small
+  // repaint in the far corner. Without them the cap fills with rectangles that
+  // cover each other and the corner gets merged into the rest.
+  wnd._markDirty({ x: 0, y: 0, w: 60, h: 60 });
+  for (let i = 0; i < 30; i++) {
+    wnd._markDirty({ x: 2 + (i % 20), y: 2 + (i % 20), w: 10, h: 10 });
+  }
+  wnd._markDirty({ x: 180, y: 90, w: 10, h: 10 });
+  await tick();
+  assert.equal(calls.CopyArea, 2, 'the corner is still its own copy');
+  assert.deepEqual(calls.copies, [
+    { x: 0, y: 0, w: 60, h: 60 },
+    { x: 180, y: 90, w: 10, h: 10 }
+  ]);
+});
+
+test('the number of copies stays capped however many regions are reported', async () => {
+  const { wnd, calls } = backedWindow();
+  // 40 scattered 2x2 rects, more than the cap. Whatever the merging does, it
+  // may not exceed the cap and may not lose a reported pixel.
+  const reported = [];
+  for (let i = 0; i < 40; i++) {
+    const rect = { x: (i * 7) % 190, y: (i * 11) % 90, w: 2, h: 2 };
+    reported.push(rect);
+    wnd._markDirty(rect);
+  }
+  await tick();
+  assert.ok(calls.CopyArea >= 1, 'something was copied');
+  assert.ok(calls.CopyArea <= 8, `at most the cap, got ${calls.CopyArea}`);
+  for (const r of reported) {
+    const inside = calls.copies.some(
+      (c) => r.x >= c.x && r.y >= c.y && r.x + r.w <= c.x + c.w && r.y + r.h <= c.y + c.h
+    );
+    assert.ok(inside, `${JSON.stringify(r)} is inside some copy`);
+  }
+});
+
+test('an unbounded region still absorbs a list of rectangles', async () => {
+  const { wnd, calls } = backedWindow();
+  // the same safety property as the single-rect version, now that "current"
+  // can be a list: an unreported operation has to discard the whole list
+  wnd._markDirty({ x: 10, y: 10, w: 10, h: 10 });
+  wnd._markDirty({ x: 150, y: 80, w: 10, h: 10 });
+  wnd._markDirty(undefined);
+  await tick();
+  assert.equal(calls.CopyArea, 1);
+  assert.deepEqual(calls.copies[0], { x: 0, y: 0, w: 200, h: 100 });
 });
 
 test('drawing that reports no region copies the whole window', async () => {
