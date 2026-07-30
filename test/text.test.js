@@ -331,6 +331,107 @@ test('MarkdownView: table layout places cells and grid', needsFonts, () => {
   assert.ok(Math.abs(right(texts[3]) - right(texts[5])) < 0.5, 'right-aligned column');
 });
 
+test('TextLayout: a narrow maxWidth is not a min-content probe', needsFonts, () => {
+  const fonts = new FontManager();
+  const style = { family: 'sans-serif', size: 16 };
+  const span = { text: 'value', ...style };
+  const whole = new TextLayout(fonts, [span], style, {}).width;
+
+  // Laying a single token out at a tiny maxWidth looks like a way to measure
+  // min-content, and is not one. `_forceBreak` splits a token wider than the
+  // container whenever a single cluster fits, so the reported width is a
+  // *fragment* — and whether a cluster fits at a given maxWidth depends on the
+  // font, which is how a table column floor built on this probe came out below
+  // the word it existed to protect on one machine and not another.
+  //
+  // The width is therefore not monotonic in maxWidth. This pins that, so the
+  // probe does not come back as an obvious simplification.
+  const widths = [1, 16].map(
+    (maxWidth) => new TextLayout(fonts, [span], style, { maxWidth }).width
+  );
+  assert.equal(widths[0], whole, 'at maxWidth 1 no cluster fits, so it overflows whole');
+  assert.ok(
+    widths[1] < whole,
+    `at maxWidth 16 the token force-breaks and reports a fragment, got ${widths[1]} of ${whole}`
+  );
+
+  // Measuring one token unconstrained is the reliable answer, and is what
+  // MarkdownView's table layout uses.
+  assert.equal(new TextLayout(fonts, [span], style, {}).width, whole);
+});
+
+test('MarkdownView: a squeezed column never narrows past its longest word', needsFonts, () => {
+  const fonts = new FontManager();
+  // Every cell is a single unbreakable word, so no column can give up width by
+  // wrapping. The floor used to be a flat 2.5em guess unrelated to the content,
+  // which handed TextLayout a maxWidth narrower than the word itself — and
+  // TextLayout force-breaks a token wider than its container, so a `value`
+  // header rendered as `valu` over `e`. Overflowing is the right answer here,
+  // and it is what a browser does with the same table.
+  //
+  // The assertion is on the *text*, not the line count: a cell can land on a
+  // second line that holds nothing, which is not a broken word. Whatever fails
+  // here has to say what it actually saw, because the only way it fails is a
+  // font whose metrics differ from the one you ran it with.
+  const md = '| column | value |\n| ------ | ----: |\n| alpha | 12 |\n| beta | 345 |';
+  for (const width of [400, 200, 120, 90, 60, 30]) {
+    const view = new MarkdownView(null, { fonts });
+    view.setMarkdown(md);
+    view.layout(width);
+    for (const item of view._items.filter((i) => i.kind === 'text')) {
+      // _text is the layout's full string; line.start/end index into it
+      const full = item.layout._text;
+      const pieces = item.layout.lines
+        .map((l) => full.slice(l.start, l.end).trim())
+        .filter((t) => t !== '');
+      assert.deepEqual(
+        pieces,
+        pieces.length ? [full.trim()] : [],
+        `at width ${width} a cell was split into ${JSON.stringify(pieces)}; ` +
+          `it holds ${JSON.stringify(full)} and was laid out at ` +
+          `maxWidth ${item.layout.options?.maxWidth}`
+      );
+    }
+  }
+});
+
+test('MarkdownView: no table cell is laid out below its widest token', needsFonts, () => {
+  const fonts = new FontManager();
+  // The invariant behind the test above, checked directly instead of through a
+  // symptom that only appears on an unlucky font. A cell handed a maxWidth
+  // below the measured width of a word it holds is a word wider than its
+  // container, and TextLayout force-breaks those.
+  //
+  // It used to be violated by arithmetic alone: the content width was derived
+  // as `cols[c] - hpad * 2` from a `cols[c]` that had just had `hpad * 2`
+  // added, and that round trip is not the identity in floating point. At size
+  // 16, a natural width of 48.953125 comes back as 48.95312499999999 — seven
+  // ULPs low, and enough.
+  const md = '| column | value |\n| ------ | ----: |\n| alpha | 12 |\n| beta | 345 |';
+  for (const size of [12, 13, 16, 19]) {
+    for (const width of [400, 220, 140, 80, 40]) {
+      const view = new MarkdownView(null, { fonts, theme: { size } });
+      view.setMarkdown(md);
+      view.layout(width);
+      for (const item of view._items.filter((i) => i.kind === 'text')) {
+        const maxWidth = item.layout.options?.maxWidth;
+        if (maxWidth === undefined) continue;
+        const text = item.layout._text;
+        for (const token of text.split(/\s+/)) {
+          if (!token) continue;
+          const style = { family: 'sans-serif', size, weight: item.layout.lines[0]?.runs[0]?.span.weight };
+          const tokenWidth = new TextLayout(fonts, [{ ...style, text: token }], style, {}).width;
+          assert.ok(
+            maxWidth >= tokenWidth,
+            `size ${size} width ${width}: "${token}" measures ${tokenWidth} but its ` +
+              `cell was laid out at maxWidth ${maxWidth}`
+          );
+        }
+      }
+    }
+  }
+});
+
 test('MarkdownView: wide table shrinks columns to the container', needsFonts, () => {
   const fonts = new FontManager();
   const view = new MarkdownView(null, { fonts });
