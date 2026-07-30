@@ -23,9 +23,45 @@ const styleOf = (html, selector, sheets = []) => {
 test('cssColor: named, hex, rgba, transparent', () => {
   assert.deepEqual(cssColor('red'), [1, 0, 0, 1]);
   assert.deepEqual(cssColor('#0000ff'), [0, 0, 1, 1]);
-  assert.deepEqual(cssColor('rgba(255, 0, 0, 0.5)'), [1, 0, 0, 0.5]);
+  // premultiplied, because these go to XRender as-is: r, g and b are each
+  // scaled by alpha, so half-alpha red is 0.5 and not 1
+  assert.deepEqual(cssColor('rgba(255, 0, 0, 0.5)'), [0.5, 0, 0, 0.5]);
   assert.deepEqual(cssColor('transparent'), [0, 0, 0, 0]);
   assert.equal(cssColor('bogus-color'), null);
+});
+
+test('cssColor: hex alpha, which parse-color does not understand', () => {
+  // parse-color returns rgba [0, 0, 0, 34, 1] here — five entries, with the
+  // alpha still a 0..255 byte. 34 clamped to 1, so this rendered opaque.
+  const black13 = cssColor('#00000022');
+  assert.equal(black13.length, 4);
+  assert.ok(Math.abs(black13[3] - 0x22 / 255) < 1e-9, `alpha ${black13[3]}`);
+  assert.deepEqual(black13.slice(0, 3), [0, 0, 0]);
+
+  // four-digit form: parse-color reads '#0002' as a truncated six-digit hex
+  assert.deepEqual(cssColor('#0002'), cssColor('#00000022'));
+  assert.deepEqual(cssColor('#f008'), cssColor('#ff000088'));
+
+  // opaque hex alpha still equals the alpha-less form, and stays exact
+  assert.deepEqual(cssColor('#ff0000ff'), [1, 0, 0, 1]);
+  assert.deepEqual(cssColor('#fff'), [1, 1, 1, 1]);
+  assert.deepEqual(cssColor('#00000000'), [0, 0, 0, 0]);
+
+  // premultiplied: white at half alpha is grey, not white
+  const [r, g, b, a] = cssColor('#ffffff80');
+  assert.ok(r <= a && g <= a && b <= a, `not premultiplied: ${[r, g, b, a]}`);
+  assert.ok(Math.abs(r - 0x80 / 255) < 1e-9, `r ${r}`);
+});
+
+test('cssColor: hex forms that are not CSS are rejected, not guessed', () => {
+  // '#' never falls back to parse-color, which turns '#1234567' into
+  // rgba [18, 52, 86, 7, 1] — an alpha of 7
+  for (const bad of ['#12345', '#1234567', '#12', '#', '#gg0000']) {
+    assert.equal(cssColor(bad), null, bad);
+  }
+  for (const bad of ['', null, undefined, 42, [1, 0, 0, 1]]) {
+    assert.equal(cssColor(bad), null, JSON.stringify(bad));
+  }
 });
 
 test('cssLength: units resolve against em base and root size', () => {
