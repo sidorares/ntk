@@ -30,6 +30,41 @@ test('cssColor: named, hex, rgba, transparent', () => {
   assert.equal(cssColor('bogus-color'), null);
 });
 
+test('cssColorStraight: unassociated alpha, and premultiply converts', async () => {
+  const { cssColorStraight, premultiply } = await import('../lib/index.js');
+
+  // straight: the components are not scaled by alpha
+  assert.deepEqual(cssColorStraight('rgba(255, 0, 0, 0.5)'), [1, 0, 0, 0.5]);
+  assert.deepEqual(cssColorStraight('red'), [1, 0, 0, 1]);
+  assert.equal(cssColorStraight('bogus-color'), null);
+
+  // hex alpha is parsed here too, not just in cssColor
+  const [r, g, b, a] = cssColorStraight('#ff000080');
+  assert.deepEqual([r, g, b], [1, 0, 0]);
+  assert.ok(Math.abs(a - 0x80 / 255) < 1e-9, `alpha ${a}`);
+
+  // the pair composes back to cssColor
+  assert.deepEqual(
+    premultiply(cssColorStraight('rgba(255, 0, 0, 0.5)')),
+    cssColor('rgba(255, 0, 0, 0.5)'),
+  );
+
+  // ...and round-trips through an rgba() string, which premultiplied does
+  // not: that is the bug this export exists to prevent, where a colour comes
+  // back half as bright at the same alpha
+  const toCss = (c) =>
+    `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)}, ${c[3]})`;
+  assert.equal(
+    toCss(cssColorStraight('rgba(255, 0, 0, 0.5)')),
+    'rgba(255, 0, 0, 0.5)',
+  );
+  assert.equal(
+    toCss(cssColor('rgba(255, 0, 0, 0.5)')),
+    'rgba(128, 0, 0, 0.5)',
+    'premultiplied values must not be formatted as a CSS colour',
+  );
+});
+
 test('cssColor: hex alpha, which parse-color does not understand', () => {
   // parse-color returns rgba [0, 0, 0, 34, 1] here — five entries, with the
   // alpha still a 0..255 byte. 34 clamped to 1, so this rendered opaque.

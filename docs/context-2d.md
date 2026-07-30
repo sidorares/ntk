@@ -77,6 +77,20 @@ White at half alpha is `[0.5, 0.5, 0.5, 0.5]`, not `[1, 1, 1, 0.5]`.
 premultiplied `[r, g, b, a]` in 0..1, or `null`. Gradient stops go through
 the same path, so `addColorStop(0, 'rgba(255, 0, 0, 0.5)')` is right too.
 
+Two companions for the places premultiplied is the *wrong* form, both
+exported alongside it:
+
+- `cssColorStraight(value)` — the same parse with **straight** alpha.
+  **OpenGL** needs this: `glClearColor` and material colours take
+  unassociated components, and premultiplied ones render translucent
+  colours dark.
+- `premultiply([r, g, b, a])` — converts. Interpolating two colours wants
+  both: lerp in straight space, then scale once at the end, because a round
+  trip back to an `rgba()` string only closes if the components were never
+  scaled. Premultiplying twice is the failure this pair exists to prevent —
+  `rgba(255, 0, 0, 0.5)` becomes `rgba(128, 0, 0, 0.5)`, a colour half as
+  bright at the same alpha.
+
 Set `NTK_STRICT_COLORS=1` to make a component outside 0..1 throw instead of
 being clamped (it wires up x11's `Render.strictColors`); ntk's own test run
 sets it. Note what that does *not* cover: an unpremultiplied `[1, 0, 0, 0.5]`
