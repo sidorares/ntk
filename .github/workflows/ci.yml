@@ -6,6 +6,29 @@ on:
   pull_request:
 
 jobs:
+  # Squash-merge builds the commit from the PR title and description, and a
+  # message release-please cannot parse is skipped silently — green workflow,
+  # no release PR. That has cost two releases, so it is checked here.
+  release-message:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Will release-please be able to read the squash commit?
+        # via env, never inline: the body is untrusted text and must not be
+        # interpolated into a shell command
+        env:
+          MESSAGE: |
+            ${{ github.event.pull_request.title }}
+
+            ${{ github.event.pull_request.body }}
+        run: node scripts/check-release-message.mjs
+
   test:
     runs-on: ubuntu-latest
     strategy:

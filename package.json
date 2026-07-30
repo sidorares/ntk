@@ -55,6 +55,10 @@
     "yoga-layout": "^3.2.1"
   },
   "scripts": {
-    "test": "NTK_STRICT_COLORS=1 node --test"
+    "test": "NTK_STRICT_COLORS=1 node --test",
+    "check-release-message": "node scripts/check-release-message.mjs"
+  },
+  "devDependencies": {
+    "@conventional-commits/parser": "^0.4.1"
   }
 }

@@ -161,8 +161,15 @@ release and publishes to npm via OIDC trusted publishing (no token secrets).
   with a callback in it is enough to break it. A commit it cannot parse is
   **silently skipped**: the workflow goes green, `commits: 0`, and no
   release PR appears (this happened to #85 → the empty re-record commit
-  e523667). Squash-merge puts the PR description in the body, so this
-  applies to PR descriptions too.
+  e523667, and again to #103 → 9fdbe38). Squash-merge puts the PR
+  description in the body, so this applies to PR descriptions too.
+- **CI checks this for you** — the `release-message` job runs
+  `npm run check-release-message` over the title and body the squash would
+  produce, using release-please's own parser, and names the line and column
+  it chokes on. Whether a given nested call trips the grammar depends on its
+  surroundings, so do not try to predict it from the rule above: the same
+  construct that broke #103 parses fine inside a fenced block. Run the
+  script locally against a file if you want to check before pushing.
 
 ## Gotchas
 
