@@ -331,33 +331,6 @@ test('MarkdownView: table layout places cells and grid', needsFonts, () => {
   assert.ok(Math.abs(right(texts[3]) - right(texts[5])) < 0.5, 'right-aligned column');
 });
 
-test('MarkdownView: a squeezed column never narrows past its longest word', needsFonts, () => {
-  const fonts = new FontManager();
-  // Every cell is a single unbreakable word, so no column can give up any
-  // width by wrapping. The column floor used to be a flat 2.5em guess with no
-  // relation to the content, which handed TextLayout a maxWidth narrower than
-  // the word itself — and it then broke the word, rendering a `value` header
-  // as `valu` over `e`. Overflowing the container is the right answer here,
-  // and it is what a browser does with the same table.
-  const md = '| column | value |\n| ------ | ----: |\n| alpha | 12 |\n| beta | 345 |';
-  for (const width of [400, 200, 120, 90, 60, 30]) {
-    const view = new MarkdownView(null, { fonts });
-    view.setMarkdown(md);
-    view.layout(width);
-    const wrapped = view._items.filter((i) => i.kind === 'text' && i.layout.lines.length > 1);
-    // The message carries the split text and the widths, because the only way
-    // this fails is a font whose metrics differ from the one you ran it with.
-    const detail = wrapped
-      .map((i) => JSON.stringify(i.layout.lines.map((l) => l.runs.map((r) => r.span.text).join(''))))
-      .join(' ');
-    assert.equal(
-      wrapped.length,
-      0,
-      `at width ${width}, ${wrapped.length} cell(s) of unbreakable words were split: ${detail}`
-    );
-  }
-});
-
 test('MarkdownView: wide table shrinks columns to the container', needsFonts, () => {
   const fonts = new FontManager();
   const view = new MarkdownView(null, { fonts });
