@@ -177,6 +177,23 @@ release and publishes to npm via OIDC trusted publishing (no token secrets).
   point and **mutates** the glyph objects passed to it (divides by 64, pads
   rows) — `GlyphPage.ensure` builds fresh one-shot objects for each upload
   for this reason.
+- **Never recover a content width by subtracting a padding you added.**
+  `width + pad - pad` is not the identity in floating point: at size 16 a
+  natural width of 48.953125 comes back as 48.95312499999999. A layout handed a
+  `maxWidth` a few ULPs below a token's own measured width sees a token *wider
+  than its container* and force-breaks it, so a `value` header renders as
+  `valu` over `e` — on some fonts and not others, depending on nothing but
+  whether the width survives the round trip. Carry the content width alongside
+  the outer width instead. `MarkdownView._layoutTable` does, with the invariant
+  under test in `test/text.test.js`.
+- **`TextLayout`'s width is not monotonic in `maxWidth`,** so laying a cell out
+  at a tiny `maxWidth` is *not* a min-content probe. `_forceBreak`
+  (`lib/text/layout.js:131`) splits a token wider than the container whenever a
+  single cluster fits and lets it overflow whole when none does, so KaTeX Main
+  at 16px measuring `value` reports 42.1 at `maxWidth` 1–8 and 13.4 at 16 — a
+  fragment. For min-content, measure each whitespace-delimited token
+  unconstrained; an unconstrained token cannot be broken. Pinned by a test, so
+  the probe does not come back as an obvious simplification.
 - `getImageData` returns BGRA byte order.
 - Colors in XRender are premultiplied `[r, g, b, a]` floats 0..1.
 - A `Window` constructed with an existing `{ id }` returns a cached instance
