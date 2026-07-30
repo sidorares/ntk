@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.10.0](https://github.com/sidorares/ntk/compare/v3.9.1...v3.10.0) (2026-07-30)
+
+
+### Features
+
+* re-record the straight-colour exports ([9fdbe38](https://github.com/sidorares/ntk/commit/9fdbe38b95f555a5c6fdd38e1f889d4ef747428e))
+
 ## [3.9.1](https://github.com/sidorares/ntk/compare/v3.9.0...v3.9.1) (2026-07-30)
 
 
