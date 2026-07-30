@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.0.0](https://github.com/sidorares/ntk/compare/v3.10.2...v4.0.0) (2026-07-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* MarkdownView no longer renders fences tagged mermaid as diagrams, and its onInvalidate option is gone. parseMermaid and layoutMermaid are removed.
+
+### Features
+
+* drop mermaid diagram rendering ([#113](https://github.com/sidorares/ntk/issues/113)) ([e478c67](https://github.com/sidorares/ntk/commit/e478c67674e42f93af1bbff210b6f021ab1a0fcb))
+
 ## [3.10.2](https://github.com/sidorares/ntk/compare/v3.10.1...v3.10.2) (2026-07-30)
 
 
