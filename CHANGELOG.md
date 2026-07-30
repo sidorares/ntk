@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.10.1](https://github.com/sidorares/ntk/compare/v3.10.0...v3.10.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* a squeezed markdown table column keeps its longest word whole ([#108](https://github.com/sidorares/ntk/issues/108)) ([21f824a](https://github.com/sidorares/ntk/commit/21f824a2142ca0ed1595ea38c1779eb258075abb))
+
+
+### Performance Improvements
+
+* intersect a rectangular clip without a full-surface mask ([#107](https://github.com/sidorares/ntk/issues/107)) ([d2bfb6d](https://github.com/sidorares/ntk/commit/d2bfb6d912eaa733fb1ef89c357444ad3fe94802))
+
 ## [3.10.0](https://github.com/sidorares/ntk/compare/v3.9.1...v3.10.0) (2026-07-30)
 
 
