@@ -331,6 +331,35 @@ test('MarkdownView: table layout places cells and grid', needsFonts, () => {
   assert.ok(Math.abs(right(texts[3]) - right(texts[5])) < 0.5, 'right-aligned column');
 });
 
+test('TextLayout: a narrow maxWidth is not a min-content probe', needsFonts, () => {
+  const fonts = new FontManager();
+  const style = { family: 'sans-serif', size: 16 };
+  const span = { text: 'value', ...style };
+  const whole = new TextLayout(fonts, [span], style, {}).width;
+
+  // Laying a single token out at a tiny maxWidth looks like a way to measure
+  // min-content, and is not one. `_forceBreak` splits a token wider than the
+  // container whenever a single cluster fits, so the reported width is a
+  // *fragment* — and whether a cluster fits at a given maxWidth depends on the
+  // font, which is how a table column floor built on this probe came out below
+  // the word it existed to protect on one machine and not another.
+  //
+  // The width is therefore not monotonic in maxWidth. This pins that, so the
+  // probe does not come back as an obvious simplification.
+  const widths = [1, 16].map(
+    (maxWidth) => new TextLayout(fonts, [span], style, { maxWidth }).width
+  );
+  assert.equal(widths[0], whole, 'at maxWidth 1 no cluster fits, so it overflows whole');
+  assert.ok(
+    widths[1] < whole,
+    `at maxWidth 16 the token force-breaks and reports a fragment, got ${widths[1]} of ${whole}`
+  );
+
+  // Measuring one token unconstrained is the reliable answer, and is what
+  // MarkdownView's table layout uses.
+  assert.equal(new TextLayout(fonts, [span], style, {}).width, whole);
+});
+
 test('MarkdownView: a squeezed column never narrows past its longest word', needsFonts, () => {
   const fonts = new FontManager();
   // Every cell is a single unbreakable word, so no column can give up width by
