@@ -306,9 +306,8 @@ files, browsers, history) are the embedder's job —
 browser built this way.
 
 Headless/embedded use: `new MarkdownView(null, { fonts })`, then
-`view.layout(width)` → content height, `view.draw(ctx, x, y)`. Pass
-`onInvalidate` to re-layout/redraw when async content (a mermaid model)
-arrives — without it a `\`\`\`mermaid` fence stays a plain code block.
+`view.layout(width)` → content height, `view.draw(ctx, x, y)`. Layout is
+synchronous throughout, so one pass is enough — nothing arrives later.
 
 `TextLayout` note for widget authors: spans keep unknown fields through
 layout normalization, and line runs expose their span (`run.span`), so
