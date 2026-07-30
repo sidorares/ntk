@@ -331,6 +331,41 @@ test('MarkdownView: table layout places cells and grid', needsFonts, () => {
   assert.ok(Math.abs(right(texts[3]) - right(texts[5])) < 0.5, 'right-aligned column');
 });
 
+test('MarkdownView: a squeezed column never narrows past its longest word', needsFonts, () => {
+  const fonts = new FontManager();
+  // Every cell is a single unbreakable word, so no column can give up width by
+  // wrapping. The floor used to be a flat 2.5em guess unrelated to the content,
+  // which handed TextLayout a maxWidth narrower than the word itself — and
+  // TextLayout force-breaks a token wider than its container, so a `value`
+  // header rendered as `valu` over `e`. Overflowing is the right answer here,
+  // and it is what a browser does with the same table.
+  //
+  // The assertion is on the *text*, not the line count: a cell can land on a
+  // second line that holds nothing, which is not a broken word. Whatever fails
+  // here has to say what it actually saw, because the only way it fails is a
+  // font whose metrics differ from the one you ran it with.
+  const md = '| column | value |\n| ------ | ----: |\n| alpha | 12 |\n| beta | 345 |';
+  for (const width of [400, 200, 120, 90, 60, 30]) {
+    const view = new MarkdownView(null, { fonts });
+    view.setMarkdown(md);
+    view.layout(width);
+    for (const item of view._items.filter((i) => i.kind === 'text')) {
+      // _text is the layout's full string; line.start/end index into it
+      const full = item.layout._text;
+      const pieces = item.layout.lines
+        .map((l) => full.slice(l.start, l.end).trim())
+        .filter((t) => t !== '');
+      assert.deepEqual(
+        pieces,
+        pieces.length ? [full.trim()] : [],
+        `at width ${width} a cell was split into ${JSON.stringify(pieces)}; ` +
+          `it holds ${JSON.stringify(full)} and was laid out at ` +
+          `maxWidth ${item.layout.options?.maxWidth}`
+      );
+    }
+  }
+});
+
 test('MarkdownView: wide table shrinks columns to the container', needsFonts, () => {
   const fonts = new FontManager();
   const view = new MarkdownView(null, { fonts });
