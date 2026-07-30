@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.1](https://github.com/sidorares/ntk/compare/v3.9.0...v3.9.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* hex alpha, and premultiply the colours XRender is given ([#100](https://github.com/sidorares/ntk/issues/100)) ([f800a2f](https://github.com/sidorares/ntk/commit/f800a2f15e0022e5abac40dccbc3dc34dd466771))
+
 ## [3.9.0](https://github.com/sidorares/ntk/compare/v3.8.0...v3.9.0) (2026-07-29)
 
 
