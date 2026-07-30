@@ -41,10 +41,15 @@ The yoga-layout instance ntk uses is re-exported as `Yoga`
 react-x11 renderer — share the same WASM module and enum values instead of
 loading a second, possibly version-mismatched copy.
 
-The two value parsers the CSS layer is built on are exported for the same
-reason: `cssColor(value)` → **premultiplied** `[r, g, b, a]` floats 0..1
-(what XRender and GL both want — see
-[context-2d.md](context-2d.md#color)) or `null`, and
+The value parsers the CSS layer is built on are exported for the same
+reason: `cssColor(value)` → **premultiplied** `[r, g, b, a]` floats 0..1,
+which is what XRender wants (see [context-2d.md](context-2d.md#color)), or
+`null`; `cssColorStraight(value)` → the same colour with **straight**
+alpha, for the callers that need unassociated components — **OpenGL** is
+one (`glClearColor` and material colours take straight alpha, and
+premultiplied values render translucent colours dark), and interpolating
+two colours is another; `premultiply([r, g, b, a])` converts, so a lerp can
+happen in straight space and be scaled once at the end. And
 `cssLength(value, emBase, rootSize)` → `{ px }`, `{ pct }`, `'auto'` or
 `null`.
 
