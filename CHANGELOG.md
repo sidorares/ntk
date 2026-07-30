@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.2](https://github.com/sidorares/ntk/compare/v3.10.1...v3.10.2) (2026-07-30)
+
+
+### Performance Improvements
+
+* copy a region, not the box around it ([#112](https://github.com/sidorares/ntk/issues/112)) ([1dd38b2](https://github.com/sidorares/ntk/commit/1dd38b2f18d9581e2f3b225a5ae4b0b93e8e6263))
+* copy only the region a frame changed, not the whole window ([#110](https://github.com/sidorares/ntk/issues/110)) ([79cd32d](https://github.com/sidorares/ntk/commit/79cd32dbe5c4fedc2d20dff8a63c7e1476057013))
+
 ## [3.10.1](https://github.com/sidorares/ntk/compare/v3.10.0...v3.10.1) (2026-07-30)
 
 
