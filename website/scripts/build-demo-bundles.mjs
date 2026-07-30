@@ -11,9 +11,8 @@
 //
 // Heavy optional ntk dependencies that no playground demo needs are aliased
 // to inert stubs (scripts/stubs/*) so the bundle stays reasonable:
-// yoga-layout (HtmlView), mermaid + dompurify + @dagrejs/dagre (diagram
-// fences), pngjs (browserify polyfill forest). katex is already lazy-loaded
-// by ntk and never bundled.
+// yoga-layout (HtmlView), pngjs (browserify polyfill forest). katex is
+// already lazy-loaded by ntk and never bundled.
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -97,9 +96,6 @@ await esbuild.build({
     keysym: path.join(shimsDir, 'keysym.js'),
     // heavy optional deps no playground demo needs
     'yoga-layout': path.join(stubsDir, 'yoga-layout.js'),
-    mermaid: path.join(stubsDir, 'mermaid.js'),
-    dompurify: path.join(stubsDir, 'dompurify.js'),
-    '@dagrejs/dagre': path.join(stubsDir, 'dagre.js'),
     pngjs: path.join(stubsDir, 'pngjs.js'),
   },
 });

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
 import { createClient, HtmlView, MarkdownView, Path2D, SvgView } from '../lib/index.js';
-import { invalidation, until, withTimeout } from './helpers/async.js';
+import { invalidation, withTimeout } from './helpers/async.js';
 
 let app = null;
 let skip = false;
@@ -258,27 +258,27 @@ test('HtmlView: inline <svg> and svg <img> render as vectors', async (t) => {
   pixmap.destroy();
 });
 
-test('MarkdownView: mermaid fence renders diagram pixels', async (t) => {
+test('MarkdownView: block decoration reaches an arbitrary 2d context', async (t) => {
   if (skip) return t.skip(skip);
   const pixmap = app.createPixmap({ width: 300, height: 200, depth: 24 });
   const ctx = pixmap.getContext('2d');
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, 300, 200);
 
-  const view = new MarkdownView(null, { fonts: app.fonts });
-  view.setMarkdown('```mermaid\nflowchart LR\n A[Hello] --> B[World]\n```');
-  view.layout(280);
-  await until(() => [...view._mermaid.values()][0]?.model, 'mermaid parse');
+  // a vivid fence background, so the readback tells drawn pixels from the
+  // cleared surface without depending on what the default theme happens to be
+  const view = new MarkdownView(null, { fonts: app.fonts, theme: { codeBg: '#00ff00' } });
+  view.setMarkdown('# Title\n\n```js\nconst a = 1;\n```');
   view.layout(280);
   view.draw(ctx, 10, 10);
 
   const image = await readPixels(ctx, 300, 200);
-  // scan for the node fill color #ececff (BGRA readback)
+  // scan for the fence background #00ff00 (BGRA readback)
   let filled = 0;
   for (let i = 0; i < image.data.length; i += 4) {
-    if (image.data[i + 2] === 0xec && image.data[i + 1] === 0xec && image.data[i] === 0xff) filled++;
+    if (image.data[i + 2] === 0x00 && image.data[i + 1] === 0xff && image.data[i] === 0x00) filled++;
   }
-  assert.ok(filled > 200, `node fill pixels present (${filled})`);
+  assert.ok(filled > 200, `fence background pixels present (${filled})`);
   pixmap.destroy();
 });
 
