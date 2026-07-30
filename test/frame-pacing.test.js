@@ -14,7 +14,7 @@ import Window from '../lib/window.js';
 let nextId = 0xa000;
 
 function makeMockApp() {
-  const calls = { CopyArea: 0 };
+  const calls = { CopyArea: 0, copies: [] };
   const fences = []; // pending GetInputFocus callbacks, released by tests
   const X = {
     _closing: false,
@@ -32,8 +32,9 @@ function makeMockApp() {
     CreatePixmap() {},
     FreePixmap() {},
     PolyFillRectangle() {},
-    CopyArea() {
+    CopyArea(src, dst, gc, sx, sy, dx, dy, width, height) {
       calls.CopyArea++;
+      calls.copies.push({ x: dx, y: dy, w: width, h: height });
     },
     GetInputFocus(cb) {
       fences.push(cb);
@@ -243,4 +244,90 @@ test('interactive resize drives one paced draw per frame', async () => {
   assert.equal(draws, 2, 'one catch-up redraw at the final size');
   assert.equal(wnd.width, 180);
   wnd.destroy();
+});
+
+
+// --- how much of the backing store a present copies ---------------------
+//
+// A blit used to be the whole window however little had changed, so a repaint
+// of two tab headers copied a megapixel to move 4k of it. A drawing operation
+// reports the region it could have touched — its clip rectangle — and the
+// present copies the union of those instead.
+
+function backedWindow() {
+  const { app, fences, calls } = makeMockApp();
+  const wnd = new Window(app, { width: 200, height: 100 });
+  wnd.width = 200;
+  wnd.height = 100;
+  // the backing store is normally allocated by getContext('2d'); there is no
+  // real context here, so stand one in and drive _markDirty directly
+  wnd._backing = { id: 0xb000, width: 200, height: 100 };
+  wnd._presentGc = 0xc000;
+  return { wnd, fences, calls };
+}
+
+test('a present copies only the region the drawing reported', async () => {
+  const { wnd, calls } = backedWindow();
+  wnd._markDirty({ x: 10, y: 20, w: 30, h: 12 });
+  await tick();
+  assert.equal(calls.CopyArea, 1);
+  assert.deepEqual(calls.copies[0], { x: 10, y: 20, w: 30, h: 12 });
+});
+
+test('reported regions union, and the union is what gets copied', async () => {
+  const { wnd, calls } = backedWindow();
+  wnd._markDirty({ x: 10, y: 10, w: 10, h: 10 });
+  wnd._markDirty({ x: 50, y: 40, w: 20, h: 20 });
+  await tick();
+  assert.equal(calls.CopyArea, 1, 'still one blit');
+  assert.deepEqual(
+    calls.copies[0],
+    { x: 10, y: 10, w: 60, h: 50 },
+    'the bounding box of both'
+  );
+});
+
+test('drawing that reports no region copies the whole window', async () => {
+  const { wnd, calls } = backedWindow();
+  // an unclipped context cannot say where it drew
+  wnd._markDirty(undefined);
+  await tick();
+  assert.deepEqual(calls.copies[0], { x: 0, y: 0, w: 200, h: 100 });
+});
+
+test('one unreported operation gives up the bound for the whole frame', async () => {
+  const { wnd, calls } = backedWindow();
+  // This is the direction that has to be safe: a small clipped draw followed
+  // by an unclipped one must not blit only the small rect, or the unclipped
+  // drawing never reaches the screen. "Unbounded" absorbs.
+  wnd._markDirty({ x: 10, y: 10, w: 10, h: 10 });
+  wnd._markDirty(undefined);
+  wnd._markDirty({ x: 20, y: 20, w: 10, h: 10 });
+  await tick();
+  assert.deepEqual(calls.copies[0], { x: 0, y: 0, w: 200, h: 100 });
+});
+
+test('the region does not leak into the next frame', async () => {
+  const { wnd, fences, calls } = backedWindow();
+  wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
+  await tick();
+  assert.deepEqual(calls.copies[0], { x: 0, y: 0, w: 10, h: 10 });
+  // release the fence the first present armed, so the second is not deferred
+  while (fences.length) fences.shift()();
+  wnd._markDirty({ x: 100, y: 50, w: 10, h: 10 });
+  await tick();
+  assert.equal(calls.CopyArea, 2);
+  assert.deepEqual(
+    calls.copies[1],
+    { x: 100, y: 50, w: 10, h: 10 },
+    'the second frame copies its own region, not the union with the first'
+  );
+});
+
+test('a reported region is clamped to the window', async () => {
+  const { wnd, calls } = backedWindow();
+  // a clip can extend past the surface; CopyArea sizes are unsigned
+  wnd._markDirty({ x: -20, y: -5, w: 400, h: 300 });
+  await tick();
+  assert.deepEqual(calls.copies[0], { x: 0, y: 0, w: 200, h: 100 });
 });
