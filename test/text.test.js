@@ -395,6 +395,43 @@ test('MarkdownView: a squeezed column never narrows past its longest word', need
   }
 });
 
+test('MarkdownView: no table cell is laid out below its widest token', needsFonts, () => {
+  const fonts = new FontManager();
+  // The invariant behind the test above, checked directly instead of through a
+  // symptom that only appears on an unlucky font. A cell handed a maxWidth
+  // below the measured width of a word it holds is a word wider than its
+  // container, and TextLayout force-breaks those.
+  //
+  // It used to be violated by arithmetic alone: the content width was derived
+  // as `cols[c] - hpad * 2` from a `cols[c]` that had just had `hpad * 2`
+  // added, and that round trip is not the identity in floating point. At size
+  // 16, a natural width of 48.953125 comes back as 48.95312499999999 — seven
+  // ULPs low, and enough.
+  const md = '| column | value |\n| ------ | ----: |\n| alpha | 12 |\n| beta | 345 |';
+  for (const size of [12, 13, 16, 19]) {
+    for (const width of [400, 220, 140, 80, 40]) {
+      const view = new MarkdownView(null, { fonts, theme: { size } });
+      view.setMarkdown(md);
+      view.layout(width);
+      for (const item of view._items.filter((i) => i.kind === 'text')) {
+        const maxWidth = item.layout.options?.maxWidth;
+        if (maxWidth === undefined) continue;
+        const text = item.layout._text;
+        for (const token of text.split(/\s+/)) {
+          if (!token) continue;
+          const style = { family: 'sans-serif', size, weight: item.layout.lines[0]?.runs[0]?.span.weight };
+          const tokenWidth = new TextLayout(fonts, [{ ...style, text: token }], style, {}).width;
+          assert.ok(
+            maxWidth >= tokenWidth,
+            `size ${size} width ${width}: "${token}" measures ${tokenWidth} but its ` +
+              `cell was laid out at maxWidth ${maxWidth}`
+          );
+        }
+      }
+    }
+  }
+});
+
 test('MarkdownView: wide table shrinks columns to the container', needsFonts, () => {
   const fonts = new FontManager();
   const view = new MarkdownView(null, { fonts });
