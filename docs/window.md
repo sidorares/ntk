@@ -194,6 +194,9 @@ All return `this` unless noted.
   `setTransientFor(owner)`, `setClass(instance, class)`,
   `setWindowType(type)`, `setAlwaysOnTop(on)`, `setPid(pid, hostname)` — see
   [Window manager hints](#window-manager-hints) below
+- `setWmState(names, action)` / `addWmState(names)` /
+  `removeWmState(names)` / `getWmStates()` — EWMH `_NET_WM_STATE`:
+  fullscreen, maximized, skip-taskbar and the rest. Promises
 - `addProtocol(name)` / `removeProtocol(name)` / `setProtocols(names)` /
   `getProtocols()` — WM_PROTOCOLS, returning promises; `setActions()` is the
   older spelling of `addProtocol('WM_DELETE_WINDOW')`
@@ -394,10 +397,49 @@ This is the window-manager-cooperative alternative to override-redirect: a
 menu marked `dropdown_menu` still gets shadows and correct stacking, while
 an override-redirect window bypasses the window manager entirely.
 
+### Window states — `setWmState(names, action)`
+
+Writes EWMH `_NET_WM_STATE`: fullscreen, maximized, sticky, shaded, modal,
+skip-taskbar, skip-pager, demands-attention, above, below.
+
+```js
+await wnd.setWmState('fullscreen');           // 'add' is the default
+await wnd.setWmState('maximized');            // both axes in one message
+await wnd.setWmState(['skip_taskbar', 'skip_pager'], 'add');
+await wnd.setWmState('fullscreen', 'toggle');
+await wnd.removeWmState('above');
+
+await wnd.getWmStates();   // ['fullscreen', 'focused'] — what the WM did
+wnd.on('statechange', (states) => { ... });
+```
+
+Names are the EWMH atoms without their `_NET_WM_STATE_` prefix, in lower
+case; full atom names work too. `'maximized'` expands to the
+`MAXIMIZED_VERT` + `MAXIMIZED_HORZ` pair, which is what the message's two
+state slots are for. More than two at once throws rather than being
+truncated — send several messages.
+
+**Mapped and unmapped windows change state differently, and the two are not
+interchangeable** (EWMH 7.7). A mapped window *asks* the window manager with
+a ClientMessage to the root; an unmapped one *declares* its initial state by
+writing the property, which is how you open a window fullscreen. ntk asks
+the server which the window is rather than trusting the last `map`/`unmap`
+event, so this is right even on the line after `map()`.
+
+The promise resolves to whether the window manager advertises every state
+asked for in `_NET_SUPPORTED`. The request is made either way — an unmapped
+window may legitimately declare a state before any window manager is
+running — so `false` means "nothing is listening", not "nothing happened".
+
+`getWmStates()` is what the window manager actually put on the window, so it
+is the answer to *am I fullscreen*, where `setWmState` is only the request.
+`statechange` fires when that property changes: the user hitting a maximize
+button or a fullscreen hotkey changes the state behind the application's
+back, and an app mirroring it in its own UI goes stale without this.
+
 ### Always on top — `setAlwaysOnTop(on)` / `alwaysOnTop`
 
-Prefers the EWMH `_NET_WM_STATE_ABOVE` state, sent as a ClientMessage to
-the root window as the spec requires for mapped windows.
+A wrapper for `setWmState('above')`, kept because it carries a fallback.
 
 quartz-wm (XQuartz) does not advertise `_NET_WM_STATE_ABOVE`, so on macOS
 this falls back to the Apple-WM extension's window levels, which are the
@@ -405,7 +447,9 @@ only always-on-top mechanism there. The fallback addresses the frame the
 window manager created rather than our own window id — Apple-WM answers
 `BadWindow` for a reparented client.
 
-Where neither is available the call is a no-op.
+The EWMH request is made either way, so where neither mechanism exists the
+window is left declaring a state nothing acts on — harmless, and what a
+window manager starting later would read.
 
 ## Being the window manager
 
@@ -623,6 +667,7 @@ constructor arg) automatically extends the window's X event mask.
 | `map` / `unmap` | Map/UnmapNotify | |
 | `destroy` | DestroyNotify | wrapper is removed from the cache |
 | `map_request`, `configure_request` | SubstructureRedirect | for window managers |
+| `statechange` | PropertyNotify | derived, not an X event: the window manager changed `_NET_WM_STATE`. The handler gets the state names, not an event object — see [Window states](#window-states--setwmstatenames-action) |
 | `property`, `reparent`, `message`, `selection*` | | |
 
 Every event object gets `ev.window` and `ev.target` set to the `Window`.

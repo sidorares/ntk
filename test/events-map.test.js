@@ -10,11 +10,20 @@ test('every camelCase handler name maps to a snake event with a mask entry', () 
   }
 });
 
-test('every maskable event name is emitted by some X event type', () => {
+// names in the mask table that are not X event types. `statechange` is
+// derived from the PropertyNotify for _NET_WM_STATE and is in the table
+// because a listener for it still has to select PropertyChange.
+const DERIVED = new Set(['statechange']);
+
+test('every maskable event name is emitted by some X event type, or derived from one', () => {
   const emitted = new Set(eventName.filter(Boolean));
   for (const name of Object.keys(mask)) {
-    if (name === 'selection_clear') continue;
+    if (name === 'selection_clear' || DERIVED.has(name)) continue;
     assert.ok(emitted.has(name), `${name} never emitted`);
+  }
+  for (const name of DERIVED) {
+    assert.ok(mask[name], `${name} is derived but selects no mask`);
+    assert.ok(!emitted.has(name), `${name} is an X event after all — drop it from DERIVED`);
   }
 });
 
