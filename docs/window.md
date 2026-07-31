@@ -459,7 +459,7 @@ constructor arg) automatically extends the window's X event mask.
 | `mousedown` / `mouseup` | ButtonPress/Release | `ev.x`, `ev.y`, `ev.keycode` (button) |
 | `mousemove` | MotionNotify | coalesced per frame; full trail in `ev.coalesced` |
 | `mouseover` / `mouseout` | Enter/LeaveNotify | |
-| `keydown` / `keyup` | KeyPress/Release | `keydown` carries `ev.codepoint` (unicode) |
+| `keydown` / `keyup` | KeyPress/Release | `keydown` carries `ev.codepoint` (unicode) — see [Keyboard input](#keyboard-input) |
 | `focus` / `blur` | FocusIn/FocusOut | keyboard focus arrived at or left this window — usually because the window manager moved it. `ev.detail`/`ev.mode` carry the X notify detail and mode |
 | `expose` | Expose | `ev.x/y/width/height` of the damaged area, coalesced per frame (bounding box; rect list in `ev.rects`); on double-buffered windows only emitted when a real repaint is needed (see above) |
 | `draw` | — | synthetic repaint request on double-buffered windows (same payload as the accompanying `expose`) |
@@ -470,3 +470,35 @@ constructor arg) automatically extends the window's X event mask.
 | `property`, `reparent`, `message`, `selection*` | | |
 
 Every event object gets `ev.window` and `ev.target` set to the `Window`.
+
+## Keyboard input
+
+`keydown` carries the raw X `ev.keycode` plus `ev.codepoint`, the Unicode
+codepoint the key types, resolved against the keyboard mapping ntk fetches at
+connect and refreshes on `MappingNotify`.
+
+**`codepoint` is absent when the key types nothing** — arrows, function keys,
+modifiers, `Pause`, and dead keys (ntk has no compose support yet, and emitting
+a bare combining accent would attach it to the previous character). Test for
+presence rather than comparing against `0`:
+
+```js
+wnd.on('keydown', (ev) => {
+  if (ev.codepoint === 8) text = text.slice(0, -1); // BackSpace
+  else if (ev.codepoint) text += String.fromCodePoint(ev.codepoint);
+});
+```
+
+Keys that do produce a character include the ones whose codepoint is a control
+character: `BackSpace` (8), `Tab` (9), `Return` (13), `Escape` (27) and
+`Delete` (127) — filter those out if you are appending to a text buffer. The
+keypad produces the character on the key (`KP_5` → `'5'`, `KP_Enter` → 13).
+
+Both legacy keysyms and the direct-Unicode form modern non-Latin layouts emit
+(`0x01000000 | codepoint`) resolve, from a table built into ntk — nothing on the
+keypress path reads the filesystem, so this works the same in an esbuild bundle,
+a single-executable build and the browser.
+
+> Selecting the keysym still ignores the active XKB group, so a second
+> (non-Latin) layout does not take effect and `AltGr` levels are unreachable.
+> Tracked in [#116](https://github.com/sidorares/ntk/issues/116).
