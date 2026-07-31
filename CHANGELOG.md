@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/sidorares/ntk/compare/v4.1.0...v4.2.0) (2026-07-31)
+
+
+### Features
+
+* setCursor('none'), a genuinely blank cursor ([#136](https://github.com/sidorares/ntk/issues/136)) ([6e69a1b](https://github.com/sidorares/ntk/commit/6e69a1bc10e925941b7cf98ea093e5a700346fbd))
+
 ## [4.1.0](https://github.com/sidorares/ntk/compare/v4.0.0...v4.1.0) (2026-07-31)
 
 
