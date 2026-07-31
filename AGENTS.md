@@ -84,6 +84,48 @@ Rendering contexts self-register on import:
 `Drawable.renderingContextFactory[name]` — `lib/index.js` imports them for
 their side effects.
 
+## ICCCM and EWMH live here, not in node-x11
+
+node-x11 owns the wire protocol; ntk owns the conventions layered on top of
+it. Concretely, **everything about window-manager properties is ours**: the
+`WM_SIZE_HINTS` and `WM_HINTS` struct packing (flags word included),
+`WM_PROTOCOLS` membership, `WM_TRANSIENT_FOR`, `_NET_WM_*`, `_NET_SUPPORTED`
+probing, `_MOTIF_WM_HINTS`, and the ICCCM selection/INCR machinery already in
+`lib/clipboard.js`.
+
+Do not file these upstream — node-x11 has declined them three times
+([#177](https://github.com/sidorares/node-x11/issues/177) "part of xlib but
+not core protocol", [#191](https://github.com/sidorares/node-x11/issues/191),
+[#87](https://github.com/sidorares/node-x11/issues/87)) and its AGENTS.md now
+records the boundary. The rule of thumb: if a wrong byte is something the X
+server would reject, it is node-x11's; if only a *window manager* could
+notice, it is ours.
+
+What that means in practice:
+
+- **Use node-x11's `X.SendClientMessage(destination, wid, type, format, data
+  [, eventMask][, cb])` and `x11.packEvent(ev)`** (x11 >= 3.4) instead of
+  hand-packing 32-byte buffers. Four such buffers exist in `lib/` today
+  (`window.js` ×3, `clipboard.js`); they should go. Note the event-mask
+  default is `SubstructureRedirect|SubstructureNotify`, right for root-window
+  EWMH messages — messages aimed at another client's own window (WM_PROTOCOLS,
+  XEmbed, XDND, SelectionNotify) must pass an explicit `0`.
+- **A property writer must set its flag bit.** The failure mode of these
+  structs is silence: `WM_NORMAL_HINTS` with `flags = 0` is a legal property
+  meaning "I declared nothing", and nothing anywhere errors. Never write a
+  field without its flag, and never fabricate a companion field the caller did
+  not supply (`minWidth` alone must not imply `minHeight: 0`).
+- **Atom-list properties are read-modify-write.** `WM_PROTOCOLS` and
+  `_NET_WM_STATE` accumulate; a `ChangeProperty(Replace)` with one atom
+  silently drops whatever else was there.
+- **Mapped windows ask, unmapped windows write.** EWMH 7.7: change
+  `_NET_WM_STATE` on a mapped window with a ClientMessage to the root, and on
+  an unmapped one by writing the property directly.
+- **Endianness:** `lib/` currently hardcodes `readUInt32LE` / `Uint32Array`
+  for property payloads. That is correct only because node-x11 negotiates the
+  host byte order and we run little-endian. If node-x11 grows a byte-order
+  export, use it.
+
 ## Hard constraints
 
 - **Dependencies:** use external dependencies if they are maintained, easy
