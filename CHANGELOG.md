@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.1.0](https://github.com/sidorares/ntk/compare/v4.0.0...v4.1.0) (2026-07-31)
+
+
+### Features
+
+* _NET_WM_STATE beyond always-on-top, and both ways of changing it ([#132](https://github.com/sidorares/ntk/issues/132)) ([7016021](https://github.com/sidorares/ntk/commit/70160215f0a0ff284d979cdb8ddbca4ef391f92f))
+* round out the ICCCM writers, and stop WM_PROTOCOLS clobbering itself ([#131](https://github.com/sidorares/ntk/issues/131)) ([cca73c3](https://github.com/sidorares/ntk/commit/cca73c3da2d3bb980db81b9f4f88c6db9b93e57c))
+
+
+### Bug Fixes
+
+* build outgoing events from objects, and reject a big-endian connection ([#130](https://github.com/sidorares/ntk/issues/130)) ([cd34931](https://github.com/sidorares/ntk/commit/cd349318c262323059e614817f2227e31cc680ef))
+* follow the active keyboard layout, and stop CapsLock shifting digits ([#133](https://github.com/sidorares/ntk/issues/133)) ([7621477](https://github.com/sidorares/ntk/commit/7621477f5f0e2db43dc08d3096f18b423a76b3ce))
+* implement deleteProperty, which the docs already promised ([#134](https://github.com/sidorares/ntk/issues/134)) ([8bf4ea4](https://github.com/sidorares/ntk/commit/8bf4ea4407db79b8a4a04aab8f863110e21b8d03))
+* inline the keysym-to-unicode table, drop the keysym dependency ([#127](https://github.com/sidorares/ntk/issues/127)) ([97d9409](https://github.com/sidorares/ntk/commit/97d940994a5cd590bd437a55ad74652fa1840243))
+
 ## [4.0.0](https://github.com/sidorares/ntk/compare/v3.10.2...v4.0.0) (2026-07-30)
 
 
