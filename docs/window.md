@@ -171,7 +171,8 @@ All return `this` unless noted.
 - `createWindow(params)` — child window (`parent` preset to this window)
 - `createPixmap(params)` — pixmap defaulting to this window's size, depth 32
 - `setCursor(nameOrShapeId)` — mouse cursor shown over the window (see
-  [Cursor](#cursor) below); `setCursor(null)` restores the parent's cursor
+  [Cursor](#cursor) below); `setCursor('none')` hides the pointer, while
+  `setCursor(null)` restores the parent's cursor — not the same thing
 - `focus(revertTo = 2)` — take the keyboard focus (X `SetInputFocus`);
   `revertTo` is 0 None / 1 PointerRoot / 2 Parent. A window manager may take
   focus back, so the authority is the `focus`/`blur` events, not the request
@@ -617,6 +618,7 @@ the window:
 ```js
 input.setCursor('text'); // I-beam over a text input
 button.setCursor('pointer'); // hand over a button or link
+kiosk.setCursor('none'); // pointer invisible over this window
 wnd.setCursor(null); // back to inheriting the parent's cursor
 ```
 
@@ -625,6 +627,17 @@ resolve to cursorfont.h glyph indices; a raw glyph index (any `XC_*`
 constant) is accepted too. Unknown names throw synchronously, listing the
 valid names. Created cursors are server-side resources, cached per
 connection on `app.cursors` and freed on `app.close()`.
+
+**`'none'` and `null` are not the same thing**, and the difference is the
+one people get wrong. `setCursor('none')` hides the pointer.
+`setCursor(null)` sets X cursor `None`, which means *inherit the parent's
+cursor* — for a top-level window that is the root window's, so the pointer
+stays on screen and merely stops being whatever this window asked for.
+
+`'none'` is the only name that is not a glyph: the cursor font has no glyph
+meaning "no cursor", so it is built from a 1×1 bitmap used as both source
+and mask. Mask bits that are 0 are not drawn, so an empty mask draws
+nothing. It is created once per connection and freed with the rest.
 
 | name | cursor font glyph |
 |---|---|
@@ -641,6 +654,7 @@ connection on `app.cursors` and freed on `app.close()`.
 | `grab` | `XC_hand1` (58) |
 | `help` | `XC_question_arrow` (92) |
 | `not-allowed` | `XC_X_cursor` (0) |
+| `none` | *no glyph* — an empty 1×1 mask, see above |
 
 `createWindow({ cursor })` still accepts a raw X cursor id at creation time;
 `app.cursors.get(name)` supplies one if you need it there:
