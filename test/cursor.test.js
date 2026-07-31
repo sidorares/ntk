@@ -86,11 +86,59 @@ test('setCursor(null) restores the parent cursor (None)', async () => {
   wnd.destroy();
 });
 
+// 'none' is the pointer being invisible; setCursor(null) is X cursor None,
+// which *inherits* the parent's cursor and leaves the pointer on screen.
+// The two get conflated because CSS spells the first one `cursor: none`.
+
+test("setCursor('none') hides the pointer with an empty-mask cursor", async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  wnd.setCursor('none');
+  const cid = app.cursors.get('none');
+  await roundtrip(app);
+
+  assert.equal(server.resources.get(wnd.id).cursor, cid, 'set on the window');
+  const cursor = server.resources.get(cid);
+  assert.equal(cursor.type, 'cursor');
+  assert.equal(cursor.sourceFont, undefined, 'not a cursor-font glyph cursor');
+  assert.equal(cursor.source, cursor.mask, 'one empty bitmap serves as both');
+  assert.deepEqual(cursor.fore, [0, 0, 0]);
+  assert.deepEqual(cursor.back, [0, 0, 0]);
+  wnd.destroy();
+});
+
+test("the bitmap behind 'none' is freed, not held for the connection", async () => {
+  const cid = app.cursors.get('none');
+  await roundtrip(app);
+  const { source } = server.resources.get(cid);
+  assert.equal(
+    server.resources.get(source),
+    undefined,
+    'the cursor keeps its own copy, so the pixmap goes straight back'
+  );
+});
+
+test("'none' is cached like any other cursor", async () => {
+  assert.equal(app.cursors.get('none'), app.cursors.get('none'), 'built once');
+  assert.notEqual(app.cursors.get('none'), app.cursors.get('default'));
+  await roundtrip(app);
+});
+
+test("setCursor(null) after 'none' brings the pointer back", async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  wnd.setCursor('none');
+  await roundtrip(app);
+  assert.notEqual(server.resources.get(wnd.id).cursor, 0, 'hidden');
+  wnd.setCursor(null);
+  await roundtrip(app);
+  assert.equal(server.resources.get(wnd.id).cursor, 0, 'inheriting again');
+  wnd.destroy();
+});
+
 test('unknown cursor names throw synchronously and list the valid names', () => {
   const wnd = app.createWindow({ width: 40, height: 30 });
   assert.throws(() => wnd.setCursor('sideways'), (err) => {
     assert.match(err.message, /unknown cursor name 'sideways'/);
-    for (const name of Object.keys(cursorShapes)) {
+    for (const name of [...Object.keys(cursorShapes), 'none']) {
       assert.ok(err.message.includes(name), `error lists '${name}'`);
     }
     return true;
@@ -101,6 +149,7 @@ test('unknown cursor names throw synchronously and list the valid names', () => 
 test('app.close() frees the cached cursors and the cursor font', async () => {
   const app2 = await connect();
   const cid = app2.cursors.get('move');
+  const blank = app2.cursors.get('none');
   await roundtrip(app2);
   const fontId = server.resources.get(cid).sourceFont;
   assert.ok(server.resources.get(fontId), 'font resource exists while cached');
@@ -110,6 +159,7 @@ test('app.close() frees the cached cursors and the cursor font', async () => {
   app2.cursors.dispose();
   await roundtrip(app2);
   assert.equal(server.resources.get(cid), undefined, 'cursor freed');
+  assert.equal(server.resources.get(blank), undefined, 'blank cursor freed too');
   assert.equal(server.resources.get(fontId), undefined, 'font closed');
   await app2.close();
 });
