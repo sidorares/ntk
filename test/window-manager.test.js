@@ -247,6 +247,30 @@ test('close asks politely when the client opted in, kills it when it did not', a
   assert.equal(await seenSilent.close(), false, 'killed outright');
 });
 
+test('a dialog is already transient by the time its map_request arrives', async () => {
+  // ICCCM 4.1.2.6 expects WM_TRANSIENT_FOR to be set before the window is
+  // mapped, and a window manager that reads it only on MapRequest — which
+  // is the moment it decides placement and stacking — sees whatever is
+  // there right then. Both atoms are predefined, so the write needs no
+  // InternAtom round trip and cannot be overtaken by a map() on the next
+  // line; going through the generic property path instead would lose this.
+  const root = wm.rootWindow();
+  await root.selectInput(REDIRECT);
+
+  const owner = client.createWindow({ width: 200, height: 150 });
+  const pending = nextEvent(root, 'map_request');
+  const dialog = client.createWindow({ width: 120, height: 80, transientFor: owner });
+  dialog.map();
+
+  const ev = await pending;
+  assert.equal(ev.window.id, dialog.id);
+  assert.equal(
+    await ev.window.getTransientFor(),
+    owner.id,
+    'the owner is known at MapRequest, not a round trip later'
+  );
+});
+
 test('sendConfigureNotify tells a reparented client where it really is', async () => {
   const app = client.createWindow({ width: 100, height: 60 });
   await settle(client);

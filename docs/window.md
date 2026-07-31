@@ -22,6 +22,13 @@ asynchronously.
 
 Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 
+- window manager hints, either grouped under `hints: { ... }` or by name at
+  the top level — `transientFor`, `maxWidth`, `urgent`, `icon`, `protocols`
+  and the rest of [Window manager hints](#window-manager-hints). `x`, `y`,
+  `width` and `height` are the exception: at the top level they are the
+  window's geometry, and only inside `hints`/`sizeHints` do they mean the
+  `WM_NORMAL_HINTS` fields of the same name
+- `pid: false` — do not declare the process and host (below)
 - `backingStore: false` — opt out of double buffering (below)
 - X window attributes, forwarded into the `CreateWindow` value list under
   their node-x11 names: `backgroundPixmap`, `backgroundPixel`,
@@ -183,15 +190,18 @@ All return `this` unless noted.
 - `queryPointer(cb)`, `setMouseHintOnly(isOn)`
 - `queryTree(cb)` — `cb(err, { parent, root, children })`, all as `Window`s
 - `reparentTo(newParent, x, y)`, `raise()`, `lower()`
-- `setActions()` — opt in to the WM_DELETE_WINDOW protocol (window manager
-  sends a `message` event instead of killing the connection on close)
-- `setSizeHints(hints)`, `setClass(instance, class)`,
-  `setWindowType(type)`, `setAlwaysOnTop(on)` — see
+- `setHints(hints)`, `setSizeHints(hints)`, `setWmHints(hints)`,
+  `setTransientFor(owner)`, `setClass(instance, class)`,
+  `setWindowType(type)`, `setAlwaysOnTop(on)`, `setPid(pid, hostname)` — see
   [Window manager hints](#window-manager-hints) below
+- `addProtocol(name)` / `removeProtocol(name)` / `setProtocols(names)` /
+  `getProtocols()` — WM_PROTOCOLS, returning promises; `setActions()` is the
+  older spelling of `addProtocol('WM_DELETE_WINDOW')`
 - `getProperty(name, options)`, `setProperty(name, value, options)`,
-  `getTitle()`, `getSizeHints()`, `getAttributes()`, `atom(name)`,
-  `selectInput(mask)`, `addToSaveSet()`, `sendConfigureNotify(geometry)`,
-  `close()`, `grabButton(options)` — the window manager side, see
+  `deleteProperty(name)`, `getTitle()`, `getSizeHints()`, `getWmHints()`,
+  `getTransientFor()`, `getAttributes()`, `atom(name)`, `selectInput(mask)`,
+  `addToSaveSet()`, `sendConfigureNotify(geometry)`, `close()`,
+  `grabButton(options)` — the window manager side, see
   [Being the window manager](#being-the-window-manager)
 - `destroy()` — destroy the window server-side (also `Symbol.dispose`)
 
@@ -200,7 +210,41 @@ All return `this` unless noted.
 Properties the window manager reads to decide how to treat the window.
 Each has a method and a matching creation argument.
 
-### Size limits — `setSizeHints(hints)` / `sizeHints`, `resizable`
+**A hint that sets no flag does nothing, and nothing reports it.** These
+properties are structs whose first word is a bitmask saying which of the
+fields that follow are meaningful. `WM_NORMAL_HINTS` with `flags = 0` is a
+perfectly legal property that declares nothing — the X server stores it
+without complaint, and only a window manager could ever tell. So ntk writes
+no property at all rather than an empty one, and warns once when a call
+would have produced one.
+
+### Everything at once — `setHints(hints)` / creation arguments
+
+```js
+wnd.setHints({ transientFor: main, maxWidth: 900, urgent: true });
+
+app.createWindow({
+  width: 360, height: 170,
+  transientFor: owner,       // hint names work as creation arguments
+  maxWidth: 800,
+  hints: { minWidth: 200, position: 'user' }   // or grouped under `hints`
+});
+```
+
+`setHints` takes every key `setSizeHints` and `setWmHints` understand, plus
+`transientFor` and `protocols`, and routes each to the property it belongs
+to. Unlike those two it **accumulates**: each call rewrites the affected
+properties from everything set on the window so far, so
+`setHints({ urgent: true })` after `setHints({ input: true })` keeps the
+input hint. The individual setters write their struct whole, which is the
+right primitive but the wrong default. A key neither one understands is
+named in a warning rather than dropped.
+
+Everything except `protocols` is on the wire when `setHints` returns, so a
+`map()` on the next line cannot overtake it — `WM_PROTOCOLS` needs its atom
+interned first, so `await setProtocols(...)` if that ordering matters.
+
+### Size limits and placement — `setSizeHints(hints)` / `sizeHints`, `resizable`
 
 Writes ICCCM `WM_NORMAL_HINTS`. Without it a window manager lets the user
 resize a window to any size at all, so fixed-size dialogs need this.
@@ -210,14 +254,119 @@ wnd.setSizeHints({ minWidth: 320, minHeight: 200, maxWidth: 1280 });
 wnd.setSizeHints({ widthInc: 8, heightInc: 16 }); // terminal-style steps
 wnd.setSizeHints({ minAspect: [4, 3], maxAspect: [16, 9] });
 wnd.setSizeHints({ resizable: false }); // pin min and max to the current size
+wnd.setSizeHints({ position: 'user' }); // the user asked to be here
 
 app.createWindow({ width: 400, height: 300, resizable: false });
 ```
 
 Keys: `minWidth`, `minHeight`, `maxWidth`, `maxHeight`, `widthInc`,
 `heightInc`, `baseWidth`, `baseHeight`, `minAspect: [num, den]`,
-`maxAspect: [num, den]`, `gravity`, `resizable`. Only the groups you pass
-set their flag, so partial hints stay partial.
+`maxAspect: [num, den]`, `gravity`, `resizable`, `position`, `size`, and
+`x`/`y`/`width`/`height`. Only the groups you pass set their flag, so
+partial hints stay partial.
+
+`position` and `size` are `'user'` or `'program'` and say **who chose the
+geometry**. A window manager that sees neither is free to place the window
+by its own policy, whatever x/y it was created with — which is why a window
+that opens "in the wrong place" usually has nothing wrong with its
+geometry. `'user'` is the stronger claim, and window managers that override
+their own placement for anything override it for that. Passing `x`/`y` or
+`width`/`height` here implies `'program'`.
+
+### Window manager protocols — `addProtocol(name)` / `protocols`
+
+Writes ICCCM `WM_PROTOCOLS`: the messages this window is willing to
+receive, each arriving as a `message` event.
+
+```js
+await wnd.addProtocol('WM_DELETE_WINDOW'); // close button asks instead of killing
+await wnd.addProtocol('WM_TAKE_FOCUS');
+
+app.createWindow({ protocols: ['WM_DELETE_WINDOW'] });
+```
+
+The property is a **set**, so these are read-modify-write and return
+promises: `addProtocol`, `removeProtocol`, `setProtocols(names)` to replace
+the list outright, and `getProtocols()` to read the names back. Concurrent
+adds are serialized, so two in the same tick both land.
+
+`setActions()` is the older spelling of `addProtocol('WM_DELETE_WINDOW')`.
+It used to write the property as a list of exactly one atom, so the next
+protocol added by any means erased it and the close button quietly stopped
+working — that is the bug the set-based API exists to prevent.
+
+### Input model, urgency, icon — `setWmHints(hints)`
+
+Writes ICCCM `WM_HINTS`.
+
+```js
+wnd.setWmHints({ input: true });           // I expect the WM to focus me
+wnd.setWmHints({ urgent: true });          // flash in the taskbar
+wnd.setWmHints({ initialState: 'iconic' }); // start minimised
+wnd.setWmHints({ icon: pixmap, windowGroup: main });
+```
+
+Keys: `input`, `initialState` (`'normal'` / `'iconic'`), `urgent`, `icon`
+(alias `iconPixmap`), `iconMask`, `iconWindow`, `iconX`, `iconY`,
+`windowGroup`. A `Window` or `Pixmap` is accepted anywhere an XID is.
+`getWmHints()` reads them back.
+
+`input` is the ICCCM 4.1.7 input model: set it before relying on the
+keyboard focus at all, since a window manager reading no input hint is
+entitled to assume the window takes focus for itself. `urgent: false` is the
+one call that legitimately writes an all-zero flags word — clearing
+attention means rewriting the struct without the bit — so it is written
+rather than warned about.
+
+`icon` is the old ICCCM pixmap mechanism; modern desktops prefer EWMH
+`_NET_WM_ICON`, which ntk does not write yet.
+
+### Dialogs — `setTransientFor(owner)` / `transientFor`
+
+Writes ICCCM `WM_TRANSIENT_FOR`, which is what makes a second top-level
+window a *dialog* rather than an unrelated application window: the window
+manager stacks it above its owner, keeps it out of the taskbar and pager,
+iconifies it alongside, places it relative to the owner, and gives it a
+dialog's reduced frame.
+
+```js
+const dialog = app.createWindow({ width: 360, height: 170, transientFor: main });
+dialog.setWindowType('dialog'); // set both — see below
+dialog.map();
+
+dialog.setTransientFor(null);   // clear
+```
+
+Accepts a `Window`, an XID, `'root'` (transient for the whole window group —
+see `setWmHints({ windowGroup })`) or `null`. `getTransientFor()` reads the
+XID back.
+
+Both atoms involved are predefined, so the write needs no round trip and is
+on the wire before a `map()` on the next line. That matters: ICCCM 4.1.2.6
+describes this as a property the window manager consults when the transient
+is mapped, and one that reads it on `MapRequest` sees whatever is there at
+that moment.
+
+Set `_NET_WM_WINDOW_TYPE_DIALOG` as well. The two are not equivalent and
+neither is redundant: this property names *which* window is the owner, the
+type says *what kind* of window this is. EWMH does treat a managed window
+with `WM_TRANSIENT_FOR` and no `_NET_WM_WINDOW_TYPE` as a dialog — but
+setting the type to anything at all turns that fallback off, so real
+toolkits set both.
+
+On an override-redirect window the property is inert, because the window
+manager never manages the window; ntk warns if you set it there.
+
+### Process identity — `setPid(pid, hostname)` / `pid: false`
+
+Writes EWMH `_NET_WM_PID` and ICCCM `WM_CLIENT_MACHINE`. Together they are
+how a desktop offers to force-quit an unresponsive application and how
+`xkill`-style tools name what they are about to kill; EWMH requires the
+machine name for the pid to mean anything, so ntk writes both or neither.
+
+Top-level windows get this automatically at creation. Pass `pid: false` to
+opt out, or a number to declare a different process. In a browser bundle
+there is no pid and no hostname, so nothing is written.
 
 ### Application identity — `setClass(instance, class)` / `wmClass`
 
@@ -360,6 +509,11 @@ The counterparts of the hint setters, for reading other clients' windows:
 - `getTitle()` — `_NET_WM_NAME` if set, else `WM_NAME`; `null` for neither
 - `getSizeHints()` — `WM_NORMAL_HINTS` shaped like `setSizeHints`' argument,
   `{}` when unset, each key present only if the client set its flag
+- `getWmHints()` — `WM_HINTS` the same way: the client's input model,
+  requested initial state, icon and urgency
+- `getTransientFor()` — the XID this window is a dialog for, or `null`
+- `getProtocols()` — the atom names in `WM_PROTOCOLS`, so `close()` can ask
+  politely rather than kill
 - `getAttributes()` — `{ mapState, overrideRedirect, ... }`. Both matter
   when adopting the windows that already existed at startup: skip
   override-redirect ones, frame only the mapped ones
@@ -376,6 +530,8 @@ The counterparts of the hint setters, for reading other clients' windows:
   root.setProperty('_NET_SUPPORTED', atoms, { type: 'ATOM' });
   ```
 
+- `deleteProperty(name)` — remove a property outright, which for most of
+  them is not the same as writing zero
 - `atom(name)` — intern an atom id, cached per connection
 
 Title changes arrive as `property` events (`PropertyChange`), so a frame
