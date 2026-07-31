@@ -83,6 +83,29 @@ automatically (opt out with `createWindow({ backingStore: false })`):
 Foreign windows (`{ id }`) and windows drawing via the `'opengl'` or
 `'x11'` contexts are not double-buffered.
 
+### `wnd.scrollRegion(rect, dx, dy)` → boolean
+
+Scroll the pixels of `rect` (`{x, y, width, height}`, window coordinates)
+by `(dx, dy)` **within the backing store**, server-side — one `CopyArea` of
+the band that survives the shift, instead of the caller re-drawing content
+that merely moved. This is the fast half of a scrolling viewport: blit the
+surviving band, then draw only the strip the shift exposed (plus chrome
+that moved with the content, e.g. a scrollbar thumb). The whole `rect` is
+marked dirty, so the next present shows the scrolled band on the window
+through the normal fence-aware path.
+
+Returns `false` — having done nothing, so the caller just repaints `rect`
+as it would have anyway — when the window has no valid backing store, when
+`dx`/`dy` are fractional (a sub-pixel shift changes every pixel) or both
+zero, or when nothing of `rect` survives the shift after clamping to
+window ∩ backing.
+
+Overlap is safe (the server fetches the source region before storing), the
+copy cannot generate `GraphicsExpose` (pixmap contents are never occluded —
+the reason this operates on the backing store, not the window), and the
+copy is issued in-order with whatever the caller draws next on the same
+connection.
+
 ## Frames, coalescing and slow connections
 
 Some X events are noisy by nature: an interactive resize is a stream of
