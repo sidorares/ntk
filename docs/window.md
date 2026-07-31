@@ -674,9 +674,15 @@ Every event object gets `ev.window` and `ev.target` set to the `Window`.
 
 ## Keyboard input
 
-`keydown` carries the raw X `ev.keycode` plus `ev.codepoint`, the Unicode
-codepoint the key types, resolved against the keyboard mapping ntk fetches at
-connect and refreshes on `MappingNotify`.
+`keydown` and `keyup` carry the raw X `ev.keycode` plus:
+
+- `ev.codepoint` — the Unicode codepoint the key types
+- `ev.keysym` — the keysym it resolved to
+- `ev.baseKeysym` — the same key's group-1, level-1 keysym, for shortcuts
+- `ev.group` — the active XKB layout group, 0–3
+
+resolved against the keyboard mapping ntk fetches at connect and refreshes on
+`MappingNotify`.
 
 **`codepoint` is absent when the key types nothing** — arrows, function keys,
 modifiers, `Pause`, and dead keys (ntk has no compose support yet, and emitting
@@ -700,6 +706,35 @@ Both legacy keysyms and the direct-Unicode form modern non-Latin layouts emit
 keypress path reads the filesystem, so this works the same in an esbuild bundle,
 a single-executable build and the browser.
 
-> Selecting the keysym still ignores the active XKB group, so a second
-> (non-Latin) layout does not take effect and `AltGr` levels are unreachable.
-> Tracked in [#116](https://github.com/sidorares/ntk/issues/116).
+### Layout groups and shortcuts
+
+A layout switch on Linux does not change the keymap. Both layouts are loaded
+at once — the map holds `[g1l1, g1l2, g2l1, g2l2, …]` for each key — and
+switching moves the *active group*, which arrives in every key event's own
+state bits. No `MappingNotify` is sent, so there is nothing to refetch;
+reading those bits is the whole of it, and ntk does.
+
+Shortcuts should match `ev.baseKeysym`, not `ev.keysym`:
+
+```js
+wnd.on('keydown', (ev) => {
+  if (ev.buttons & 4 && ev.baseKeysym === 0x7a) undo(); // Ctrl+Z, any layout
+});
+```
+
+`baseKeysym` stays on group 1 whatever the user is typing, which is how GTK,
+Qt and browsers keep `Ctrl+Z` working while a Cyrillic layout is active. Match
+on `ev.keysym` instead and the shortcut disappears the moment the user
+switches layout.
+
+CapsLock applies only to keys that have a case, so it does not turn the number
+row into its shifted symbols — the rule XKB's key types encode, reproduced
+here from Unicode case mapping, which covers Cyrillic and Greek as well as
+Latin.
+
+> **Not yet: `AltGr` (level 3).** The core keyboard map is ambiguous about it —
+> four keysyms on a key are two groups of two levels under `us,ru` and one
+> group of four under `us(intl)`, and nothing in the core protocol tells them
+> apart. The request that resolves it, `XkbGetMap`, is not implemented in
+> node-x11, and guessing would break multi-layout users to half-serve AltGr
+> users. Tracked in [#116](https://github.com/sidorares/ntk/issues/116).
