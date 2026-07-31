@@ -100,11 +100,18 @@ test('setAlwaysOnTop asks the window manager with a five-word EWMH message', asy
   // the WM advertises the state, so the EWMH path is taken rather than the
   // Apple-WM fallback
   await root.setProperty('_NET_SUPPORTED', [above], { type: 'ATOM' });
-  await root.selectInput(REDIRECT);
+  // SubstructureNotify alone: enough to receive a message sent with the
+  // substructure mask, and without the redirect bit the client's own map()
+  // proceeds instead of turning into a map_request for us to answer
+  await root.selectInput(x11.eventMask.SubstructureNotify);
   await settleBoth();
 
   const app = client.createWindow({ width: 40, height: 30 });
+  const mapped = nextEvent(app, 'map');
+  app.map();
+  await mapped;
   await settleBoth();
+
   // the message travels via the root's substructure mask but names the
   // client window in its own window field, and ntk routes events by that
   // field — so a window manager sees it on its wrapper for the client
