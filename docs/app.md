@@ -26,6 +26,11 @@ const app2 = await createClient({ display: ':1' });
   GLX support.
 - Keyboard mapping is fetched up front and kept up to date on
   `MappingNotify`, so `keydown` events carry `codepoint`.
+- A big-endian (MSBFirst) connection is rejected with an error. node-x11
+  declares the host byte order in its connection hello but encodes every
+  request LSBFirst regardless, so such a connection is already inconsistent
+  before ntk sees it; failing here beats decoding byte-swapped properties
+  into plausible-looking nonsense.
 - The legacy node-style `callback` is also supported.
 
 ## Properties

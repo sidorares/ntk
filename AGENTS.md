@@ -105,10 +105,11 @@ What that means in practice:
 
 - **Use node-x11's `X.SendClientMessage(destination, wid, type, format, data
   [, eventMask][, cb])` and `x11.packEvent(ev)`** (x11 >= 3.4) instead of
-  hand-packing 32-byte buffers. Four such buffers exist in `lib/` today
-  (`window.js` ×3, `clipboard.js`); they should go. Note the event-mask
-  default is `SubstructureRedirect|SubstructureNotify`, right for root-window
-  EWMH messages — messages aimed at another client's own window (WM_PROTOCOLS,
+  hand-packing 32-byte buffers. `SendEvent` also takes an event object
+  directly, which is how `sendConfigureNotify` and the clipboard's
+  SelectionNotify are built. Note the event-mask default is
+  `SubstructureRedirect|SubstructureNotify`, right for root-window EWMH
+  messages — messages aimed at another client's own window (WM_PROTOCOLS,
   XEmbed, XDND, SelectionNotify) must pass an explicit `0`.
 - **A property writer must set its flag bit.** The failure mode of these
   structs is silence: `WM_NORMAL_HINTS` with `flags = 0` is a legal property
@@ -121,10 +122,14 @@ What that means in practice:
 - **Mapped windows ask, unmapped windows write.** EWMH 7.7: change
   `_NET_WM_STATE` on a mapped window with a ClientMessage to the root, and on
   an unmapped one by writing the property directly.
-- **Endianness:** `lib/` currently hardcodes `readUInt32LE` / `Uint32Array`
-  for property payloads. That is correct only because node-x11 negotiates the
-  host byte order and we run little-endian. If node-x11 grows a byte-order
-  export, use it.
+- **Endianness:** `lib/` decodes property payloads with `readUInt32LE` /
+  `Uint32Array` and that is fine — but not for the reason it looks like.
+  node-x11 declares the *host* byte order in its connection hello
+  (`display.byte_order`, x11 >= 3.4) and then encodes every request LSBFirst
+  anyway, so a big-endian host yields a connection that is already garbage
+  before any property reaches us. `App`'s constructor rejects such a
+  connection outright; do not add MSBFirst decode paths here, because there
+  is no working MSBFirst connection for them to run on.
 
 ## Hard constraints
 
