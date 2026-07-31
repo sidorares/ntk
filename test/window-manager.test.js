@@ -227,6 +227,17 @@ test('setProperty round-trips through getProperty', async () => {
   assert.equal(raw.type, await window.atom('WINDOW'));
 });
 
+test('deleteProperty removes a property rather than emptying it', async () => {
+  const window = wm.createWindow({ width: 40, height: 30 });
+  await window.setProperty('_NET_WM_NAME', 'here');
+  assert.equal(await window.getProperty('_NET_WM_NAME', { as: 'string' }), 'here');
+
+  await window.deleteProperty('_NET_WM_NAME');
+  // type None, which is how "this client never declared that" is spelled —
+  // an empty write would leave the property present and readable
+  assert.equal(await window.getProperty('_NET_WM_NAME'), null);
+});
+
 test('close asks politely when the client opted in, kills it when it did not', async () => {
   const polite = client.createWindow({ width: 40, height: 30 });
   polite.setActions();
