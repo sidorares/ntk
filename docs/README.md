@@ -15,7 +15,7 @@ matching file here (see AGENTS.md).
 - [Getting started](getting-started.md) — installation, requirements, first window
 - [App](app.md) — connecting to the X server, the `App` factory object
 - [Window](window.md) — window creation, properties, methods, events,
-  frame pacing / event coalescing, `requestAnimationFrame`
+  keyboard input, frame pacing / event coalescing, `requestAnimationFrame`
 - [Pixmap](pixmap.md) — offscreen drawables
 - [Clipboard](clipboard.md) — `app.clipboard.write()/read()`: text transfer
   over the CLIPBOARD/PRIMARY selections (ICCCM), INCR-aware reads

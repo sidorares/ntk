@@ -92,8 +92,6 @@ await esbuild.build({
     'node:path': path.join(shimsDir, 'path.js'),
     util: path.join(shimsDir, 'util.js'),
     'node:util': path.join(shimsDir, 'util.js'),
-    // keysym reads its JSON tables with fs at load time; this build inlines them
-    keysym: path.join(shimsDir, 'keysym.js'),
     // heavy optional deps no playground demo needs
     'yoga-layout': path.join(stubsDir, 'yoga-layout.js'),
     pngjs: path.join(stubsDir, 'pngjs.js'),
