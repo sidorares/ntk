@@ -5,40 +5,64 @@ import { once } from 'node:events';
 import { after, before, test } from 'node:test';
 
 import { createClient } from '../lib/index.js';
-
-const withTimeout = (promise, ms, what) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout: ${what}`)), ms).unref())
-  ]);
+import { withTimeout } from './helpers/async.js';
 
 let app = null;
 let skip = false;
+let keepalive = null;
+/** set if the server drops us mid-file, so the failure names itself */
+let lost = null;
 
 before(async () => {
   if (!process.env.DISPLAY) {
     skip = 'no DISPLAY set';
     return;
   }
+  // Nothing here refs the event loop on its own for the whole file: a pending
+  // WASM instantiation refs nothing, and the X socket stops refing the moment
+  // the server closes it. If the loop drains mid-run node exits, and the test
+  // runner can only report every subtest as `cancelledByParent` — no test
+  // named, no cause. `node --test` runs ~20 files against one Xvfb, so a
+  // connection really does get dropped occasionally. This keeps the file
+  // alive long enough for whatever went wrong to be reported as itself.
+  keepalive = setInterval(() => {}, 1000);
   try {
     app = await withTimeout(createClient(), 5000, 'connecting to X server');
   } catch (err) {
     skip = `cannot connect to X server: ${err.message}`;
+    return;
   }
+  const drop = (why) => {
+    lost ??= why;
+  };
+  app.X.on('end', () => drop('the server closed the connection'));
+  app.X.on('close', () => drop('the connection closed'));
+  // node-x11 emits transport failures here; App installs its own listener for
+  // protocol errors, so this one only sees what that does not route
+  app.X.on('error', (err) => drop(`connection error: ${err.message}`));
 });
 
 after(async () => {
-  if (app) await app.close();
+  clearInterval(keepalive);
+  if (app && !lost) await app.close();
 });
+
+/** Fail with the reason the connection went away, rather than letting the
+ * process exit and blaming whichever subtest happened to be running. */
+function assertConnected() {
+  if (lost) assert.fail(`X connection lost: ${lost}`);
+}
 
 test('connects and exposes screen info', (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   assert.ok(app.display.screen[0].root > 0);
   assert.ok(app.display.Render, 'render extension preloaded');
 });
 
 test('creates, maps and destroys a window', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const wnd = app.createWindow({ width: 120, height: 80, title: 'ntk smoke' });
   assert.ok(wnd.id > 0);
   assert.equal(wnd.width, 120);
@@ -52,6 +76,7 @@ test('creates, maps and destroys a window', async (t) => {
 
 test('requestAnimationFrame paces frames against the server', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const wnd = app.createWindow({ width: 60, height: 40, frameInterval: 0 });
   const stamps = [];
   await withTimeout(
@@ -73,6 +98,7 @@ test('requestAnimationFrame paces frames against the server', async (t) => {
 
 test('2d context: fillRect pixels round-trip through the server', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const pixmap = app.createPixmap({ width: 64, height: 64, depth: 24 });
   const ctx = pixmap.getContext('2d');
 
@@ -95,6 +121,7 @@ test('2d context: fillRect pixels round-trip through the server', async (t) => {
 
 test('2d context: gradients and paths render', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const pixmap = app.createPixmap({ width: 64, height: 64, depth: 24 });
   const ctx = pixmap.getContext('2d');
 
@@ -132,6 +159,7 @@ const readPixels = (ctx, w, h) => ctx.getImageData(0, 0, w, h);
 
 test('text rendering: fillText draws shaped glyphs, measureText advances', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -160,6 +188,7 @@ test('text rendering: fillText draws shaped glyphs, measureText advances', async
 
 test('text rendering: second draw reuses uploaded glyphs and still renders', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -184,6 +213,7 @@ test('text rendering: second draw reuses uploaded glyphs and still renders', asy
 
 test('text rendering: layoutText wraps to maxWidth and draws', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -215,6 +245,7 @@ test('text rendering: layoutText wraps to maxWidth and draws', async (t) => {
 
 test('backing store: window 2d context draws into backing pixmap', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const wnd = app.createWindow({ width: 64, height: 64 });
   const ctx = wnd.getContext('2d');
   assert.ok(wnd._backing, 'backing pixmap allocated');
@@ -232,6 +263,7 @@ test('backing store: window 2d context draws into backing pixmap', async (t) => 
 
 test('backing store: expose is served from cache without user redraw', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const wnd = app.createWindow({ width: 64, height: 64 });
   const ctx = wnd.getContext('2d');
   ctx.fillStyle = 'blue';
@@ -248,6 +280,7 @@ test('backing store: expose is served from cache without user redraw', async (t)
 
 test('backing store: resize invalidates and requests one coalesced redraw', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const wnd = app.createWindow({ width: 64, height: 64 });
   const ctx = wnd.getContext('2d');
   ctx.fillStyle = 'green';
@@ -273,6 +306,7 @@ test('backing store: resize invalidates and requests one coalesced redraw', asyn
 
 test('backing store: opt out keeps drawing direct', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const wnd = app.createWindow({ width: 32, height: 32, backingStore: false });
   const ctx = wnd.getContext('2d');
   assert.equal(wnd._backing, null);
@@ -282,6 +316,7 @@ test('backing store: opt out keeps drawing direct', async (t) => {
 
 test('vector text: sizes above vectorFrom render via trapezoids', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -309,6 +344,7 @@ test('vector text: sizes above vectorFrom render via trapezoids', async (t) => {
 
 test('vector text: bitmap and vector paths draw the same glyphs consistently', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -340,6 +376,7 @@ test('vector text: bitmap and vector paths draw the same glyphs consistently', a
 
 test('vector text: fractional sizes render without quantizing', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -371,6 +408,7 @@ test('vector text: fractional sizes render without quantizing', async (t) => {
 
 test('glyph page LRU: transient sizes are evicted under the cache budget', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -403,6 +441,7 @@ test('glyph page LRU: transient sizes are evicted under the cache budget', async
 
 test('images: drawImage composites decoded PNG pixels, alpha blends', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const { PNG } = await import('pngjs');
   const { decodeImage } = await import('../lib/image.js');
 
@@ -435,6 +474,7 @@ test('images: drawImage composites decoded PNG pixels, alpha blends', async (t) 
 
 test('images: drawImage scales server-side with filtering', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const { PNG } = await import('pngjs');
   const { decodeImage } = await import('../lib/image.js');
 
@@ -465,6 +505,7 @@ test('images: drawImage scales server-side with filtering', async (t) => {
 
 test('tex: formulas draw with batched runs, rules and surd paths', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   const { layoutTex } = await import('../lib/widgets/tex.js');
 
   const pixmap = app.createPixmap({ width: 260, height: 120, depth: 24 });
@@ -500,6 +541,7 @@ test('tex: formulas draw with batched runs, rules and surd paths', async (t) => 
 
 test('markdown: highlighted fences and math fences render', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -536,6 +578,7 @@ test('markdown: highlighted fences and math fences render', async (t) => {
 
 test('markdown: invalid math falls back to a plain code block', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -552,6 +595,7 @@ test('markdown: invalid math falls back to a plain code block', async (t) => {
 
 test('markdown: links record hit rectangles and linkAt resolves them', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -588,6 +632,7 @@ test('markdown: links record hit rectangles and linkAt resolves them', async (t)
 
 test('html: HtmlView renders backgrounds, borders, text, links and images', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
@@ -652,6 +697,7 @@ test('html: HtmlView renders backgrounds, borders, text, links and images', asyn
 
 test('markdown widget renders into a window-less pixmap context', async (t) => {
   if (skip) return t.skip(skip);
+  assertConnected();
   try {
     app.fonts.match('sans-serif');
   } catch (err) {
