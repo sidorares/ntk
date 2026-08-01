@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.2.0](https://github.com/sidorares/ntk/compare/v5.1.0...v5.2.0) (2026-08-01)
+
+
+### Features
+
+* publish frameInFlight, the gate for painting a discrete input now ([#148](https://github.com/sidorares/ntk/issues/148)) ([64e4108](https://github.com/sidorares/ntk/commit/64e41082094dade3c89db35fb1f33cad63758f58))
+
 ## [5.1.0](https://github.com/sidorares/ntk/compare/v5.0.0...v5.1.0) (2026-08-01)
 
 
