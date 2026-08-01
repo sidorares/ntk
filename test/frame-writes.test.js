@@ -1,45 +1,35 @@
-// One socket write per frame (ntk#125). Needs a real server: what is measured
-// is what x11's output buffer hands to the socket, which the mock client in
-// frame-pacing.test.js has no equivalent of. Skipped when no server is
-// reachable.
+// One socket write per frame (ntk#125). Hermetic: an ntk client talks to
+// node-x11's pure-JS X server over an in-process stream pair, so this measures
+// what the client's output buffer hands to the transport without depending on
+// a display — the mock client in frame-pacing.test.js has no output buffer to
+// measure, and a shared server makes connection timing another test's problem.
 //
 // A frame is "draw, then a round trip": _runFrame() emits the drawing and the
-// blit in one synchronous run and ends with the frame fence, a GetInputFocus
-// whose reply x11 does not make the caller wait for the buffer. `X.sync()` is
-// that same round trip, so this drives the batch directly rather than through
-// the frame clock — the property under test is the same one, and the test
-// cannot hang waiting for a frame that a busy shared display never delivers.
+// blit in one synchronous run and ends with the frame fence, a GetInputFocus.
+// x11 flushes on a request that expects a reply, and `X.sync()` is that same
+// round trip — so driving the batch with sync() tests the property the frame
+// clock relies on, without waiting for a frame.
 import assert from 'node:assert/strict';
-import { before, test } from 'node:test';
+import { test } from 'node:test';
 
-import { createClient } from '../lib/index.js';
+import xserver from 'x11/lib/xserver/index.js';
 
-const withTimeout = (promise, ms, what) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout: ${what}`)), ms).unref())
-  ]);
+import { createClient, StaticFontSource } from '../lib/index.js';
+
+const { createServer, createStreamPair } = xserver;
 
 const OPS = 200; // draw calls per frame
 
-let skip = false;
-
-before(async () => {
-  if (!process.env.DISPLAY) {
-    skip = 'no DISPLAY set';
-    return;
-  }
-  try {
-    const probe = await withTimeout(createClient(), 5000, 'connecting to X server');
-    await probe.close();
-  } catch (err) {
-    skip = `cannot connect to X server: ${err.message}`;
-  }
-});
-
 /** Draw OPS rectangles, round-trip, and report what it cost on the wire. */
 async function measureFrame(options) {
-  const app = await withTimeout(createClient(options), 5000, 'connecting to X server');
+  const server = createServer({ width: 320, height: 240 });
+  const [serverEnd, clientEnd] = createStreamPair();
+  server.addClientStream(serverEnd);
+  const app = await createClient({
+    stream: clientEnd,
+    fontSource: new StaticFontSource(),
+    ...options
+  });
   try {
     const pixmap = app.createPixmap({ width: 200, height: 200 });
     const ctx = pixmap.getContext('2d');
@@ -53,12 +43,12 @@ async function measureFrame(options) {
     };
 
     paint(); // warm up: gcs, pictures and any first-use round trips
-    await withTimeout(app.X.sync(), 5000, 'warm-up round trip');
+    await app.X.sync();
 
     const before = { ...app.X.pack_stream.stats };
     paint();
     const midFrame = app.X.pack_stream.stats.writes - before.writes;
-    await withTimeout(app.X.sync(), 5000, 'measured round trip');
+    await app.X.sync();
     const now = app.X.pack_stream.stats;
     return {
       writes: now.writes - before.writes,
@@ -67,12 +57,11 @@ async function measureFrame(options) {
       bytes: now.bytes - before.bytes
     };
   } finally {
-    await app.close();
+    app.X.terminate();
   }
 }
 
-test('a frame of drawing goes out in one socket write', async (t) => {
-  if (skip) return t.skip(skip);
+test('a frame of drawing goes out in one socket write', async () => {
   const frame = await measureFrame();
   assert.ok(frame.requests > OPS / 2, `${frame.requests} requests for ${OPS} draw calls`);
   assert.ok(frame.bytes > 1000, 'the frame actually drew something');
@@ -83,8 +72,7 @@ test('a frame of drawing goes out in one socket write', async (t) => {
   assert.ok(frame.writes <= 3, `${frame.writes} writes for ${frame.requests} requests`);
 });
 
-test('bufferRequests: false restores a write per request', async (t) => {
-  if (skip) return t.skip(skip);
+test('bufferRequests: false restores a write per request', async () => {
   const frame = await measureFrame({ bufferRequests: false });
   assert.ok(frame.writes >= frame.requests, `${frame.writes} writes, ${frame.requests} requests`);
   assert.ok(frame.midFrame >= OPS, 'every request is written as it is issued');
