@@ -15,8 +15,9 @@ The pipeline is pure JavaScript — no compiled modules:
    postscript name).
 3. **Rasterization** (`lib/rasterize.js`): glyph outlines are rasterized to
    8-bit alpha bitmaps by a small built-in scanline rasterizer (non-zero
-   winding, 4x4 supersampled antialiasing; 2x2 above 96px where the extra
-   samples are invisible).
+   winding, signed-area accumulation — antialiasing is exact analytic
+   coverage rather than sampled, so there is no quality dial and no size at
+   which it is worth turning down).
 4. **Upload**: bitmaps go to the X server as XRender glyphs (`AddGlyphs`) —
    once per glyph per (face, size), shared across all windows of the
    connection. Drawing afterwards is a cheap server-side `CompositeGlyphs`

@@ -141,7 +141,8 @@ Full canvas path surface:
 - `rect(x, y, w, h)`, `roundRect(x, y, w, h, radii)` — radii like the spec:
   a number, or an array of 1–4 numbers / `{x, y}` pairs
 - `fill([path][, fillRule])` — `'nonzero'` (default) or `'evenodd'`;
-  trapezoidated client-side (`lib/trapezoid.js`), composited server-side
+  rasterized here or on the server depending on size (see
+  [Where drawings are rasterized](#where-drawings-are-rasterized))
 - `stroke([path])` — extrudes the polyline (extrude-polyline) and renders
   triangles; honors line dashes, round caps/joins, clip, `globalAlpha` and
   the composite op. Round-cap/join disks overlap the stroke body, so their
@@ -152,6 +153,81 @@ Full canvas path surface:
   `restore()`
 - `isPointInPath([path, ]x, y[, fillRule])` — hit test in canvas (device)
   coordinates
+
+## Where drawings are rasterized
+
+Every fill and stroke ends the same way: coverage lands in a scratch a8 mask,
+the mask is intersected with the clip and `globalAlpha`, and the fill style is
+composited through it. Only the first step has a choice of where it happens.
+
+- **Server-side** — the geometry is trapezoidated here
+  (`lib/trapezoid.js`) and sent as `AddTraps`/`Triangles`. Cost grows with
+  geometric complexity: per-request overhead plus 40 bytes per trapezoid.
+- **Locally** — the geometry is rasterized into 8-bit coverage here
+  (`lib/rasterize.js`) and uploaded with one `PutImage`. Cost grows with
+  area: one byte per pixel of the drawing's bounding box.
+
+The choice is per drawing, made by `routeRaster()` from the bounding-box area
+and the flattened edge count. Defaults, measured against XQuartz with shapes
+bracketing the range (a rounded rectangle at 14–79 trapezoids, a stroked icon
+at 181–1053):
+
+```js
+{ maxArea: 64 * 64,   // at or below this bounding-box area, always local
+  bytesPerEdge: 150,  // above it, local while area <= 150 * edges
+  maxBytes: 1 << 20 } // never upload more coverage than this at once
+```
+
+An icon-sized drawing takes the local route, and a wall of 400 of them costs
+~24 ms of server time instead of ~1.9 s. A large, geometrically simple shape
+(a full-window rounded rectangle) takes the server route, where a handful of
+trapezoids beat a megabyte of coverage.
+
+Because what crosses the wire is **coverage, not colour**, the route is
+invisible to everything else: gradients, solid fills, `globalAlpha`, clip and
+composite ops all work identically either way, and a widget that draws through
+`fill()`/`stroke()` — `SvgView`, `HtmlView`, anything of your own — is routed
+without knowing this exists.
+
+### Swapping the rasterizer
+
+```js
+import { createClient, ScanlineRasterizer, setDefaultRasterizer } from 'ntk';
+
+const app = await createClient({ rasterizer: myRasterizer });
+// or per app, at any time:
+app.rasterizer = myRasterizer;
+app.rasterizer = null;          // send every drawing to the server
+// or process-wide, before any app is created:
+setDefaultRasterizer(myRasterizer);
+```
+
+A rasterizer is any object with one method:
+
+```js
+rasterize({ polys, triangles, width, height, rule, dx, dy }) → Uint8Array | Buffer | null
+```
+
+- exactly one of `polys` (closed polygons `[x0,y0,x1,y1,…]`, filled by `rule`,
+  `'nonzero'` or `'evenodd'`) and `triangles` (a stroke's triangle soup, whose
+  overlaps must **union** rather than cancel — caps, joins and segments
+  overlap constantly);
+- `dx`/`dy` must be added to every coordinate. Geometry arrives in device
+  space and the grid covers the drawing's bounding box; the offset maps one to
+  the other. It is passed rather than pre-applied because pre-applying means
+  copying every point of every path on every frame;
+- return `width * height` bytes of 8-bit coverage, row-major and unpadded, or
+  `null` to decline. Declining routes that drawing back to the server, so a
+  partial implementation is safe — a rasterizer that only understands
+  non-zero fills can return `null` for everything else and stay correct.
+
+Thresholds are tunable the same way: `createClient({ rasterPolicy })` or
+`app.rasterPolicy`, merged over `DEFAULT_RASTER_POLICY`.
+
+The default `ScanlineRasterizer` uses signed-area accumulation (the font-rs /
+stb_truetype v2 algorithm) — exact analytic antialiasing, no supersampling,
+no dependencies, and it works in a browser bundle. `CoverageAccumulator` is
+exported if you want to drive it directly.
 
 ## Path2D
 

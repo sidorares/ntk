@@ -53,9 +53,9 @@ layout.draw(ctx, 16, 60);
    scripts (Arabic joining etc.). RTL runs come back in visual order.
 5. **Rasterize + upload** — new glyphs are rasterized by the built-in
    scanline rasterizer (`lib/rasterize.js`) and uploaded once per
-   (face, size) with a single batched `AddGlyphs` request. (Above 96px the
-   supersampling drops from 4×4 to 2×2 — indistinguishable at that size and
-   4× cheaper.)
+   (face, size) with a single batched `AddGlyphs` request. Coverage is
+   computed by signed-area accumulation, so antialiasing is exact at every
+   size and costs the same.
 6. **Composite** — drawing sends one `CompositeGlyphs` request; the server
    does all the actual blending.
 
