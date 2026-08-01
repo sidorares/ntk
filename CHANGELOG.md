@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.1.0](https://github.com/sidorares/ntk/compare/v5.0.0...v5.1.0) (2026-08-01)
+
+
+### Features
+
+* **context-2d:** rasterize small drawings locally, behind a pluggable seam ([#147](https://github.com/sidorares/ntk/issues/147)) ([05c46fa](https://github.com/sidorares/ntk/commit/05c46fae2a961ea1161f29d742828f466cc12b62))
+
+
+### Bug Fixes
+
+* **context-2d:** bound stroke mask work to the stroke's bounding box ([#145](https://github.com/sidorares/ntk/issues/145)) ([3e6a332](https://github.com/sidorares/ntk/commit/3e6a3326be3abd79dd1880dfc96129af161c71b4))
+
 ## [5.0.0](https://github.com/sidorares/ntk/compare/v4.3.0...v5.0.0) (2026-08-01)
 
 
