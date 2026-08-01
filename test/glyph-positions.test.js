@@ -72,10 +72,7 @@ function expectedImage(positions) {
   return img;
 }
 
-const readPixels = (ctx) =>
-  new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, W, H, (err, data) => (err ? reject(err) : resolve(data)))
-  );
+const readPixels = (ctx) => ctx.getImageData(0, 0, W, H);
 
 function diffStats(actual, expected) {
   let bad = 0;

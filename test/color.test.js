@@ -31,15 +31,10 @@ after(async () => {
   if (app) await app.close();
 });
 
-// getImageData returns BGRA, so red is index 2
 const centre = async (ctx) => {
-  const d = await new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, W, H, (err, data) =>
-      err ? reject(err) : resolve(data)
-    )
-  );
+  const d = await ctx.getImageData(0, 0, W, H);
   const i = (10 * W + 10) * 4;
-  return [d.data[i + 2], d.data[i + 1], d.data[i]];
+  return [d.data[i], d.data[i + 1], d.data[i + 2]];
 };
 
 // fill `under`, then apply a style and fill again over the top

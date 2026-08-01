@@ -39,15 +39,11 @@ function freshCtx() {
   return ctx;
 }
 
-const read = (ctx) =>
-  new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, W, H, (err, d) => (err ? reject(err) : resolve(d))),
-  );
+const read = (ctx) => ctx.getImageData(0, 0, W, H);
 
-// BGRA -> [r, g, b]
 const at = (img, x, y) => {
   const i = (y * W + x) * 4;
-  return [img.data[i + 2], img.data[i + 1], img.data[i]];
+  return [img.data[i], img.data[i + 1], img.data[i + 2]];
 };
 const isWhite = (p) => p[0] > 240 && p[1] > 240 && p[2] > 240;
 
