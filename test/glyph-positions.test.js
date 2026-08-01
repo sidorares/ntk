@@ -18,15 +18,10 @@ import { after, before, test } from 'node:test';
 import { createClient } from '../lib/index.js';
 import { drawGlyphRuns, positionGlyphs } from '../lib/text/glyphs.js';
 import { reorderRuns } from '../lib/text/shape.js';
+import { withTimeout } from './helpers/async.js';
 
 const W = 420;
 const H = 90;
-
-const withTimeout = (promise, ms, what) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout: ${what}`)), ms).unref())
-  ]);
 
 let app = null;
 let skip = false;
