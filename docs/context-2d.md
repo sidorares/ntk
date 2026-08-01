@@ -121,9 +121,17 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   [`Image`](images.md) (decoded PNG/JPEG). The image uploads to the server
   once and is cached; scaling (and any affine transform) happens server-side
   with bilinear filtering. Respects clip and `globalAlpha`. `image` can also
-  be another ntk 2d context (server-side composite of the whole drawable) or
-  a node-canvas-like object exposing `image.context.getImageData()` (pixels
-  are uploaded)
+  be a [`Surface`](surface.md) (pixels the server drew, including a8 coverage
+  surfaces that paint in the current `fillStyle`), anything else exposing
+  `width`/`height`/`picture(app)`, another ntk 2d context (server-side
+  composite of the whole drawable) or a node-canvas-like object exposing
+  `image.context.getImageData()` (pixels are uploaded). Under a rectangular
+  clip the clip goes to the server directly, rather than through a
+  full-surface mask
+- `ctx.destroy()` / `Symbol.dispose` — release the context's server-side
+  resources: its GC, its Picture, its masks and its solid-colour pictures.
+  Needed only for contexts created dynamically, such as one per
+  [`Surface`](surface.md); a context on a window lives as long as the window
 ### Pixels
 
 Pixel access follows the canvas API: `ImageData` is straight

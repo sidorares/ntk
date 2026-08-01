@@ -35,6 +35,9 @@ lib/index.js               createClient() -> App; package entry (ESM)
 lib/app.js                 App: one X connection, window/pixmap factory
 lib/window.js              Window (extends Drawable): events, geometry, WM bits
 lib/pixmap.js              offscreen drawable
+lib/surface.js             Surface: pixmap + Picture, drawn once and
+                           composited many times; a8 coverage surfaces take
+                           their colour from the drawing context
 lib/drawable.js            EventEmitter base + getContext() registry
 lib/events_map.js          X event code <-> browser-ish event name tables
                            (incl. FocusIn/FocusOut as 'focus'/'blur')
