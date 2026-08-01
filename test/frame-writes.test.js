@@ -62,14 +62,26 @@ async function measureFrame(options) {
 }
 
 test('a frame of drawing goes out in one socket write', async () => {
-  const frame = await measureFrame();
+  // with the age gate off the only thing that can split the batch is its
+  // size, and a frame this size does not reach it: exactly one write, and it
+  // is the round trip at the end of the frame that produces it
+  const frame = await measureFrame({ bufferRequests: { maxSize: 64 * 1024, maxDelay: Infinity } });
   assert.ok(frame.requests > OPS / 2, `${frame.requests} requests for ${OPS} draw calls`);
   assert.ok(frame.bytes > 1000, 'the frame actually drew something');
-  // 1 in practice: the round trip that ends a frame flushes the batch. The
-  // slack is for a machine slow enough that drawing outlives the client's
-  // 5 ms age gate, which splits the batch rather than sitting on it. What
-  // must not happen is a write per request.
-  assert.ok(frame.writes <= 3, `${frame.writes} writes for ${frame.requests} requests`);
+  assert.equal(frame.writes, 1, `${frame.writes} writes for ${frame.requests} requests`);
+  assert.equal(frame.midFrame, 0, 'nothing is written while the frame is being drawn');
+});
+
+test('the shipped defaults keep writes flat as a frame grows', async () => {
+  const frame = await measureFrame();
+  // 1 on an idle machine. A loaded one can take more than the client's 5 ms
+  // age limit to paint, and the batch is then split rather than sat on —
+  // which is the point of that limit. What must not happen is a write per
+  // request, so assert the shape (O(1)) rather than an exact count.
+  assert.ok(
+    frame.writes * 10 <= frame.requests,
+    `${frame.writes} writes for ${frame.requests} requests`
+  );
 });
 
 test('bufferRequests: false restores a write per request', async () => {
