@@ -22,6 +22,8 @@ matching file here (see AGENTS.md).
 - [2d rendering context](context-2d.md) — canvas-like drawing API over XRender
 - [Images](images.md) — PNG/JPEG loading (`loadImage`), the `Image` object,
   `drawImage`
+- [Surface](surface.md) — draw once, composite many times; a8 coverage
+  surfaces for drawings that take their colour from the caller
 - [Fonts](fonts.md) — font lookup, loading, rasterization pipeline
 - [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout, MarkdownView,
   wire-efficiency design, the vector (trapezoid) path for large/animated sizes

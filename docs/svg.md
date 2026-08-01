@@ -39,14 +39,19 @@ See `examples/svg-viewer.js` for a small viewer
   - `theme.background` — window-mode background fill (default `'white'`)
   - `fit` — window-mode fitting: `'contain'` (default; fitted + centered,
     preserving aspect ratio) or `'fill'` (stretch)
+  - `color` — what `currentColor` resolves to (default `'#000'`); see
+    [Taking colour from the caller](#taking-colour-from-the-caller)
 - `view.setSvg(svgText)` — parse and adopt a document (a string containing
   an `<svg>` element). Re-renders in window mode
 - `view.setSvgDom(element)` — adopt an already-parsed htmlparser2 `<svg>`
   element. Used by [HtmlView](html.md) for inline SVG; tolerates HTML-mode
   parses (lowercased tag/attribute names like `viewbox`, `lineargradient`)
-- `view.draw(ctx, x, y[, w, h])` — draw into any 2d context; `w`/`h` default
-  to the natural size. The `viewBox` (when present) is scaled to the target
-  box
+- `view.draw(ctx, x, y[, w, h][, opts])` — draw into any 2d context; `w`/`h`
+  default to the natural size. The `viewBox` (when present) is scaled to the
+  target box. `opts.color` sets what `currentColor` resolves to for this draw
+  only, overriding the view's own `color`
+- `view.paintKind` / `view.soloPaint` — how many colours the document commits
+  to, from the parse; see [Taking colour from the caller](#taking-colour-from-the-caller)
 - `view.render()` — window mode: clear the background and draw fitted;
   called automatically on `expose`
 - `view.naturalWidth` / `view.naturalHeight` — from the `width`/`height`
@@ -86,6 +91,50 @@ Not supported (skipped silently): CSS stylesheets/`<style>`, `clipPath`,
 `mask`, `filter`, `pattern`, `marker`, animation/SMIL, `foreignObject`,
 external references, `preserveAspectRatio` values other than the default
 behavior, stroke dashing, and full `text` layout (`tspan`, `textPath`).
+
+## Taking colour from the caller
+
+An icon set is written without colours: every shape says
+`fill="currentColor"` or `stroke="currentColor"`, and the surrounding UI
+decides what that means. One parsed document then serves a normal row, a
+hovered row and a disabled row.
+
+```js
+const icon = new SvgView(null).setSvg(iconMarkup);
+
+icon.draw(ctx, x, y, 20, 20, { color: theme.fg });
+icon.draw(ctx, x, y + 24, 20, 20, { color: theme.accent }); // same document
+```
+
+`opts.color` applies to that draw only. A default for every draw goes on the
+view, and window mode uses it too, since `render()` takes no options:
+
+```js
+const view = new SvgView(wnd, { color: '#0984e3' });
+```
+
+Both fall back to the CSS initial value, black. Note that only `currentColor`
+follows this: the initial `fill` is black, not `currentColor`, so a document
+that names no paint at all still fills black — as it does in a browser.
+
+### paintKind: which documents can be recoloured
+
+Parsing also records how many distinct paints the drawing actually commits
+to, which is what a caller caching rendered output needs in order to decide
+whether the colour belongs in its cache key:
+
+- `view.paintKind === 'mono'` — every fill and stroke that reaches a shape is
+  `none` or the *same* paint. The drawing is a coverage mask plus a colour,
+  so one rendered copy can be recoloured for every use. `view.soloPaint` is
+  that paint: a colour, or the literal `'currentColor'` when the document
+  defers to its caller.
+- `view.paintKind === 'multi'` — a second distinct paint, or a
+  gradient/pattern reference. Those colours belong to the drawing rather than
+  to the UI, so a rendered copy is only good for the colours baked into it,
+  and `soloPaint` is `null`.
+
+Opacity does not enter into it: `opacity`, `fill-opacity` and
+`stroke-opacity` scale coverage, which a mask carries perfectly well.
 
 ## SVG path data elsewhere
 
