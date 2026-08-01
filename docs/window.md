@@ -141,6 +141,24 @@ delivered immediately — any buffered noisy events are flushed first so
 handlers observe them in the order they happened. Blits of an already-drawn
 backing store still respect the fence, but skip the timer for latency.
 
+A toolkit that schedules its own painting can go one better and draw a
+discrete input's response *inside* the handler, so the pixels leave with the
+handler's own requests rather than on the next paced frame — a click's
+`:active` flip is one paint of a few hundred microseconds, and waiting a
+frame interval for it buys nothing. `wnd.frameInFlight()` is the gate to
+make that decision with: `false` means the server is caught up and drawing
+now costs nothing extra, `true` means a frame is already on its way and the
+present would only be deferred and coalesced with it. Gating on it is what
+keeps a burst sane — the first wheel notch paints immediately, the rest fold
+into one catch-up frame.
+
+```js
+wnd.on('mousedown', (ev) => {
+  applyPressedState(ev);
+  if (!wnd.frameInFlight()) paint(); // else leave it to the frame clock
+});
+```
+
 Escape hatches, from mildest to rawest:
 
 - `frameInterval = 0` — fence-only pacing (fastest delivery that cannot
@@ -203,6 +221,10 @@ All return `this` unless noted.
 - `getContext(name)` — `'2d'`, `'opengl'` or `'x11'`; see the context docs
 - `requestAnimationFrame(cb)` — returns an id, does not return `this`;
   `cancelAnimationFrame(id)` (see above)
+- `frameInFlight()` — returns a boolean, not `this`: whether the last frame's
+  fence is still unanswered. The gate for painting a discrete input's
+  response from its own handler instead of on the next paced frame (see
+  [above](#frames-coalescing-and-slow-connections))
 - `createWindow(params)` — child window (`parent` preset to this window)
 - `createPixmap(params)` — pixmap defaulting to this window's size, depth 32
 - `setCursor(nameOrShapeId)` — mouse cursor shown over the window (see

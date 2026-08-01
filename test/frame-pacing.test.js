@@ -214,6 +214,57 @@ test('frameInterval paces flushes when the fence is disabled', async () => {
   wnd.destroy();
 });
 
+// frameInFlight() — the gate a toolkit paints a discrete input's response
+// through. What it has to get right is the *transitions*: false while the
+// server is caught up, true from the moment a frame's fence goes out until
+// its reply lands.
+test('frameInFlight tracks the fence across a frame', async () => {
+  const { app, fences } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0 });
+  assert.equal(wnd.frameInFlight(), false, 'nothing drawn yet, nothing to wait for');
+
+  wnd.requestAnimationFrame(() => {});
+  await tick();
+  assert.equal(fences.length, 1);
+  assert.equal(wnd.frameInFlight(), true, 'the frame sent its fence');
+
+  fences.shift()(null);
+  assert.equal(wnd.frameInFlight(), false, 'the server caught up');
+  wnd.destroy();
+});
+
+test('a discrete handler that draws sees the gate open, then closed', async () => {
+  const { app, fences, calls } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0 });
+  wnd._enableBackingStore();
+  const gate = [];
+  wnd.on('mousedown', () => {
+    gate.push(wnd.frameInFlight());
+    wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 }); // as painting would
+  });
+
+  // three notches of a wheel arriving faster than the server can answer
+  wnd.emit('event', { type: 4, x: 1, y: 1, keycode: 4 });
+  wnd.emit('event', { type: 4, x: 1, y: 1, keycode: 4 });
+  wnd.emit('event', { type: 4, x: 1, y: 1, keycode: 4 });
+  assert.deepEqual(gate, [false, true, true], 'open for the first, shut behind it');
+  assert.equal(calls.CopyArea, 1, 'only the first press blitted');
+
+  fences.shift()(null);
+  assert.equal(calls.CopyArea, 2, 'the rest caught up in one blit');
+  wnd.destroy();
+});
+
+test('frameInFlight stays false when frameSync is off', async () => {
+  const { app, fences } = makeMockApp();
+  const wnd = new Window(app, { frameSync: false, frameInterval: 0 });
+  wnd.requestAnimationFrame(() => {});
+  await tick();
+  assert.equal(fences.length, 0, 'no fence is ever sent');
+  assert.equal(wnd.frameInFlight(), false, 'so a caller gating on it never defers');
+  wnd.destroy();
+});
+
 test('interactive resize drives one paced draw per frame', async () => {
   const { app, fences, calls } = makeMockApp();
   const wnd = new Window(app, { frameInterval: 0, width: 100, height: 100 });
