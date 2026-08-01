@@ -250,7 +250,8 @@ All return `this` unless noted.
 - `reparentTo(newParent, x, y)`, `raise()`, `lower()`
 - `setHints(hints)`, `setSizeHints(hints)`, `setWmHints(hints)`,
   `setTransientFor(owner)`, `setClass(instance, class)`,
-  `setWindowType(type)`, `setAlwaysOnTop(on)`, `setPid(pid, hostname)` — see
+  `setWindowType(type)`, `setAlwaysOnTop(on)`, `setPid(pid, hostname)`,
+  `setIcon(images)` / `getIcon()` — see
   [Window manager hints](#window-manager-hints) below
 - `setWmState(names, action)` / `addWmState(names)` /
   `removeWmState(names)` / `getWmStates()` — EWMH `_NET_WM_STATE`:
@@ -379,8 +380,9 @@ one call that legitimately writes an all-zero flags word — clearing
 attention means rewriting the struct without the bit — so it is written
 rather than warned about.
 
-`icon` is the old ICCCM pixmap mechanism; modern desktops prefer EWMH
-`_NET_WM_ICON`, which ntk does not write yet.
+`icon` is the old ICCCM pixmap mechanism — 1-bit or depth-matched, with no
+alpha. Modern desktops prefer EWMH `_NET_WM_ICON`; see
+[Icons](#icons--seticonimages--icon) below.
 
 ### Dialogs — `setTransientFor(owner)` / `transientFor`
 
@@ -417,6 +419,41 @@ toolkits set both.
 
 On an override-redirect window the property is inert, because the window
 manager never manages the window; ntk warns if you set it there.
+
+### Icons — `setIcon(images)` / `icon`
+
+Writes EWMH `_NET_WM_ICON`, the icon a taskbar, alt-tab switcher or titlebar
+draws for the window.
+
+```js
+wnd.setIcon(await loadImage('icon-48.png'));
+wnd.setIcon([icon16, icon32, icon48]);
+wnd.setIcon(await ctx.getImageData(0, 0, 64, 64)); // draw your own
+wnd.setIcon(null);                                  // remove it
+app.createWindow({ icon: icon48 });
+```
+
+An image is an ntk [`Image`](images.md), an `ImageData` from
+[`getImageData`](context-2d.md), or anything with `{ width, height, data }`
+where `data` is straight (non-premultiplied) RGBA. That is the same contract
+as the rest of ntk, so whatever `loadImage()` or `getImageData()` returns
+goes in unchanged — the byte order, channel packing and premultiplication
+that `_NET_WM_ICON` actually wants are ntk's problem, not yours.
+
+Passing several sizes is the useful case: the window manager picks whichever
+suits the slot it is filling rather than scaling one of them badly. No
+particular sizes are required; 16, 32 and 48 cover most desktops. Writing
+again replaces the whole set, and `setIcon(null)` (or `[]`) deletes the
+property outright rather than writing an empty one.
+
+`getIcon()` reads it back as an array of `ImageData`, or `null` when the
+window has none. That is mostly for the window-manager side — a frame
+drawing its own titlebars reads this off each client it manages — so it
+treats the bytes as untrusted: a truncated or nonsensical run yields the
+images that parsed cleanly instead of throwing.
+
+`examples/wm-icon.js` is a working demonstration: draw in the window with
+the mouse and the drawing becomes the window's own icon.
 
 ### Process identity — `setPid(pid, hostname)` / `pid: false`
 
