@@ -128,12 +128,37 @@ with `console.warn` and does not cost the other watchers their event.
 Built on XFixes `SelectSelectionInput`. Every X server since about 2004 has
 the extension; on one that does not, `watch()` rejects saying so, rather than
 silently never firing.
+### Reading a specific target
+
+`options.target` reads one named target instead of text, and resolves with a
+`Buffer` — the mirror of offering one to `write()`:
+
+```js
+const png = await app.clipboard.read({ target: 'image/png' });
+const html = await app.clipboard.read({ target: 'text/html' });
+html.toString('utf8');
+```
+
+`INCR` applies here too, so a payload larger than one request reassembles
+transparently. Rejects naming the target when the owner cannot convert to it.
+
+## `app.clipboard.targets([options]) → Promise<string[]>`
+
+What the current owner can convert to, as target names.
+
+```js
+const offered = await app.clipboard.targets();
+if (offered.includes('image/png')) {
+  const png = await app.clipboard.read({ target: 'image/png' });
+}
+```
+
+Ask this before `read({ target })`: an owner answers `TARGETS` cheaply, where
+guessing costs a failed conversion per guess. Resolves with `[]` when nothing
+owns the selection.
 
 ## Limitations
 
-- `read()` is text: it converts `UTF8_STRING`/`STRING` and returns a
-  string. Reading an arbitrary target (the `image/png` an owner offers, say)
-  is not exposed yet, even though writing one is.
 - Nothing negotiates with a clipboard manager (`SAVE_TARGETS`), so the data
   really does vanish when the app exits.
 - The `STRING` target is latin-1 by definition — codepoints above U+00FF

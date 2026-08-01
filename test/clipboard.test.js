@@ -560,3 +560,57 @@ test('watch() explains itself on a server without XFixes', async () => {
 test('watch() rejects a missing handler before touching the server', async () => {
   await assert.rejects(() => reader.clipboard.watch('CLIPBOARD'), /needs a handler/);
 });
+// --- reading what multi-format write publishes -----------------------------
+//
+// write() has offered arbitrary targets since this change; these are the
+// other half, so an ntk app can get back what an ntk app put there.
+
+test('targets() lists what the owner offers', async () => {
+  await writer.clipboard.write({
+    'text/plain;charset=utf-8': 'hi',
+    'text/html': '<b>hi</b>',
+    'image/png': Buffer.from([0x89, 0x50, 0x4e, 0x47])
+  });
+  const offered = await reader.clipboard.targets();
+  for (const name of ['text/plain;charset=utf-8', 'text/html', 'image/png']) {
+    assert.ok(offered.includes(name), `${name} offered, got ${offered.join(', ')}`);
+  }
+  // the three ntk answers for itself are advertised too, per ICCCM 2.6.2
+  for (const name of ['TARGETS', 'TIMESTAMP', 'MULTIPLE']) {
+    assert.ok(offered.includes(name), `${name} advertised`);
+  }
+});
+
+test('targets() is empty when nothing owns the selection', async () => {
+  const offered = await reader.clipboard.targets({ selection: 'NTK_UNOWNED_SELECTION' });
+  assert.deepEqual(offered, []);
+});
+
+test('read({ target }) returns that target as bytes', async () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  await writer.clipboard.write({ 'image/png': png, 'text/html': '<b>hi</b>' });
+
+  const back = await reader.clipboard.read({ target: 'image/png' });
+  assert.ok(Buffer.isBuffer(back), 'binary targets come back as bytes');
+  assert.deepEqual(back, png);
+
+  const html = await reader.clipboard.read({ target: 'text/html' });
+  assert.equal(html.toString('utf8'), '<b>hi</b>');
+});
+
+test('read({ target }) survives an INCR-sized payload', async () => {
+  const big = Buffer.alloc(300000);
+  for (let i = 0; i < big.length; i++) big[i] = i & 0xff;
+  await writer.clipboard.write({ 'application/octet-stream': big });
+  const back = await reader.clipboard.read({ target: 'application/octet-stream' });
+  assert.equal(back.length, big.length);
+  assert.ok(back.equals(big), 'every byte survives the chunking');
+});
+
+test('read({ target }) says which target the owner could not convert', async () => {
+  await writer.clipboard.write('just text');
+  await assert.rejects(
+    () => reader.clipboard.read({ target: 'image/png' }),
+    /cannot convert to image\/png/
+  );
+});
