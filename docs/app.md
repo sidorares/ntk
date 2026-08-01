@@ -15,6 +15,9 @@ const app2 = await createClient({ display: ':1' });
   ntk additionally understands:
   - `fontSource` — pluggable system-font lookup for `app.fonts`
     (see [fonts.md](fonts.md#pluggable-font-sources));
+  - `rasterizer` / `rasterPolicy` — where fills and strokes are rasterized,
+    and the thresholds for that choice (see
+    [context-2d.md](context-2d.md#where-drawings-are-rasterized));
   - `glxVisual` — visual id `getContext('opengl')` should use instead of
     querying the server for one (see [context-opengl.md](context-opengl.md));
   - `onXError` — called with X protocol errors that no request callback
@@ -52,6 +55,11 @@ const app2 = await createClient({ display: ':1' });
 - `app.fonts` — lazy [FontManager](fonts.md): font matching/loading, shaping
 - `app.clipboard` — lazy [Clipboard](clipboard.md): selection/clipboard
   text transfer (`write()`/`read()`)
+- `app.rasterizer` — the Rasterizer small fills and strokes go through;
+  writable, `null` sends every drawing to the server
+  ([context-2d.md](context-2d.md#swapping-the-rasterizer))
+- `app.rasterPolicy` — the thresholds for that choice, merged over
+  `DEFAULT_RASTER_POLICY`
 
 ## Methods
 
