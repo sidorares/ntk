@@ -1,30 +1,22 @@
 // Draw with the mouse; what you draw becomes the window's icon.
 //
-// A proof of concept for ntk#118 item 5 (`setIcon` / `_NET_WM_ICON`). The
-// property writer is four lines — `wnd.setProperty(name, buf, {type:
-// 'CARDINAL', format: 32})` already exists. What is actually open is the
-// pixel format, and this example exists to make that concrete: it walks a
-// drawing from an XRender surface to an EWMH icon and has to cross three
-// separate conversions on the way.
-//
-//   1. byte order   GetImage hands back bytes in the *server's*
-//                   image_byte_order; property CARD32s are read in the
-//                   *connection's* byte order. Two different fields.
-//   2. channel order which byte is red depends on the source. Off a window
-//                   it is the visual's masks. Off a picture whose format we
-//                   chose it is fixed by RENDER — see below.
-//   3. alpha        XRender is premultiplied. EWMH is not.
-//
-// The trick this example leans on for (2): rather than reading the window
-// (depth 24 here — its fourth byte is padding, not alpha), it composites the
-// pad into a depth-32 pixmap through a picture *we* created with
-// Render.rgba32. PictStandardARGB32 pins A=24 R=16 G=8 B=0 inside the
-// CARD32 regardless of the visual, so only conversions (1) and (3) are left.
-//
 //   node examples/wm-icon.js            draw with the mouse
 //   node examples/wm-icon.js --selftest draw a fixed pattern, verify, exit
 //
 // Keys: c clears the pad, s saves the published icon to /tmp as a PNG.
+//
+// The interesting part is how little there is of it. `_NET_WM_ICON` wants
+// straight (non-premultiplied) ARGB packed into CARD32s, and this walks a
+// drawing all the way there without converting anything by hand:
+//
+//   composite the pad into a depth-32 pixmap -> getImageData() -> setIcon()
+//
+// `getImageData` hands back straight RGBA and `setIcon` takes straight RGBA,
+// so all three conversions between an XRender surface and an EWMH icon —
+// the server's image_byte_order, the visual's channel masks, and
+// premultiplied versus straight alpha — happen inside ntk. When this example
+// was first written the two APIs disagreed and it carried thirty lines of
+// bit-twiddling in their place.
 
 import { createClient, Pixmap, Picture } from '../lib/index.js';
 
@@ -46,17 +38,16 @@ const wnd = app.createWindow({
 });
 const ctx = wnd.getContext('2d');
 
-// ---------------------------------------------------------------------------
-// the icon scratch surface: depth 32, so alpha is real, and rgba32 so the
-// channel positions inside each CARD32 are fixed by RENDER rather than by
-// whatever visual the window happens to have
-// ---------------------------------------------------------------------------
+// The icon scratch surface. Depth 32 so alpha is real — the window itself is
+// depth 24 here, and a depth-24 drawable's fourth byte is padding rather than
+// opacity — and its context reads back as straight RGBA, which is exactly
+// what setIcon takes.
 const iconPixmap = new Pixmap(app, { depth: 32, width: ICON, height: ICON });
-const iconPicture = new Picture(app, { drawable: iconPixmap, format: Render.rgba32 });
+const iconCtx = iconPixmap.getContext('2d');
 
 // A round alpha mask, built here and uploaded once. Antialiased on purpose:
-// the partial alphas around the rim are what make the premultiply conversion
-// observable — get it wrong and the edge pixels come out too dark.
+// the partial alphas around the rim are what would look wrong if anything in
+// the chain forgot to un-premultiply, so they are worth having.
 const maskPixmap = new Pixmap(app, { depth: 8, width: ICON, height: ICON });
 const maskPicture = new Picture(app, { drawable: maskPixmap, format: Render.a8 });
 {
@@ -84,60 +75,12 @@ const maskPicture = new Picture(app, { drawable: maskPixmap, format: Render.a8 }
   X.PutImage(2, maskPixmap.id, gc8, ICON, ICON, 0, 0, 0, 8, mask);
 }
 
-// ---------------------------------------------------------------------------
-// XRender surface -> EWMH _NET_WM_ICON property bytes
-// ---------------------------------------------------------------------------
-/**
- * Pack a depth-32 GetImage reply into the `width, height, pixel...` CARD32
- * run `_NET_WM_ICON` wants. This is the function a real `setIcon()` would
- * own, and the reason item 5 is a decision rather than a patch.
- */
-function toIconProperty(img, width, height, display) {
-  const src = img.data;
-  const out = Buffer.allocUnsafe(8 + width * height * 4);
-
-  // (1) two different byte orders, and they are genuinely different fields:
-  // image_byte_order is the server's pixel order, byte_order is what this
-  // connection agreed to speak and therefore how the server will read the
-  // property back.
-  const readPixel = display.image_byte_order
-    ? (o) => src.readUInt32BE(o)
-    : (o) => src.readUInt32LE(o);
-  const writeWord = display.byte_order
-    ? (v, o) => out.writeUInt32BE(v, o)
-    : (v, o) => out.writeUInt32LE(v, o);
-
-  writeWord(width, 0);
-  writeWord(height, 4);
-
-  for (let i = 0; i < width * height; i++) {
-    const px = readPixel(i * 4);
-    // (2) fixed by Render.rgba32 (PictStandardARGB32), not by the visual
-    const a = (px >>> 24) & 0xff;
-    let r = (px >>> 16) & 0xff;
-    let g = (px >>> 8) & 0xff;
-    let b = px & 0xff;
-    // (3) XRender stores c*a; EWMH wants c. Fully transparent pixels carry
-    // no colour to recover, and clamping matters because a rounded-up
-    // premultiplied channel can exceed its own alpha.
-    if (a === 0) {
-      r = g = b = 0;
-    } else if (a < 255) {
-      r = Math.min(255, Math.round((r * 255) / a));
-      g = Math.min(255, Math.round((g * 255) / a));
-      b = Math.min(255, Math.round((b * 255) / a));
-    }
-    writeWord((((a << 24) | (r << 16) | (g << 8) | b) >>> 0), 8 + i * 4);
-  }
-  return out;
-}
-
-/** scale the pad into the icon surface, read it back, publish it */
+/** scale the pad into the icon surface and publish it */
 async function publishIcon() {
-  const src = ctx.picture; // the window's backing picture (depth 24 here)
+  const src = ctx.picture; // the window's backing picture
 
   // start from fully transparent so the mask's rim leaves real partial alpha
-  Render.FillRectangles(Render.PictOp.Src, iconPicture.id, [0, 0, 0, 0], [0, 0, ICON, ICON]);
+  Render.FillRectangles(Render.PictOp.Src, iconCtx.picture.id, [0, 0, 0, 0], [0, 0, ICON, ICON]);
 
   // dest pixel (i, j) samples (PAD_X + i*PAD/ICON, PAD_Y + j*PAD/ICON)
   Render.SetPictureTransform(src.id, [PAD / ICON, 0, PAD_X, 0, PAD / ICON, PAD_Y, 0, 0, 1]);
@@ -146,7 +89,7 @@ async function publishIcon() {
     Render.PictOp.Src,
     src.id,
     maskPicture.id,
-    iconPicture.id,
+    iconCtx.picture.id,
     0, 0, // src
     0, 0, // mask
     0, 0, // dst
@@ -155,17 +98,7 @@ async function publishIcon() {
   Render.SetPictureTransform(src.id, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
   src.setFilter('nearest');
 
-  const img = await new Promise((res, rej) =>
-    X.GetImage(2, iconPixmap.id, 0, 0, ICON, ICON, 0xffffffff, (e, i) => (e ? rej(e) : res(i)))
-  );
-  const data = toIconProperty(img, ICON, ICON, app.display);
-
-  // 128x128 is 65544 bytes of property data. Sizes from 256x256 up would
-  // overrun the classic 262140-byte request cap, but node-x11 turns on
-  // BIG-REQUESTS during handshake unless you pass `disableBigRequests`, so
-  // max_request_length here is 16 MB and even a full icon set fits in one go.
-  await wnd.setProperty('_NET_WM_ICON', data, { type: 'CARDINAL', format: 32 });
-  return data;
+  await wnd.setIcon(await iconCtx.getImageData(0, 0, ICON, ICON));
 }
 
 // ---------------------------------------------------------------------------
@@ -260,53 +193,37 @@ wnd.on('keydown', async (ev) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// verification: read the property back off the server and decode it the way
-// a window manager would, so the conversion is checked rather than assumed
-// ---------------------------------------------------------------------------
-async function readBackIcon() {
-  const prop = await wnd.getProperty('_NET_WM_ICON');
-  if (!prop) return null;
-  const buf = prop.data;
-  const read = app.display.byte_order
-    ? (o) => buf.readUInt32BE(o)
-    : (o) => buf.readUInt32LE(o);
-  const w = read(0);
-  const h = read(4);
-  const rgba = Buffer.alloc(w * h * 4); // straight RGBA, what a decoder wants
-  for (let i = 0; i < w * h; i++) {
-    const px = read(8 + i * 4);
-    rgba[i * 4] = (px >>> 16) & 0xff;
-    rgba[i * 4 + 1] = (px >>> 8) & 0xff;
-    rgba[i * 4 + 2] = px & 0xff;
-    rgba[i * 4 + 3] = (px >>> 24) & 0xff;
-  }
-  return { width: w, height: h, data: rgba, words: buf.length / 4 };
-}
-
+/**
+ * Read the icon back off the server — the same call a window manager makes —
+ * and write it out, so the round trip is checked rather than assumed.
+ */
 async function savePublishedIcon(path) {
-  const { PNG } = await import('pngjs');
-  const icon = await readBackIcon();
-  if (!icon) {
+  const icons = await wnd.getIcon();
+  if (!icons) {
     console.log('no _NET_WM_ICON set yet');
     return null;
   }
-  const png = new PNG({ width: icon.width, height: icon.height });
-  icon.data.copy(png.data);
+  const { PNG } = await import('pngjs');
   const { writeFileSync } = await import('node:fs');
+  const icon = icons[0];
+  const png = new PNG({ width: icon.width, height: icon.height });
+  png.data.set(icon.data);
   writeFileSync(path, PNG.sync.write(png));
-  console.log(`wrote ${path} (${icon.width}x${icon.height}, ${icon.words} CARD32s)`);
+  console.log(`wrote ${path} (${icon.width}x${icon.height})`);
   return icon;
 }
 
 // ---------------------------------------------------------------------------
 paint();
-console.log(`window 0x${wnd.id.toString(16)} — image_byte_order=${app.display.image_byte_order} ` +
-  `connection byte_order=${app.display.byte_order} window depth=${wnd.depth || app.display.screen[0].root_depth}`);
+console.log(
+  `window 0x${wnd.id.toString(16)} — image_byte_order=${app.display.image_byte_order} ` +
+    `connection byte_order=${app.display.byte_order} ` +
+    `window depth=${wnd.depth || app.display.screen[0].root_depth}`
+);
 
 if (selftest) {
-  // a fixed pattern instead of the mouse: three strokes, one per primary, so
-  // the read-back can be checked against known colours
+  // a fixed pattern instead of the mouse: three strokes, so the read-back can
+  // be checked against known colours
   strokes.push([[PAD_X + 40, PAD_Y + 60], [PAD_X + 216, PAD_Y + 60]]);
   strokes.push([[PAD_X + 40, PAD_Y + 128], [PAD_X + 216, PAD_Y + 196]]);
   strokes.push([[PAD_X + 128, PAD_Y + 40], [PAD_X + 128, PAD_Y + 216]]);
@@ -315,7 +232,6 @@ if (selftest) {
   await publishIcon();
   const icon = await savePublishedIcon('/tmp/ntk-wm-icon.png');
 
-  // spot checks against what was drawn
   const at = (x, y) => {
     const o = (y * icon.width + x) * 4;
     return [icon.data[o], icon.data[o + 1], icon.data[o + 2], icon.data[o + 3]];
@@ -329,10 +245,10 @@ if (selftest) {
   console.log('paper  (expect ~251,241,199,255):', paper);
   console.log('corner (expect 0,0,0,0):', corner);
 
-  // The premultiply check, and the only one that would notice conversion (3)
-  // being skipped. Find a rim pixel with partial alpha and compare it to the
-  // opaque pixel 8px further in along the same radius: un-premultiplied they
-  // are the same colour, premultiplied the rim is scaled down by its alpha.
+  // The premultiply check, and the only one that would notice the alpha
+  // conversion being skipped. Find a rim pixel with partial alpha and compare
+  // it to the opaque pixel 8px further in along the same radius: straight
+  // they are the same colour, premultiplied the rim is scaled by its alpha.
   const c = (ICON - 1) / 2;
   let rim = null;
   let inner = null;
@@ -341,9 +257,7 @@ if (selftest) {
       const p = at(x, y);
       if (p[3] < 60 || p[3] > 200) continue;
       const len = Math.hypot(x - c, y - c) || 1;
-      const ix = Math.round(x - ((x - c) / len) * 8);
-      const iy = Math.round(y - ((y - c) / len) * 8);
-      const q = at(ix, iy);
+      const q = at(Math.round(x - ((x - c) / len) * 8), Math.round(y - ((y - c) / len) * 8));
       if (q[3] !== 255) continue;
       rim = p;
       inner = q;
