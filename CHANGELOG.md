@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.0.0](https://github.com/sidorares/ntk/compare/v4.3.0...v5.0.0) (2026-08-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* load the layout engine without top-level await ([#143](https://github.com/sidorares/ntk/issues/143))
+
+### Features
+
+* load the layout engine without top-level await ([#143](https://github.com/sidorares/ntk/issues/143)) ([3ea8127](https://github.com/sidorares/ntk/commit/3ea8127190eec5b82cd3fcb6b59b4c287114cd71))
+* one socket write per frame — buffer requests by default ([#141](https://github.com/sidorares/ntk/issues/141)) ([8c6e76d](https://github.com/sidorares/ntk/commit/8c6e76df34eb5efc9627238e3f0b9807b96d43d3))
+
 ## [4.3.0](https://github.com/sidorares/ntk/compare/v4.2.0...v4.3.0) (2026-08-01)
 
 
