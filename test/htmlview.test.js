@@ -2,11 +2,16 @@
 // server; needs fontconfig for text measurement).
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { test } from 'node:test';
+import { before, test } from 'node:test';
 
 import FontManager from '../lib/text/fontmanager.js';
 import HtmlView from '../lib/widgets/htmlview.js';
+import { loadLayout } from '../lib/yoga.js';
 import { invalidation } from './helpers/async.js';
+
+// HtmlView lays out with yoga's WebAssembly. createClient() loads it for an
+// application; these tests have no App, so they load it themselves.
+before(() => loadLayout());
 
 let hasFontconfig = true;
 try {

@@ -36,10 +36,31 @@ parsing [postcss](https://www.npmjs.com/package/postcss). PNG/JPEG images
 render through the [image pipeline](images.md); SVG — inline or as an
 `<img>` source — through the [SVG widget](svg.md).
 
-The yoga-layout instance ntk uses is re-exported as `Yoga`
-(`import { Yoga } from 'ntk'`) so downstream layout consumers — e.g. the
-react-x11 renderer — share the same WASM module and enum values instead of
-loading a second, possibly version-mismatched copy.
+The layout engine ntk uses is exported as `Yoga` (`import { Yoga } from
+'ntk'`) so downstream layout consumers — e.g. the react-x11 renderer — share
+the same WASM instance and enum values instead of loading a second, possibly
+version-mismatched copy. Import it from `ntk`, not from `yoga-layout`: the
+package's default entry builds its own instance, and nodes from two
+instances cannot be mixed.
+
+Its enum constants (`Yoga.FLEX_DIRECTION_ROW`, …) are readable as soon as
+ntk is imported, so a module-level lookup table works. `Yoga.Node` and
+`Yoga.Config` need the WebAssembly, which `createClient()` loads — a widget
+used **without** an App must load it first:
+
+```js
+import { HtmlView, loadLayout } from 'ntk';
+
+await loadLayout();                       // createClient() does this for you
+const view = new HtmlView(null, { fonts });
+view.setHtml('<p>headless layout</p>');
+view.layout(400);
+```
+
+Using `Yoga.Node` before that throws a message saying so. `layoutLoaded()`
+reports whether it is in place. This split is what keeps ntk out of
+top-level await, which is what makes a CommonJS bundle — and therefore a
+single-file executable — possible; see [packaging.md](packaging.md).
 
 The value parsers the CSS layer is built on are exported for the same
 reason: `cssColor(value)` → **premultiplied** `[r, g, b, a]` floats 0..1,
