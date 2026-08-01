@@ -26,15 +26,11 @@ after(async () => {
   if (app) await app.close();
 });
 
-const readPixels = (ctx, w, h) =>
-  new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, w, h, (err, data) => (err ? reject(err) : resolve(data)))
-  );
+const readPixels = (ctx, w, h) => ctx.getImageData(0, 0, w, h);
 
-// BGRA readback -> [r, g, b]
 const px = (image, w, x, y) => {
   const i = (y * w + x) * 4;
-  return [image.data[i + 2], image.data[i + 1], image.data[i]];
+  return [image.data[i], image.data[i + 1], image.data[i + 2]];
 };
 
 function freshCtx(size = 64) {
@@ -273,10 +269,10 @@ test('MarkdownView: block decoration reaches an arbitrary 2d context', async (t)
   view.draw(ctx, 10, 10);
 
   const image = await readPixels(ctx, 300, 200);
-  // scan for the fence background #00ff00 (BGRA readback)
+  // scan for the fence background #00ff00
   let filled = 0;
   for (let i = 0; i < image.data.length; i += 4) {
-    if (image.data[i + 2] === 0x00 && image.data[i + 1] === 0xff && image.data[i] === 0x00) filled++;
+    if (image.data[i] === 0x00 && image.data[i + 1] === 0xff && image.data[i + 2] === 0x00) filled++;
   }
   assert.ok(filled > 200, `fence background pixels present (${filled})`);
   pixmap.destroy();

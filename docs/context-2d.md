@@ -124,9 +124,40 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   be another ntk 2d context (server-side composite of the whole drawable) or
   a node-canvas-like object exposing `image.context.getImageData()` (pixels
   are uploaded)
-- `createImageData(w, h)`, `putImageData(data, x, y)`
-- `getImageData(x, y, w, h, cb)` — async, `cb(err, image)`; `image.data` is
-  BGRA byte order
+### Pixels
+
+Pixel access follows the canvas API: `ImageData` is straight
+(non-premultiplied) RGBA in a `Uint8ClampedArray`, rows top to bottom, and
+ntk converts to and from the drawable's own layout at the boundary.
+
+- `getImageData(x, y, w, h)` — resolves to an `ImageData`. A trailing
+  `cb(err, imageData)` is still accepted. Reads the backing pixmap on
+  double-buffered windows, so it is valid even where the window is occluded
+- `putImageData(data, x, y[, dirtyX, dirtyY, dirtyWidth, dirtyHeight])` —
+  writes straight RGBA back, optionally only part of the source
+- `createImageData(w, h)` / `createImageData(imagedata)` — a blank
+  `ImageData`; the second form copies the size, not the pixels
+
+```js
+const img = await ctx.getImageData(0, 0, 64, 64);
+img.data[0] = 255; // red channel of the top-left pixel
+ctx.putImageData(img, 0, 0);
+```
+
+What the drawable actually holds is none of those things — `GetImage`
+returns words in the *server's* `image_byte_order` (a different handshake
+field from the one the connection speaks), the channel positions come from
+the visual's masks, anything XRender composited into is premultiplied, and a
+depth-24 drawable's fourth byte is undefined padding rather than opacity.
+Converting costs a pass over the pixels: roughly 0.04 ms for a 128×128 read,
+0.7 ms at 640×480, 4.6 ms at 1920×1080.
+
+- `readPixels(x, y, w, h)` — the way out when you want the server's own
+  bytes, for handing straight back to `PutImage` or into a codec. Resolves to
+  `{ width, height, data, depth, bitsPerPixel, byteOrder, masks,
+  premultiplied }`, so unlike a bare `GetImage` the bytes say what they mean.
+  `byteOrder` is `'lsb'` or `'msb'`; `masks.alpha` is 0 when the drawable has
+  no alpha channel
 
 ## Paths
 

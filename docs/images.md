@@ -27,6 +27,10 @@ wnd.map();
   `URL`, or a `Buffer`/`Uint8Array` of encoded PNG/JPEG bytes
 - `decodeImage(buffer)` → `Image` — synchronous decode of in-memory bytes;
   the format is sniffed from magic bytes
+- `new Image(imagedata)` — an `ImageData` from
+  [`ctx.getImageData()`](context-2d.md) is already the right shape, so
+  reading pixels back and turning them into a reusable server-side image
+  needs no conversion
 - `new Image({ width, height, data })` — wrap raw non-premultiplied RGBA
   pixels (`width * height * 4` bytes)
 

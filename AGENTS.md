@@ -191,8 +191,9 @@ README.md holds only the pitch and short samples — details belong in docs/.
   on the PR branch and reference them with
   `https://raw.githubusercontent.com/sidorares/ntk/<commit-sha>/docs/img/…`
   URLs (SHA-pinned links survive squash-merge branch deletion). Headless
-  recipe: draw into a pixmap, read back with `getImageData` (BGRA order) and
-  save with `pngjs` — same pattern as `test/smoke-canvas.test.js`.
+  recipe: draw into a pixmap, read back with `getImageData` (straight RGBA,
+  ready to hand to `pngjs`) and save — same pattern as
+  `test/smoke-canvas.test.js`.
 
 ## Releases
 
@@ -244,7 +245,11 @@ release and publishes to npm via OIDC trusted publishing (no token secrets).
   fragment. For min-content, measure each whitespace-delimited token
   unconstrained; an unconstrained token cannot be broken. Pinned by a test, so
   the probe does not come back as an obvious simplification.
-- `getImageData` returns BGRA byte order.
+- `getImageData`/`putImageData` speak straight (non-premultiplied) RGBA, as
+  the canvas spec does; `lib/imagedata.js` owns the conversion to and from
+  the drawable's layout. `readPixels` is the raw escape hatch. Never assume
+  BGRA — that is only what an LSBFirst server with the standard visual masks
+  happens to want.
 - Colors in XRender are premultiplied `[r, g, b, a]` floats 0..1.
 - A `Window` constructed with an existing `{ id }` returns a cached instance
   if one exists; geometry arrives async (`_readyPromise`).

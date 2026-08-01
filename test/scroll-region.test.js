@@ -140,15 +140,11 @@ test('refusals: no backing, invalid backing, fractional, zero, nothing survives'
 
 // --- pixel truth against the in-process X server -------------------------
 
-const readPixels = (ctx, w, h) =>
-  new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, w, h, (err, data) => (err ? reject(err) : resolve(data)))
-  );
+const readPixels = (ctx, w, h) => ctx.getImageData(0, 0, w, h);
 
-// BGRA readback -> [r, g, b]
 const px = (image, w, x, y) => {
   const i = (y * w + x) * 4;
-  return [image.data[i + 2], image.data[i + 1], image.data[i]];
+  return [image.data[i], image.data[i + 1], image.data[i + 2]];
 };
 
 test('pixels: the band lands shifted exactly, the exposed strip is untouched', async () => {

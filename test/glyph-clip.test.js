@@ -38,10 +38,7 @@ after(async () => {
 const W = 160;
 const H = 80;
 
-const readPixels = (ctx) =>
-  new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, W, H, (err, data) => (err ? reject(err) : resolve(data)))
-  );
+const readPixels = (ctx) => ctx.getImageData(0, 0, W, H);
 
 /** Count pixels darker than white in a band of rows. */
 function inkInRows(image, y0, y1) {
@@ -49,7 +46,7 @@ function inkInRows(image, y0, y1) {
   for (let y = y0; y < y1; y++) {
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
-      // BGRA; anything appreciably darker than the white background is ink
+      // anything appreciably darker than the white background is ink
       if (image.data[i] < 200 || image.data[i + 1] < 200 || image.data[i + 2] < 200) n++;
     }
   }

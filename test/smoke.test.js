@@ -81,13 +81,11 @@ test('2d context: fillRect pixels round-trip through the server', async (t) => {
   ctx.fillStyle = 'red';
   ctx.fillRect(0, 0, 32, 32);
 
-  const image = await new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, 64, 64, (err, data) => (err ? reject(err) : resolve(data)))
-  );
+  const image = await ctx.getImageData(0, 0, 64, 64);
 
   const px = (x, y) => {
-    const i = (y * 64 + x) * 4; // BGRA
-    return [image.data[i + 2], image.data[i + 1], image.data[i]];
+    const i = (y * 64 + x) * 4;
+    return [image.data[i], image.data[i + 1], image.data[i + 2]];
   };
   assert.deepEqual(px(10, 10), [255, 0, 0], 'inside red rect');
   assert.deepEqual(px(50, 50), [255, 255, 255], 'outside red rect');
@@ -113,13 +111,11 @@ test('2d context: gradients and paths render', async (t) => {
   ctx.lineTo(32, 56);
   ctx.fill();
 
-  const image = await new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, 64, 64, (err, data) => (err ? reject(err) : resolve(data)))
-  );
+  const image = await ctx.getImageData(0, 0, 64, 64);
   // triangle centroid should be blue-dominant
   const i = (20 * 64 + 32) * 4;
-  assert.ok(image.data[i] > 200, `blue channel dominant, got ${image.data[i]}`);
-  assert.ok(image.data[i + 2] < 100, 'red channel low inside triangle');
+  assert.ok(image.data[i + 2] > 200, `blue channel dominant, got ${image.data[i + 2]}`);
+  assert.ok(image.data[i] < 100, 'red channel low inside triangle');
 
   pixmap.destroy();
 });
@@ -132,10 +128,7 @@ const countDark = (image) => {
   return dark;
 };
 
-const readPixels = (ctx, w, h) =>
-  new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, w, h, (err, data) => (err ? reject(err) : resolve(data)))
-  );
+const readPixels = (ctx, w, h) => ctx.getImageData(0, 0, w, h);
 
 test('text rendering: fillText draws shaped glyphs, measureText advances', async (t) => {
   if (skip) return t.skip(skip);
@@ -231,10 +224,8 @@ test('backing store: window 2d context draws into backing pixmap', async (t) => 
   // backing pixmap so the result is deterministic
   ctx.fillStyle = 'red';
   ctx.fillRect(0, 0, 64, 64);
-  const image = await new Promise((resolve, reject) =>
-    ctx.getImageData(0, 0, 64, 64, (err, data) => (err ? reject(err) : resolve(data)))
-  );
-  assert.deepEqual([image.data[2], image.data[1], image.data[0]], [255, 0, 0]);
+  const image = await ctx.getImageData(0, 0, 64, 64);
+  assert.deepEqual([image.data[0], image.data[1], image.data[2]], [255, 0, 0]);
 
   wnd.destroy();
 });
@@ -428,8 +419,8 @@ test('images: drawImage composites decoded PNG pixels, alpha blends', async (t) 
 
   const image = await readPixels(ctx, 8, 8);
   const px = (x, y) => {
-    const i = (y * 8 + x) * 4; // BGRA
-    return [image.data[i + 2], image.data[i + 1], image.data[i]];
+    const i = (y * 8 + x) * 4;
+    return [image.data[i], image.data[i + 1], image.data[i + 2]];
   };
   assert.deepEqual(px(1, 1), [255, 0, 0], 'red pixel');
   assert.deepEqual(px(2, 1), [0, 255, 0], 'green pixel');
@@ -460,10 +451,10 @@ test('images: drawImage scales server-side with filtering', async (t) => {
 
   const image = await readPixels(ctx, 32, 32);
   const at = (x, y) => (y * 32 + x) * 4;
-  assert.ok(image.data[at(16, 16) + 2] > 200, 'center scaled area red');
-  assert.ok(image.data[at(16, 16)] < 60, 'center blue channel low');
-  assert.equal(image.data[at(1, 1) + 2], 255, 'outside white');
+  assert.ok(image.data[at(16, 16)] > 200, 'center scaled area red');
+  assert.ok(image.data[at(16, 16) + 2] < 60, 'center blue channel low');
   assert.equal(image.data[at(1, 1)], 255, 'outside white');
+  assert.equal(image.data[at(1, 1) + 2], 255, 'outside white');
 
   // second draw reuses the cached upload (no re-upload path errors)
   ctx.drawImage(img, 0, 0, 1, 1, 4, 4, 8, 8);
@@ -588,7 +579,7 @@ test('markdown: links record hit rectangles and linkAt resolves them', async (t)
   const image = await readPixels(ctx, 300, 120);
   let blueish = 0;
   for (let i = 0; i < image.data.length; i += 4) {
-    if (image.data[i] > 140 && image.data[i + 2] < 100) blueish++; // BGRA
+    if (image.data[i + 2] > 140 && image.data[i] < 100) blueish++;
   }
   assert.ok(blueish > 20, `expected link color/underline pixels, got ${blueish}`);
 
@@ -629,8 +620,8 @@ test('html: HtmlView renders backgrounds, borders, text, links and images', asyn
 
   const image = await readPixels(ctx, 320, 300);
   const px = (x, y) => {
-    const i = (y * 320 + x) * 4; // BGRA
-    return [image.data[i + 2], image.data[i + 1], image.data[i]];
+    const i = (y * 320 + x) * 4;
+    return [image.data[i], image.data[i + 1], image.data[i + 2]];
   };
   assert.deepEqual(px(10, 10), [0x22, 0x44, 0xcc], 'background div');
   assert.deepEqual(px(1, 21), [0xcc, 0x22, 0x22], 'border left edge');
