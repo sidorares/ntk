@@ -1,6 +1,6 @@
 # Clipboard
 
-`app.clipboard` transfers plain text between X clients through selections —
+`app.clipboard` transfers data between X clients through selections —
 lazily created on first use, like `app.fonts`.
 
 X has no clipboard buffer: "copy" means owning a **selection** (the
@@ -19,24 +19,55 @@ await app.clipboard.write('Hello, κόσμε!');
 const text = await app.clipboard.read(); // from whoever owns CLIPBOARD now
 ```
 
-## `app.clipboard.write(text, [options]) → Promise`
+## `app.clipboard.write(data, [options]) → Promise`
 
-Takes ownership of a selection and serves `text` to anyone who pastes.
+Takes ownership of a selection and serves `data` to anyone who pastes.
 
+- `data` — a string, or an object (or `Map`) from **target name** to
+  payload for multi-format ownership:
+
+  ```js
+  await app.clipboard.write({
+    'text/plain;charset=utf-8': 'hello',
+    'text/html': '<b>hello</b>',
+    'image/png': pngBuffer
+  });
+  ```
+
+  String payloads are encoded UTF-8 (latin-1 for the `STRING` target, which
+  is defined as latin-1); `Buffer`s and typed arrays are served as-is, so
+  the target name is the only thing that says what the bytes mean. A bare
+  string is shorthand for offering `UTF8_STRING` and `STRING`.
 - `options.selection` — selection atom name, default `'CLIPBOARD'`; use
   `'PRIMARY'` for the middle-click paste buffer.
+- `options.time` — the server timestamp of the event that triggered the
+  copy (the `time` field of the key or button event you handled). ICCCM 2.1
+  requires ownership to be taken with such a timestamp, and it is what
+  arbitrates a race with another client copying at the same moment. Without
+  one, ntk asks the server for the current time rather than using
+  `CurrentTime`, which ICCCM forbids.
 - Resolves once the server confirms the ownership; rejects if it could not
   be acquired.
-- Ownership (and the text) is held until another client copies — the
-  server's `SelectionClear` then drops the stored text — or the app closes.
-  The text lives in this process: unlike desktops with a clipboard manager,
-  closing the app makes the selection unavailable, which is normal X
-  behavior.
+- Ownership (and the data) is held until another client copies — the
+  server's `SelectionClear` then drops it — or the app closes. The data
+  lives in this process: unlike desktops with a clipboard manager, closing
+  the app makes the selection unavailable, which is normal X behavior.
 
-Requestors are offered the targets `TARGETS`, `UTF8_STRING` and `STRING`
-(latin-1, best effort — codepoints above U+00FF are lossy). Anything else
-(`MULTIPLE`, `TIMESTAMP`, images, …) is refused with a `SelectionNotify`
-carrying property `None`, as ICCCM prescribes.
+Requestors are offered the three targets ICCCM 2.6.2 makes mandatory —
+`TARGETS`, `TIMESTAMP` (the ownership timestamp, as an `INTEGER`) and
+`MULTIPLE` (a batch of conversions listed in an `ATOM_PAIR` property; pairs
+that cannot be converted come back with their property set to `None`) —
+plus whatever the call offered, in the order it offered them. Because ntk
+answers those three itself, they cannot be used as target names in `data`.
+Any other target is refused with a `SelectionNotify` carrying property
+`None`.
+
+Payloads too large for a single X request are transferred incrementally
+(`INCR`, ICCCM 2.7.2): the conversion is answered with an `INCR` property
+holding the byte count, and the chunks follow as the requestor consumes
+them. This is transparent to both sides — nothing in the API changes with
+size. A requestor that abandons a transfer is dropped after 10 seconds of
+silence.
 
 ## `app.clipboard.read([options]) → Promise<string>`
 
@@ -100,14 +131,13 @@ silently never firing.
 
 ## Limitations
 
-- Text only — no image or rich-content targets (yet).
-- `INCR` is not implemented on the **write** side: when another client
-  pastes, the whole payload goes to the server in a single `ChangeProperty`
-  request. Texts approaching the server's maximum request length (~256 KB
-  without BIG-REQUESTS, which node-x11 does not negotiate) may fail to
-  paste into other applications.
-- `SetSelectionOwner` is issued with `CurrentTime` — ntk has no "last user
-  input" timestamp to arbitrate ownership races with.
+- `read()` is text: it converts `UTF8_STRING`/`STRING` and returns a
+  string. Reading an arbitrary target (the `image/png` an owner offers, say)
+  is not exposed yet, even though writing one is.
+- Nothing negotiates with a clipboard manager (`SAVE_TARGETS`), so the data
+  really does vanish when the app exits.
+- The `STRING` target is latin-1 by definition — codepoints above U+00FF
+  are lossy there. Modern requestors ask for `UTF8_STRING`, which is not.
 
 ## Testing without a display
 
@@ -115,4 +145,5 @@ The whole protocol runs against node-x11's in-process JS X server (which
 routes `SetSelectionOwner` / `ConvertSelection` / `SendEvent` since x11
 3.1.0) — see [xserver.md](xserver.md) and `test/clipboard.test.js`, where
 two ntk clients and raw node-x11 clients (a `STRING`-only legacy owner, an
-`INCR` owner) pass text to each other hermetically.
+`INCR` owner, requestors asking for `TARGETS`, `TIMESTAMP`, `MULTIPLE` and
+`INCR` payloads) pass data to each other hermetically.

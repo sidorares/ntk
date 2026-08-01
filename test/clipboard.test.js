@@ -60,12 +60,52 @@ const selectionNotify = (time, requestor, selection, target, property) => {
   return b;
 };
 
-const rawWindow = (display) => {
+const rawWindow = (display, eventMask = 0) => {
   const X = display.client;
   const wid = X.AllocID();
-  X.CreateWindow(wid, display.screen[0].root, 0, 0, 1, 1, 0, 0, 0, 0, {});
+  X.CreateWindow(wid, display.screen[0].root, 0, 0, 1, 1, 0, 0, 0, 0, { eventMask });
   return wid;
 };
+
+// ConvertSelection from a raw client and wait for the owner's answer
+const rawConvert = (X, wid, selection, target, property) =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      X.removeListener('event', onEvent);
+      reject(new Error('no SelectionNotify'));
+    }, 2000);
+    const onEvent = (ev) => {
+      if (ev.type !== 31 || ev.requestor !== wid || ev.target !== target) return;
+      clearTimeout(timer);
+      X.removeListener('event', onEvent);
+      resolve(ev);
+    };
+    X.on('event', onEvent);
+    X.ConvertSelection(wid, selection, target, property, 0);
+  });
+
+// the requestor half of ICCCM 2.7.2: collect chunks until a zero-length one.
+// Call before deleting the INCR property — that delete starts the transfer.
+const rawIncrRead = (X, wid, prop) =>
+  new Promise((resolve, reject) => {
+    const chunks = [];
+    const finish = (err, data) => {
+      clearTimeout(timer);
+      X.removeListener('event', onEvent);
+      return err ? reject(err) : resolve(data);
+    };
+    const timer = setTimeout(() => finish(new Error('INCR transfer stalled')), 4000);
+    const onEvent = (ev) => {
+      if (ev.type !== 28 || ev.wid !== wid || ev.atom !== prop || ev.state !== 0) return;
+      // delete=1 is the "next chunk please" handshake
+      X.GetProperty(1, wid, prop, 0, 0, 0x1fffffff, (err, res) => {
+        if (err) return finish(err);
+        if (res.data.length === 0) return finish(null, Buffer.concat(chunks));
+        chunks.push(res.data);
+      });
+    };
+    X.on('event', onEvent);
+  });
 
 test('round-trip between two clients, including non-ASCII UTF-8', async () => {
   const text = 'Hello, κόσμε! 🎉 — ntk';
@@ -110,36 +150,325 @@ test('ownership handover: last writer wins, loser forgets its text', async () =>
   assert.equal(writer.clipboard._owned.has(clipboardAtom), false);
 });
 
-test('TARGETS lists [TARGETS, UTF8_STRING, STRING]; unknown targets are refused', async () => {
+test('TARGETS lists the required three plus the text targets; unknown ones are refused', async () => {
   await writer.clipboard.write('anything');
   const X = raw.client;
   const wid = rawWindow(raw);
-  const [CLIPBOARD, TARGETS, UTF8_STRING, PROP, PNG] = await Promise.all(
-    ['CLIPBOARD', 'TARGETS', 'UTF8_STRING', 'NTK_TEST_PROP', 'image/png'].map((n) => atom(X, n))
+  const [CLIPBOARD, TARGETS, TIMESTAMP, MULTIPLE, UTF8_STRING, PROP, PNG] = await Promise.all(
+    [
+      'CLIPBOARD',
+      'TARGETS',
+      'TIMESTAMP',
+      'MULTIPLE',
+      'UTF8_STRING',
+      'NTK_TEST_PROP',
+      'image/png'
+    ].map((n) => atom(X, n))
   );
-
-  const convert = (target) =>
-    new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('no SelectionNotify')), 2000);
-      const onEvent = (ev) => {
-        if (ev.type !== 31 || ev.requestor !== wid) return;
-        clearTimeout(timer);
-        X.removeListener('event', onEvent);
-        resolve(ev);
-      };
-      X.on('event', onEvent);
-      X.ConvertSelection(wid, CLIPBOARD, target, PROP, 0);
-    });
+  const convert = (target) => rawConvert(X, wid, CLIPBOARD, target, PROP);
 
   const targetsReply = await convert(TARGETS);
   assert.equal(targetsReply.property, PROP, 'TARGETS conversion succeeds');
   const prop = await getProperty(X, wid, PROP);
   assert.equal(prop.type, X.atoms.ATOM);
-  const offered = [0, 4, 8].map((o) => prop.data.readUInt32LE(o));
-  assert.deepEqual(offered, [TARGETS, UTF8_STRING, X.atoms.STRING]);
+  const offered = [];
+  for (let o = 0; o < prop.data.length; o += 4) offered.push(prop.data.readUInt32LE(o));
+  assert.deepEqual(offered, [TARGETS, TIMESTAMP, MULTIPLE, UTF8_STRING, X.atoms.STRING]);
 
   const refused = await convert(PNG);
   assert.equal(refused.property, 0, 'unsupported target refused with property None');
+});
+
+test('TIMESTAMP answers the ownership time, which is never CurrentTime', async () => {
+  const X = raw.client;
+  const wid = rawWindow(raw);
+  const [CLIPBOARD, TIMESTAMP, PROP] = await Promise.all(
+    ['CLIPBOARD', 'TIMESTAMP', 'NTK_TEST_PROP'].map((n) => atom(X, n))
+  );
+
+  await writer.clipboard.write('stamped');
+  const owned = writer.clipboard._owned.get(await atom(writer.X, 'CLIPBOARD'));
+  // ICCCM 2.1 forbids acquiring with CurrentTime; with no event timestamp
+  // to hand, ntk asks the server for one
+  assert.notEqual(owned.time, 0, 'ownership acquired with a real timestamp');
+
+  const reply = await rawConvert(X, wid, CLIPBOARD, TIMESTAMP, PROP);
+  assert.equal(reply.property, PROP, 'TIMESTAMP conversion succeeds');
+  const prop = await getProperty(X, wid, PROP);
+  assert.equal(prop.type, X.atoms.INTEGER);
+  assert.equal(prop.data.readUInt32LE(0), owned.time);
+
+  // an explicit event timestamp (what a toolkit routing key events has) wins
+  await writer.clipboard.write('stamped by the caller', {
+    selection: 'NTK_TEST_STAMP',
+    time: 4242
+  });
+  const stamped = await rawConvert(
+    X,
+    wid,
+    await atom(X, 'NTK_TEST_STAMP'),
+    TIMESTAMP,
+    PROP
+  );
+  assert.equal(stamped.property, PROP);
+  assert.equal((await getProperty(X, wid, PROP)).data.readUInt32LE(0), 4242);
+});
+
+test('MULTIPLE converts every pair it can and marks the rest None', async () => {
+  await writer.clipboard.write('multi');
+  const X = raw.client;
+  const wid = rawWindow(raw);
+  const [CLIPBOARD, MULTIPLE, UTF8_STRING, ATOM_PAIR, LIST, P1, P2, PNG] = await Promise.all(
+    [
+      'CLIPBOARD',
+      'MULTIPLE',
+      'UTF8_STRING',
+      'ATOM_PAIR',
+      'NTK_TEST_LIST',
+      'NTK_TEST_P1',
+      'NTK_TEST_P2',
+      'image/png'
+    ].map((n) => atom(X, n))
+  );
+
+  // (UTF8_STRING -> P1) can be converted, (image/png -> P2) cannot
+  X.ChangeProperty(0, wid, LIST, ATOM_PAIR, 32, [UTF8_STRING, P1, PNG, P2]);
+  const reply = await rawConvert(X, wid, CLIPBOARD, MULTIPLE, LIST);
+  assert.equal(reply.property, LIST, 'MULTIPLE itself is not refused');
+
+  const list = await getProperty(X, wid, LIST);
+  assert.equal(list.data.readUInt32LE(4), P1, 'converted pair keeps its property');
+  assert.equal(list.data.readUInt32LE(12), 0, 'unconvertible pair comes back as None');
+
+  assert.equal((await getProperty(X, wid, P1)).data.toString('utf8'), 'multi');
+  assert.equal((await getProperty(X, wid, P2)).type, 0, 'nothing written for the refused pair');
+});
+
+test('a payload over the transfer limit is served with INCR', async () => {
+  const clipboard = writer.clipboard;
+  const X = raw.client;
+  const wid = rawWindow(raw, x11.eventMask.PropertyChange);
+  const [CLIPBOARD, UTF8_STRING, INCR, PROP] = await Promise.all(
+    ['CLIPBOARD', 'UTF8_STRING', 'INCR', 'NTK_TEST_INCR_PROP'].map((n) => atom(X, n))
+  );
+
+  const text = `${'a'.repeat(5000)}κόσμος🎉${'b'.repeat(5000)}`;
+  const payload = Buffer.from(text, 'utf8');
+  clipboard._transferLimit = 64; // instead of copying a quarter of a megabyte
+  try {
+    await clipboard.write(text);
+    const reply = await rawConvert(X, wid, CLIPBOARD, UTF8_STRING, PROP);
+    assert.equal(reply.property, PROP);
+
+    const collecting = rawIncrRead(X, wid, PROP);
+    const first = await getProperty(X, wid, PROP); // delete=1 starts the transfer
+    assert.equal(first.type, INCR, 'answered with INCR, not the data itself');
+    assert.equal(first.data.readUInt32LE(0), payload.length, 'INCR carries the byte count');
+    assert.deepEqual(await collecting, payload);
+    // the owner closes the transfer when the empty property it ended with
+    // is deleted, one notification behind the requestor
+    for (let i = 0; i < 50 && clipboard._transfers.size; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(clipboard._transfers.size, 0, 'transfer released');
+    // and gives back the event mask it selected to pace the chunks
+    const attrs = await new Promise((resolve, reject) =>
+      writer.X.GetWindowAttributes(wid, (err, a) => (err ? reject(err) : resolve(a)))
+    );
+    assert.equal(attrs.myEventMasks, 0, 'requestor window left as it was found');
+  } finally {
+    clipboard._transferLimit = null;
+  }
+});
+
+test('an INCR write round-trips through ntk read(), twice on one helper window', async () => {
+  const clipboard = writer.clipboard;
+  const text = `${'x'.repeat(4000)}κόσμε${'y'.repeat(4000)}`;
+  clipboard._transferLimit = 100;
+  try {
+    await clipboard.write(text);
+    assert.equal(await reader.clipboard.read(), text, 'INCR write -> INCR read across clients');
+    // the second paste only works if the first restored PropertyChange on
+    // the requestor's window (here: another ntk client's helper window)
+    assert.equal(await reader.clipboard.read(), text, 'and again');
+    // owner and requestor on one connection: the requestor window is ntk's
+    // own, whose event mask the transfer must not clear
+    assert.equal(await clipboard.read(), text, 'self paste over INCR');
+    assert.equal(await clipboard.read(), text, 'and again');
+  } finally {
+    clipboard._transferLimit = null;
+  }
+});
+
+test('a copy larger than one X request pastes (the real, uncapped threshold)', async () => {
+  // the bug this guards: one ChangeProperty cannot carry more than 65535
+  // four-byte units, and the request never reached the server at all — the
+  // paste came back empty with no error on either side
+  const text = `${'z'.repeat(300000)}κόσμε`;
+  await writer.clipboard.write(text);
+  assert.ok(
+    Buffer.byteLength(text) > writer.clipboard._limit(),
+    'payload is over the single-request limit'
+  );
+  assert.equal(await reader.clipboard.read(), text);
+});
+
+test('MULTIPLE carries INCR pairs, and the requestor window is released once', async () => {
+  const clipboard = writer.clipboard;
+  const X = raw.client;
+  const wid = rawWindow(raw, x11.eventMask.PropertyChange);
+  const [CLIPBOARD, MULTIPLE, ATOM_PAIR, INCR, HTML, PNG, LIST, P1, P2] = await Promise.all(
+    [
+      'CLIPBOARD',
+      'MULTIPLE',
+      'ATOM_PAIR',
+      'INCR',
+      'text/html',
+      'image/png',
+      'NTK_TEST_MLIST',
+      'NTK_TEST_MP1',
+      'NTK_TEST_MP2'
+    ].map((n) => atom(X, n))
+  );
+
+  const html = `<p>${'h'.repeat(3000)}</p>`;
+  const png = Buffer.alloc(3000, 0xa7);
+  clipboard._transferLimit = 64;
+  try {
+    await clipboard.write({ 'text/html': html, 'image/png': png });
+    X.ChangeProperty(0, wid, LIST, ATOM_PAIR, 32, [HTML, P1, PNG, P2]);
+    const reply = await rawConvert(X, wid, CLIPBOARD, MULTIPLE, LIST);
+    assert.equal(reply.property, LIST);
+
+    const list = await getProperty(X, wid, LIST);
+    assert.deepEqual(
+      [list.data.readUInt32LE(4), list.data.readUInt32LE(12)],
+      [P1, P2],
+      'both pairs accepted'
+    );
+
+    const collecting = [rawIncrRead(X, wid, P1), rawIncrRead(X, wid, P2)];
+    const [firstHtml, firstPng] = await Promise.all([
+      getProperty(X, wid, P1),
+      getProperty(X, wid, P2)
+    ]);
+    assert.equal(firstHtml.type, INCR);
+    assert.equal(firstPng.type, INCR);
+    const [gotHtml, gotPng] = await Promise.all(collecting);
+    assert.equal(gotHtml.toString('utf8'), html);
+    assert.deepEqual(gotPng, png);
+
+    for (let i = 0; i < 50 && clipboard._transfers.size; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(clipboard._transfers.size, 0, 'both transfers released');
+    assert.equal(clipboard._watched.size, 0, 'and the window watched for them only once');
+  } finally {
+    clipboard._transferLimit = null;
+  }
+});
+
+test('two INCR conversions at once share one watch on the requestor', async () => {
+  const clipboard = writer.clipboard;
+  const X = raw.client;
+  const wid = rawWindow(raw, x11.eventMask.PropertyChange);
+  const [CLIPBOARD, HTML, PNG, P1, P2] = await Promise.all(
+    ['CLIPBOARD', 'text/html', 'image/png', 'NTK_TEST_CP1', 'NTK_TEST_CP2'].map((n) => atom(X, n))
+  );
+
+  // lopsided on purpose: the short one is done long before the long one,
+  // and must not take the window's event mask with it when it goes
+  const html = `<p>${'c'.repeat(200)}</p>`;
+  const png = Buffer.alloc(12000, 0x5c);
+  clipboard._transferLimit = 64;
+  try {
+    await clipboard.write({ 'text/html': html, 'image/png': png });
+    // ICCCM allows concurrent conversions as long as they use different
+    // properties; both answers are INCR, so both want PropertyChange here
+    const replies = await Promise.all([
+      rawConvert(X, wid, CLIPBOARD, HTML, P1),
+      rawConvert(X, wid, CLIPBOARD, PNG, P2)
+    ]);
+    assert.deepEqual(
+      replies.map((r) => r.property),
+      [P1, P2]
+    );
+
+    const collecting = [rawIncrRead(X, wid, P1), rawIncrRead(X, wid, P2)];
+    await Promise.all([getProperty(X, wid, P1), getProperty(X, wid, P2)]);
+    const [gotHtml, gotPng] = await Promise.all(collecting);
+    assert.equal(gotHtml.toString('utf8'), html);
+    assert.deepEqual(gotPng, png);
+
+    for (let i = 0; i < 50 && clipboard._watched.size; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    // one transfer finishing must not stop pacing the other, and the last
+    // one out gives the window back
+    assert.equal(clipboard._watched.size, 0, 'watch released exactly once');
+  } finally {
+    clipboard._transferLimit = null;
+  }
+});
+
+test('write() offers arbitrary targets, including binary ones', async () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0x7f]);
+  await writer.clipboard.write({
+    'text/plain;charset=utf-8': 'hello',
+    'text/html': '<b>hello</b>',
+    'image/png': png
+  });
+
+  const X = raw.client;
+  const wid = rawWindow(raw);
+  const [CLIPBOARD, TARGETS, TIMESTAMP, MULTIPLE, PLAIN, HTML, PNG, PROP, UTF8_STRING] =
+    await Promise.all(
+      [
+        'CLIPBOARD',
+        'TARGETS',
+        'TIMESTAMP',
+        'MULTIPLE',
+        'text/plain;charset=utf-8',
+        'text/html',
+        'image/png',
+        'NTK_TEST_PROP',
+        'UTF8_STRING'
+      ].map((n) => atom(X, n))
+    );
+
+  const targetsReply = await rawConvert(X, wid, CLIPBOARD, TARGETS, PROP);
+  assert.equal(targetsReply.property, PROP);
+  const list = await getProperty(X, wid, PROP);
+  const offered = [];
+  for (let o = 0; o < list.data.length; o += 4) offered.push(list.data.readUInt32LE(o));
+  assert.deepEqual(
+    offered,
+    [TARGETS, TIMESTAMP, MULTIPLE, PLAIN, HTML, PNG],
+    'the required three, then what the caller offered, in order'
+  );
+
+  assert.equal((await rawConvert(X, wid, CLIPBOARD, HTML, PROP)).property, PROP);
+  assert.equal((await getProperty(X, wid, PROP)).data.toString('utf8'), '<b>hello</b>');
+
+  const pngReply = await rawConvert(X, wid, CLIPBOARD, PNG, PROP);
+  assert.equal(pngReply.property, PROP);
+  const pngProp = await getProperty(X, wid, PROP);
+  assert.equal(pngProp.type, PNG, 'served with the target as its type');
+  assert.deepEqual(pngProp.data, png, 'bytes survive untouched');
+
+  // offering formats explicitly means exactly those formats
+  assert.equal(
+    (await rawConvert(X, wid, CLIPBOARD, UTF8_STRING, PROP)).property,
+    0,
+    'UTF8_STRING was not offered, so it is refused'
+  );
+});
+
+test('write() rejects payloads it cannot name a target for', async () => {
+  await assert.rejects(writer.clipboard.write(Buffer.from('png')), /needs a target name/);
+  await assert.rejects(writer.clipboard.write({}), /at least one target/);
+  await assert.rejects(writer.clipboard.write({ TARGETS: 'no' }), /answered by ntk/);
+  await assert.rejects(writer.clipboard.write({ 'text/html': 42 }), /string or binary/);
 });
 
 test('falls back to STRING when the owner refuses UTF8_STRING', async () => {

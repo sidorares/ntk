@@ -43,8 +43,9 @@ lib/events_map.js          X event code <-> browser-ish event name tables
                            (incl. FocusIn/FocusOut as 'focus'/'blur')
 lib/keyboard.js            key event -> keysym/codepoint: XKB group from the
                            event state, CapsLock only on cased keys
-lib/clipboard.js           app.clipboard: ICCCM selection/clipboard text
-                           transfer (CLIPBOARD/PRIMARY, INCR-aware reads)
+lib/clipboard.js           app.clipboard: ICCCM selection/clipboard transfer
+                           (CLIPBOARD/PRIMARY, required targets, INCR both
+                           ways, multi-format ownership)
 lib/renderingcontext_2d.js canvas-like context (XRender); CanvasGradient
 lib/path.js                Path2D, SVG path-data parser, affine matrices,
                            adaptive bezier flattening
