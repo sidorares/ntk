@@ -21,6 +21,18 @@ const app2 = await createClient({ display: ':1' });
     claimed (races like a request landing after its window was destroyed).
     Defaults to a `console.warn`; without any listener node-x11's error
     emit would throw inside its packet parser and wedge the connection.
+- **Requests are buffered by default**, so a frame is one socket write
+  instead of one per drawing request (see
+  [Frames, coalescing and slow connections](window.md#frames-coalescing-and-slow-connections)).
+  ntk sets
+  node-x11's `bufferRequests` to a 64 KB output buffer; pass your own policy
+  (`{ maxSize, maxDelay, flushOnReply, shouldFlush }`) or `bufferRequests:
+  false` to write per request. Nothing waits on the buffer: node-x11 flushes
+  it when it is full, when its oldest request is 5 ms old, when a request
+  that expects a reply is sent, before the event loop polls, and on
+  `app.close()`/process exit. `app.X.flush()` forces it out at any time, and
+  `app.X.pack_stream.stats` (`{ packets, bytes, writes, allocs }`) reports
+  what reached the socket.
 - The XRender extension is preloaded (required for the 2d context). GLX is
   preloaded when available; `app.display.GLX` is `null` when the server has no
   GLX support.

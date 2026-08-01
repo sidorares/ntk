@@ -153,6 +153,18 @@ Escape hatches, from mildest to rawest:
 `wnd.frameLatency` reports the last measured fence round-trip in
 milliseconds (`null` until the first frame) — a live estimate of connection
 + server latency, useful for adapting rendering quality or animation rates.
+Note that with request buffering on (the default, see
+[app.md](app.md)) the fence reply
+also waits for the server to work through the frame it flushed, so this
+reads higher than it did when every request was written on its own — the
+frame *period* is what did not change.
+
+A frame is emitted in one synchronous run, and the fence is a request with a
+reply, which is exactly what makes node-x11 flush: **one socket write per
+frame**, with no explicit flush call anywhere. A 200-rectangle frame is 203
+requests and 1 write; unbuffered it was 203 writes. `frameSync: false` gives
+up the fence, and the flush then happens when the event loop is about to
+poll — still one write per frame.
 
 ### requestAnimationFrame
 
