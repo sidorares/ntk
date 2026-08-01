@@ -57,7 +57,7 @@ function mockCtx() {
       calls.push(['stroke', path, this.strokeStyle, this.lineWidth, this.globalAlpha]);
     },
     fillText(text, x, y) {
-      calls.push(['fillText', text, x, y, this.font, this.textAlign]);
+      calls.push(['fillText', text, x, y, this.font, this.textAlign, this.fillStyle]);
     },
     createLinearGradient(x1, y1, x2, y2) {
       const g = { type: 'linear', x1, y1, x2, y2, stops: [], addColorStop(o, c) { this.stops.push([o, c]); return this; } };
@@ -217,4 +217,147 @@ test('nested svg documents inside html-ish wrappers still parse', () => {
   const view = new SvgView(null);
   view.setSvg('<?xml version="1.0"?><!-- c --><svg viewBox="0 0 4 4"><rect width="4" height="4"/></svg>');
   assert.equal(view.naturalWidth, 4);
+});
+
+// --- external currentColor, and the mono/multi paint scan ------------------
+
+const ICON = (paint) =>
+  `<svg viewBox="0 0 24 24"><g fill="none" stroke="${paint}" stroke-width="2">` +
+  '<circle cx="12" cy="12" r="9"/><line x1="6" y1="12" x2="18" y2="12"/></g></svg>';
+
+test('currentColor resolves to the colour the caller draws with', () => {
+  const view = new SvgView(null).setSvg(ICON('currentColor'));
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 24, 24, { color: '#e17055' });
+  assert.equal(of(ctx.calls, 'stroke')[0][2], '#e17055');
+});
+
+test('currentColor falls back to the view colour, then to black', () => {
+  const ctx = mockCtx();
+  new SvgView(null, { color: '#0984e3' })
+    .setSvg(ICON('currentColor'))
+    .draw(ctx, 0, 0, 24, 24);
+  assert.equal(of(ctx.calls, 'stroke')[0][2], '#0984e3');
+
+  const plain = mockCtx();
+  new SvgView(null).setSvg(ICON('currentColor')).draw(plain, 0, 0, 24, 24);
+  assert.equal(of(plain.calls, 'stroke')[0][2], '#000');
+});
+
+test('a per-draw colour overrides the view colour, and does not stick', () => {
+  const view = new SvgView(null, { color: '#0984e3' }).setSvg(ICON('currentColor'));
+  const once = mockCtx();
+  view.draw(once, 0, 0, 24, 24, { color: '#d63031' });
+  assert.equal(of(once.calls, 'stroke')[0][2], '#d63031');
+  // the same parsed document, drawn again with no options
+  const after = mockCtx();
+  view.draw(after, 0, 0, 24, 24);
+  assert.equal(of(after.calls, 'stroke')[0][2], '#0984e3');
+});
+
+test('currentColor reaches text too', () => {
+  const view = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 100 100"><text x="0" y="10" fill="currentColor">hi</text></svg>'
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 100, 100, { color: '#00b894' });
+  assert.equal(of(ctx.calls, 'fillText')[0][6], '#00b894');
+});
+
+test('paint scan: one paint is mono, whatever that paint is', () => {
+  const literal = new SvgView(null).setSvg(ICON('#2d3436'));
+  assert.equal(literal.paintKind, 'mono');
+  assert.equal(literal.soloPaint, '#2d3436');
+
+  const deferred = new SvgView(null).setSvg(ICON('currentColor'));
+  assert.equal(deferred.paintKind, 'mono');
+  assert.equal(deferred.soloPaint, 'currentColor');
+
+  // nothing specified anywhere: shapes take the initial fill, black
+  const bare = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'
+  );
+  assert.equal(bare.paintKind, 'mono');
+  assert.equal(bare.soloPaint, '#000');
+});
+
+test('paint scan: a second distinct paint is multi', () => {
+  const two = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10"><rect width="4" height="4" fill="#f00"/>' +
+      '<rect x="5" width="4" height="4" fill="#0f0"/></svg>'
+  );
+  assert.equal(two.paintKind, 'multi');
+
+  // a literal alongside currentColor is two colours, not one
+  const mixed = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10"><rect width="4" height="4" fill="currentColor"/>' +
+      '<rect x="5" width="4" height="4" fill="#0f0"/></svg>'
+  );
+  assert.equal(mixed.paintKind, 'multi');
+});
+
+test('paint scan: a gradient or pattern reference is multi', () => {
+  const grad = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10"><defs><linearGradient id="g">' +
+      '<stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/>' +
+      '</linearGradient></defs><rect width="10" height="10" fill="url(#g)"/></svg>'
+  );
+  assert.equal(grad.paintKind, 'multi');
+});
+
+test('paint scan: opacity does not make a document multi-coloured', () => {
+  const faded = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10"><g opacity="0.5" fill="currentColor">' +
+      '<rect width="4" height="4" fill-opacity="0.3"/>' +
+      '<rect x="5" width="4" height="4"/></g></svg>'
+  );
+  assert.equal(faded.paintKind, 'mono');
+  assert.equal(faded.soloPaint, 'currentColor');
+});
+
+test('paint scan: none never counts, and a <line> contributes no fill', () => {
+  // fill is inherited black here, but a <line> is stroke-only — counting its
+  // fill would call this two-coloured and cost the cache a mask entry
+  const line = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10" stroke="#333"/></svg>'
+  );
+  assert.equal(line.paintKind, 'mono');
+  assert.equal(line.soloPaint, '#333');
+});
+
+test('paint scan: inline style beats the presentation attribute', () => {
+  const styled = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10"><rect width="10" height="10" fill="#f00" style="fill: #0f0"/></svg>'
+  );
+  assert.equal(styled.paintKind, 'mono');
+  assert.equal(styled.soloPaint, '#0f0');
+});
+
+test('paint scan: <use> paints its target with the use element style', () => {
+  const used = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 20 10"><defs><circle id="c" cx="5" cy="5" r="4"/></defs>' +
+      '<use href="#c" fill="currentColor"/><use href="#c" x="10" fill="currentColor"/></svg>'
+  );
+  assert.equal(used.paintKind, 'mono');
+  assert.equal(used.soloPaint, 'currentColor');
+});
+
+test('paint scan: defs that nothing references contribute nothing', () => {
+  // the gradient is declared but never used — the drawing is still one colour
+  const unused = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10"><defs><linearGradient id="g">' +
+      '<stop offset="0" stop-color="#f00"/></linearGradient></defs>' +
+      '<rect width="10" height="10" fill="currentColor"/></svg>'
+  );
+  assert.equal(unused.paintKind, 'mono');
+  assert.equal(unused.soloPaint, 'currentColor');
+});
+
+test('paint scan: re-adopting a document re-scans it', () => {
+  const view = new SvgView(null).setSvg(ICON('currentColor'));
+  assert.equal(view.soloPaint, 'currentColor');
+  view.setSvg('<svg viewBox="0 0 10 10"><rect width="4" height="4" fill="#f00"/>' +
+    '<rect x="5" width="4" height="4" fill="#0f0"/></svg>');
+  assert.equal(view.paintKind, 'multi');
+  assert.equal(view.soloPaint, null);
 });
