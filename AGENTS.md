@@ -51,7 +51,10 @@ lib/glx.js                 GLX visual/fbconfig discovery (app.chooseGLXConfig)
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
 lib/glyphset.js            XRender GlyphSet wrapper
-lib/rasterize.js           pure-JS glyph outline -> a8 bitmap rasterizer
+lib/rasterize.js           pure-JS coverage rasterizer (signed-area
+                           accumulation): glyph outlines and path/stroke
+                           geometry -> a8; the pluggable Rasterizer seam and
+                           the local/server routing policy
 lib/trapezoid.js           polygon -> XRender trapezoids (non-zero/even-odd;
                            vector text and all 2d path fills)
 lib/fontconfig.js          font matching + fallback chain via fc-match CLI
