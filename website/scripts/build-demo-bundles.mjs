@@ -93,7 +93,9 @@ await esbuild.build({
     util: path.join(shimsDir, 'util.js'),
     'node:util': path.join(shimsDir, 'util.js'),
     // heavy optional deps no playground demo needs
+    // both entries: ntk imports the WASM-free 'yoga-layout/load'
     'yoga-layout': path.join(stubsDir, 'yoga-layout.js'),
+    'yoga-layout/load': path.join(stubsDir, 'yoga-layout.js'),
     pngjs: path.join(stubsDir, 'pngjs.js'),
   },
 });
