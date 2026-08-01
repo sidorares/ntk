@@ -213,3 +213,21 @@ test('INCR transfer reassembles chunks split mid-codepoint', async () => {
     X.removeListener('event', onEvent);
   }
 });
+
+// --- selection watching, without XFixes ------------------------------------
+//
+// The in-process server has no XFixes, which makes it the right place to pin
+// what happens on a server that lacks it: a readable error, not a crash and
+// not silence. The working path needs a real server — see
+// test/selection-watch.test.js.
+
+test('watch() explains itself on a server without XFixes', async () => {
+  await assert.rejects(
+    () => reader.clipboard.watch('CLIPBOARD', () => {}),
+    /no XFixes extension/
+  );
+});
+
+test('watch() rejects a missing handler before touching the server', async () => {
+  await assert.rejects(() => reader.clipboard.watch('CLIPBOARD'), /needs a handler/);
+});
