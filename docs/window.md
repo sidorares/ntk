@@ -257,7 +257,8 @@ All return `this` unless noted.
   `removeWmState(names)` / `getWmStates()` — EWMH `_NET_WM_STATE`:
   fullscreen, maximized, skip-taskbar and the rest. Promises
 - `addProtocol(name)` / `removeProtocol(name)` / `setProtocols(names)` /
-  `getProtocols()` — WM_PROTOCOLS, returning promises; `setActions()` is the
+  `getProtocols()` — WM_PROTOCOLS, returning promises. For
+  `WM_DELETE_WINDOW`, `on('close')` opts in for you; `setActions()` is the
   older spelling of `addProtocol('WM_DELETE_WINDOW')`
 - `getProperty(name, options)`, `setProperty(name, value, options)`,
   `deleteProperty(name)`, `getTitle()`, `getSizeHints()`, `getWmHints()`,
@@ -341,11 +342,14 @@ Writes ICCCM `WM_PROTOCOLS`: the messages this window is willing to
 receive, each arriving as a `message` event.
 
 ```js
-await wnd.addProtocol('WM_DELETE_WINDOW'); // close button asks instead of killing
 await wnd.addProtocol('WM_TAKE_FOCUS');
 
 app.createWindow({ protocols: ['WM_DELETE_WINDOW'] });
 ```
+
+For `WM_DELETE_WINDOW` specifically there is no need to do this by hand:
+listening for [`close`](#closing--onclose-ev--evpreventdefault) advertises
+it for you.
 
 The property is a **set**, so these are read-modify-write and return
 promises: `addProtocol`, `removeProtocol`, `setProtocols(names)` to replace
@@ -356,6 +360,46 @@ adds are serialized, so two in the same tick both land.
 It used to write the property as a list of exactly one atom, so the next
 protocol added by any means erased it and the close button quietly stopped
 working — that is the bug the set-based API exists to prevent.
+
+### Closing — `on('close', ev => ev.preventDefault())`
+
+When the user hits the close button, a window manager does not close the
+window: it asks the client to, with a `WM_DELETE_WINDOW` message, and only
+kills the connection outright if the client never said it wanted to be
+asked. `close` is that question.
+
+```js
+wnd.on('close', (ev) => {
+  if (unsaved) {
+    ev.preventDefault();  // stay open
+    showSaveDialog();
+  }
+});
+```
+
+Listening is the opt-in — the handler is registered and `WM_PROTOCOLS` gains
+`WM_DELETE_WINDOW` in the same act, so there is nothing else to call and
+nothing to get wrong. Other protocols already on the window are kept.
+
+If no handler calls `preventDefault()`, the default action runs and the
+window is destroyed, which is what an application that just wants to save
+some state on the way out should want. `preventDefault()` has to be called
+**synchronously** — there is no point at which the answer could be awaited,
+so a handler that needs to ask the user declines first and closes later, by
+calling `destroy()` itself.
+
+The web parallel is close enough to be worth naming, and so is the
+difference: `beforeunload` can no longer really be cancelled by script,
+whereas declining `WM_DELETE_WINDOW` is completely normal — an
+unsaved-changes dialog is exactly this.
+
+A window with no `close` listener behaves as it always did: the request
+arrives as a raw `message` event and nothing happens to the window unless
+the application acts. When both are listened for, `message` fires first.
+
+Note the deliberate symmetry with the window-manager side: a frame calls
+[`client.close()`](#closing-and-focusing) to ask, and the application on the
+other end gets this event.
 
 ### Input model, urgency, icon — `setWmHints(hints)`
 
@@ -776,6 +820,7 @@ constructor arg) automatically extends the window's X event mask.
 | `destroy` | DestroyNotify | wrapper is removed from the cache |
 | `map_request`, `configure_request` | SubstructureRedirect | for window managers |
 | `statechange` | PropertyNotify | derived, not an X event: the window manager changed `_NET_WM_STATE`. The handler gets the state names, not an event object — see [Window states](#window-states--setwmstatenames-action) |
+| `close` | ClientMessage | the window manager asking this window to close. `ev.preventDefault()` declines; see [Closing](#closing--onclose-ev--evpreventdefault) |
 | `property`, `reparent`, `message`, `selection*` | | |
 
 Every event object gets `ev.window` and `ev.target` set to the `Window`.
