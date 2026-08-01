@@ -56,6 +56,48 @@ Reads the current text of a selection from whoever owns it.
 Concurrent `read()` calls on one app are serialized internally (they share
 one transfer property on the helper window).
 
+## `app.clipboard.watch(selection, handler) → Promise<function>`
+
+Call `handler` whenever a selection changes hands — the event an edit menu
+needs to grey out Paste, and what a clipboard-manager-style tool is built on.
+
+```js
+const unwatch = await app.clipboard.watch('CLIPBOARD', (ev) => {
+  pasteItem.disabled = ev.owner === 0;
+});
+
+unwatch(); // stop listening
+```
+
+The handler gets:
+
+| field | |
+| --- | --- |
+| `selection` | the name you asked for, e.g. `'CLIPBOARD'` |
+| `owner` | window now owning it, or `0` when it is unowned |
+| `timestamp` | server time of the change |
+| `selectionTimestamp` | time the current owner acquired it |
+| `reason` | `'new-owner'`, `'destroyed'` or `'closed'` |
+
+`'destroyed'` means the owning window went away, `'closed'` that the owning
+client disconnected. Both usually leave `owner` at `0`, which is the case
+worth acting on: there is nothing to paste.
+
+The alternative is polling `read()`, which is a full conversion round trip
+against whatever foreign client owns the selection — and a two second wait
+when that client is wedged. This is a server-side subscription instead, so it
+costs nothing until something changes.
+
+Watchers share one server-side registration per selection: watching
+`CLIPBOARD` twice is one extra callback and no extra protocol, and the
+registration is dropped only when the last watcher for that selection
+unsubscribes. `unwatch()` is idempotent. A handler that throws is reported
+with `console.warn` and does not cost the other watchers their event.
+
+Built on XFixes `SelectSelectionInput`. Every X server since about 2004 has
+the extension; on one that does not, `watch()` rejects saying so, rather than
+silently never firing.
+
 ## Limitations
 
 - Text only — no image or rich-content targets (yet).
