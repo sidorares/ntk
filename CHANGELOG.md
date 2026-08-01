@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.0](https://github.com/sidorares/ntk/compare/v4.2.0...v4.3.0) (2026-08-01)
+
+
+### Features
+
+* Window.scrollRegion — server-side scroll of the backing store ([#139](https://github.com/sidorares/ntk/issues/139)) ([055028a](https://github.com/sidorares/ntk/commit/055028a2b2e231e30dbecd9b88f33f5e5523d57a))
+
 ## [4.2.0](https://github.com/sidorares/ntk/compare/v4.1.0...v4.2.0) (2026-07-31)
 
 
