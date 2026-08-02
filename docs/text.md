@@ -194,16 +194,44 @@ app.fonts.layout([
 ```
 
 Results are inspectable before drawing: `layout.width`, `layout.height`,
-`layout.truncated`, `layout.lines[] = { x, y, baseline, width, ascent,
-descent, runs, start, end }` where `runs[] = { x, width, run, span, start,
-end }` in visual order (`start`/`end` are the logical UTF-16 ranges the
-line/run covers). `layout.draw(ctx, x, y)` draws, batching consecutive
+`layout.truncated`, `layout.lines[] = { x, y, height, baseline, width,
+ascent, descent, runs, start, end }` where `runs[] = { x, width, run, span,
+start, end }` in visual order (`start`/`end` are the logical UTF-16 ranges
+the line/run covers). `layout.draw(ctx, x, y)` draws, batching consecutive
 same-color runs into single requests.
 
 Line breaking is UAX#14 (`linebreak` package); `\n` forces breaks; a word
 wider than `maxWidth` force-breaks at the widest grapheme prefix that fits;
 trailing whitespace at line ends is stripped (and doesn't count against
 `maxWidth` during fitting, CSS-style).
+
+#### Line boxes and leading
+
+A line has two rectangles, and which one you want depends on what you are
+drawing:
+
+| | |
+| --- | --- |
+| the **line box** | `y` to `y + height`. Boxes tile the layout exactly, so they sum to `layout.height`. This is the selection band, and what hit testing divides on. |
+| the **glyphs** | `baseline - ascent` to `baseline + descent`. This is the ink, and what a caret should match. |
+
+The difference between them is the **leading**, and it is split evenly above
+and below the text — half-leading, as in
+[CSS Inline Layout 3](https://www.w3.org/TR/css-inline-3/#inline-height).
+That is what makes a single line sit visually centred in a box measured from
+`layout.height`, which is what a button or a list row does:
+
+```js
+const layout = app.fonts.layout(label, style, { lineHeight: 1.5 });
+// no manual offset: the text is already centred in layout.height
+layout.draw(ctx, x, y + (rowHeight - layout.height) / 2);
+```
+
+Leading appears even at `lineHeight: 1`, because a font's natural line
+height is `ascent + descent + lineGap` and the gap is real — 8 px at 16 px
+for some UI faces. A `lineHeight` small enough to make the box shorter than
+the glyphs gives negative leading, and the text overflows evenly on both
+sides; CSS does the same.
 
 #### Capping lines, and eliding
 
@@ -280,8 +308,10 @@ const index = layout.indexAt(clickX, clickY);
   **code-point** index in `[0, codePointCount]` (out of range clamps —
   count code points with `Array.from(text).length`, not `text.length`).
   `x` is the caret's visual x within the layout box (alignment included),
-  `y` the top of the line box, `height` its `ascent + descent`, `line` the
-  line index.
+  `y` the top of the **glyphs**, `height` their `ascent + descent`, `line`
+  the line index. The caret tracks the text rather than the line box, so it
+  stays locked to the glyphs whatever the leading; for a full-height
+  selection band use `line.y` and `line.height` instead.
 - `indexAt(x, y)` → logical code-point index of the caret boundary nearest
   to layout-box coordinates: the line is picked by `y` (clamping above the
   first / below the last line), then the nearest boundary by `x` in visual

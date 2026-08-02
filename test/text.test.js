@@ -221,6 +221,85 @@ test('TextLayout force-breaks tokens wider than the container', needsFonts, () =
   }
 });
 
+// ---------- leading ----------
+
+test('leading is split evenly above and below the glyphs', () => {
+  const fonts = fixedFonts();
+  const style = { family: 'sans-serif', size: 16 };
+  for (const lineHeight of [1, 1.25, 1.5, 2, 0.8, 0.5]) {
+    const layout = new TextLayout(fonts, 'Hg\nHg', style, { lineHeight });
+    for (const line of layout.lines) {
+      const above = line.baseline - line.ascent - line.y;
+      const below = line.y + line.height - (line.baseline + line.descent);
+      assert.ok(
+        Math.abs(above - below) < 1e-9,
+        `lineHeight ${lineHeight}: ${above} above vs ${below} below`
+      );
+      // a multiplier too small for the glyphs overflows evenly, as in CSS
+      if (lineHeight >= 1) assert.ok(above >= 0);
+      else assert.ok(above < 0);
+    }
+  }
+});
+
+test('leading applies at lineHeight 1, because a line gap is leading too', () => {
+  // the bug was visible at the default setting, not just above it: a face
+  // whose natural line height exceeds ascent+descent has slack to split
+  const fonts = fixedFonts();
+  const style = { family: 'sans-serif', size: 16 };
+  const m = fonts.match('sans-serif').metrics(16);
+  assert.ok(m.lineGap > 0, 'precondition: this face has a line gap');
+  const line = new TextLayout(fonts, 'Hg', style, {}).lines[0];
+  assert.ok(line.baseline - line.ascent > 0, 'glyphs are not pinned to the box top');
+  assert.ok(Math.abs(line.baseline - line.ascent - m.lineGap / 2) < 1e-9);
+});
+
+test('the line box still tiles the layout height exactly', () => {
+  const fonts = fixedFonts();
+  const style = { family: 'sans-serif', size: 16 };
+  for (const lineHeight of [1, 1.4]) {
+    const layout = new TextLayout(fonts, 'one\ntwo\nthree', style, { lineHeight });
+    assert.equal(layout.lines.length, 3);
+    let y = 0;
+    for (const line of layout.lines) {
+      assert.equal(line.y, y, 'line boxes are contiguous, with no gap or overlap');
+      y += line.height;
+    }
+    assert.equal(layout.height, y);
+  }
+});
+
+test('a single line sits centred in a box measured from layout.height', () => {
+  // the reported symptom: text rides high in any box sized from the layout
+  const fonts = fixedFonts();
+  const layout = new TextLayout(fonts, 'Hg', { family: 'sans-serif', size: 16 }, { lineHeight: 1.5 });
+  const line = layout.lines[0];
+  const above = line.baseline - line.ascent;
+  const below = layout.height - (line.baseline + line.descent);
+  assert.ok(Math.abs(above - below) < 1e-9, `${above} above vs ${below} below`);
+  assert.ok(above > 1, 'precondition: there is real leading to distribute');
+});
+
+test('the caret box is the glyph band, centred in the line box', () => {
+  const fonts = fixedFonts();
+  const layout = new TextLayout(fonts, 'Hg', { family: 'sans-serif', size: 16 }, { lineHeight: 2 });
+  const line = layout.lines[0];
+  const caret = layout.caretPosition(0);
+  assert.equal(caret.y, line.baseline - line.ascent);
+  assert.equal(caret.height, line.ascent + line.descent);
+  assert.ok(caret.y > line.y, 'the caret starts below the line box top');
+  assert.ok(caret.y + caret.height < line.y + line.height, 'and ends above its bottom');
+});
+
+test('hit testing still uses the whole line box', () => {
+  // clicking in the leading belongs to that line, not to a gap between lines
+  const fonts = fixedFonts();
+  const layout = new TextLayout(fonts, 'one\ntwo', { family: 'sans-serif', size: 16 }, { lineHeight: 2 });
+  const second = layout.lines[1];
+  assert.equal(layout.caretPosition(layout.indexAt(0, second.y + 0.5)).line, 1);
+  assert.equal(layout.caretPosition(layout.indexAt(0, second.y + second.height - 0.5)).line, 1);
+});
+
 // ---------- maxLines / ellipsis ----------
 
 const LONG = 'one two three four five six seven eight nine ten eleven twelve';

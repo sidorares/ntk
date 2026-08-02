@@ -134,7 +134,9 @@ test('multi-line: caret y/line from the line the index falls on', () => {
   // index 5 = the soft-wrap boundary maps to the start of the next line
   const start1 = layout.caretPosition(5);
   assert.equal(start1.line, 1);
-  assert.equal(start1.y, layout.lines[1].y);
+  // the caret tracks the glyphs, which sit centred in the line box rather
+  // than pinned to its top (half-leading)
+  assert.equal(start1.y, layout.lines[1].baseline - layout.lines[1].ascent);
   assert.ok(Math.abs(start1.x - layout.lines[1].x) < 1e-6);
   // hit-test y clamps above the first and below the last line
   assert.equal(layout.indexAt(0, -100), 0);
@@ -150,7 +152,13 @@ test('multi-line: caret y/line from the line the index falls on', () => {
 test('empty text: caret at the aligned line origin', () => {
   const fm = manager();
   const left = fm.layout('', style);
-  assert.deepEqual(left.caretPosition(0), { x: 0, y: 0, height: left.lines[0].ascent + left.lines[0].descent, line: 0 });
+  const line = left.lines[0];
+  assert.deepEqual(left.caretPosition(0), {
+    x: 0,
+    y: line.baseline - line.ascent,
+    height: line.ascent + line.descent,
+    line: 0
+  });
   const center = fm.layout('', style, { maxWidth: 100, align: 'center' });
   assert.equal(center.caretPosition(0).x, 50);
   const right = fm.layout('', style, { maxWidth: 100, align: 'right' });
