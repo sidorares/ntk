@@ -129,9 +129,11 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   clip the clip goes to the server directly, rather than through a
   full-surface mask
 - `ctx.destroy()` / `Symbol.dispose` — release the context's server-side
-  resources: its GC, its Picture, its masks and its solid-colour pictures.
+  resources: its GCs, its Picture, its masks and its solid-colour pictures.
   Needed only for contexts created dynamically, such as one per
-  [`Surface`](surface.md); a context on a window lives as long as the window
+  [`Surface`](surface.md); a context on a window lives as long as the window.
+  A context dropped without it still releases its GCs through a finalizer,
+  as `Pixmap` and `Picture` do for theirs
 ### Pixels
 
 Pixel access follows the canvas API: `ImageData` is straight
