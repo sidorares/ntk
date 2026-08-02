@@ -614,3 +614,242 @@ test('read({ target }) says which target the owner could not convert', async () 
     /cannot convert to image\/png/
   );
 });
+
+// --- conversion timestamps (ICCCM 2.4) -------------------------------------
+//
+// A requestor should convert with the timestamp of the event that asked for
+// the data, not CurrentTime. The owner sees it on its SelectionRequest, so a
+// raw client playing owner can assert what went over the wire. Note the
+// server substitutes its own clock for a zero time, which is what makes the
+// default distinguishable from an explicit one.
+
+// A raw selection owner that records the timestamp of every request it gets.
+// `serve(ev)` returns { type, data } to answer with, or null to refuse.
+const recordingOwner = (X, wid, serve) => {
+  const requests = [];
+  const onRequest = (ev) => {
+    if (ev.type !== 30 || ev.owner !== wid) return;
+    requests.push({ target: ev.target, time: ev.time });
+    const payload = serve(ev);
+    let property = ev.property;
+    if (payload) {
+      X.ChangeProperty(0, ev.requestor, property, payload.type, 8, payload.data);
+    } else {
+      property = 0;
+    }
+    X.SendEvent(
+      ev.requestor,
+      0,
+      0,
+      selectionNotify(ev.time, ev.requestor, ev.selection, ev.target, property)
+    );
+  };
+  X.on('event', onRequest);
+  return { requests, stop: () => X.removeListener('event', onRequest) };
+};
+
+const PASTE_TIME = 0x3ade68b1; // a timestamp no server clock will coincide with
+
+test('read({ time }) converts with that timestamp, and without one with CurrentTime', async () => {
+  const X = raw.client;
+  const wid = rawWindow(raw);
+  const [SELECTION, UTF8_STRING] = await Promise.all(
+    ['NTK_TEST_CONVERT_TIME', 'UTF8_STRING'].map((n) => atom(X, n))
+  );
+  const owner = recordingOwner(X, wid, (ev) =>
+    ev.target === UTF8_STRING ? { type: UTF8_STRING, data: Buffer.from('stamped', 'utf8') } : null
+  );
+  X.SetSelectionOwner(wid, SELECTION, 0);
+  try {
+    assert.equal(
+      await reader.clipboard.read({ selection: 'NTK_TEST_CONVERT_TIME', time: PASTE_TIME }),
+      'stamped'
+    );
+    assert.equal(owner.requests.length, 1);
+    assert.equal(owner.requests[0].time, PASTE_TIME, 'the paste timestamp reaches the owner');
+
+    // no time: still CurrentTime, which the server replaces with its own
+    // clock — so the owner sees a real stamp, just not the caller's
+    await reader.clipboard.read({ selection: 'NTK_TEST_CONVERT_TIME' });
+    assert.equal(owner.requests.length, 2);
+    assert.notEqual(owner.requests[1].time, PASTE_TIME, 'the option is what carries it');
+  } finally {
+    owner.stop();
+  }
+});
+
+test('the STRING retry is the same paste, so it reuses its timestamp', async () => {
+  const X = raw.client;
+  const wid = rawWindow(raw);
+  const [SELECTION, UTF8_STRING] = await Promise.all(
+    ['NTK_TEST_RETRY_TIME', 'UTF8_STRING'].map((n) => atom(X, n))
+  );
+  // a legacy owner: refuses UTF8_STRING, so read() falls back to STRING
+  const owner = recordingOwner(X, wid, (ev) =>
+    ev.target === X.atoms.STRING
+      ? { type: X.atoms.STRING, data: Buffer.from('caf\xe9', 'latin1') }
+      : null
+  );
+  X.SetSelectionOwner(wid, SELECTION, 0);
+  try {
+    assert.equal(
+      await reader.clipboard.read({ selection: 'NTK_TEST_RETRY_TIME', time: PASTE_TIME }),
+      'café'
+    );
+    assert.deepEqual(
+      owner.requests.map((r) => r.target),
+      [UTF8_STRING, X.atoms.STRING],
+      'refused UTF8_STRING, then retried as STRING'
+    );
+    assert.deepEqual(
+      owner.requests.map((r) => r.time),
+      [PASTE_TIME, PASTE_TIME],
+      'both halves of one paste carry its timestamp'
+    );
+  } finally {
+    owner.stop();
+  }
+});
+
+test('targets({ time }) and read({ target, time }) carry it too', async () => {
+  const X = raw.client;
+  const wid = rawWindow(raw);
+  const [SELECTION, TARGETS, PNG] = await Promise.all(
+    ['NTK_TEST_TARGETS_TIME', 'TARGETS', 'image/png'].map((n) => atom(X, n))
+  );
+  const owner = recordingOwner(X, wid, (ev) => {
+    if (ev.target === TARGETS) {
+      const list = Buffer.alloc(4);
+      list.writeUInt32LE(PNG, 0);
+      // format 32 for an ATOM list; ChangeProperty's format follows the type
+      X.ChangeProperty(0, ev.requestor, ev.property, X.atoms.ATOM, 32, list);
+      X.SendEvent(
+        ev.requestor,
+        0,
+        0,
+        selectionNotify(ev.time, ev.requestor, ev.selection, ev.target, ev.property)
+      );
+      return undefined; // already answered
+    }
+    return ev.target === PNG ? { type: PNG, data: Buffer.from([0x89, 0x50]) } : null;
+  });
+  X.SetSelectionOwner(wid, SELECTION, 0);
+  try {
+    const offered = await reader.clipboard.targets({
+      selection: 'NTK_TEST_TARGETS_TIME',
+      time: PASTE_TIME
+    });
+    assert.deepEqual(offered, ['image/png']);
+    await reader.clipboard.read({
+      selection: 'NTK_TEST_TARGETS_TIME',
+      target: 'image/png',
+      time: PASTE_TIME
+    });
+    assert.deepEqual(
+      owner.requests.map((r) => r.time),
+      [PASTE_TIME, PASTE_TIME]
+    );
+  } finally {
+    owner.stop();
+  }
+});
+
+// --- giving a selection back (ICCCM 2.3.1) ---------------------------------
+
+test('clear() releases the selection, and a paste then finds no owner', async () => {
+  await writer.clipboard.write('temporary');
+  assert.equal(await reader.clipboard.read(), 'temporary');
+
+  await writer.clipboard.clear();
+  await assert.rejects(() => reader.clipboard.read(), /no owner/);
+  const sel = await atom(writer.X, 'CLIPBOARD');
+  assert.equal(writer.clipboard._owned.has(sel), false, 'and it stops answering for it');
+});
+
+test('clear() gives up one selection, not every selection', async () => {
+  await writer.clipboard.write('for ctrl-v');
+  await writer.clipboard.write('for middle click', { selection: 'PRIMARY' });
+
+  await writer.clipboard.clear();
+
+  await assert.rejects(() => reader.clipboard.read(), /no owner/);
+  assert.equal(await reader.clipboard.read({ selection: 'PRIMARY' }), 'for middle click');
+});
+
+test('clear() releases with the timestamp the selection was acquired with', async () => {
+  const clipboard = writer.clipboard;
+  await clipboard.write('stamped');
+  const sel = await atom(writer.X, 'CLIPBOARD');
+  const acquired = clipboard._owned.get(sel).time;
+  assert.notEqual(acquired, 0);
+
+  const calls = [];
+  const real = clipboard.X.SetSelectionOwner.bind(clipboard.X);
+  clipboard.X.SetSelectionOwner = (owner, selection, time) => {
+    calls.push({ owner, selection, time });
+    return real(owner, selection, time);
+  };
+  try {
+    await clipboard.clear();
+  } finally {
+    clipboard.X.SetSelectionOwner = real;
+  }
+  // ICCCM 2.3.1: owner None, and the acquisition timestamp — not a fresh
+  // one, and not CurrentTime, either of which a real server may reject
+  assert.deepEqual(calls, [{ owner: 0, selection: sel, time: acquired }]);
+});
+
+test('clear() on a selection we do not own sends nothing', async () => {
+  const X = raw.client;
+  const wid = rawWindow(raw);
+  const SELECTION = await atom(X, 'NTK_TEST_FOREIGN');
+  X.SetSelectionOwner(wid, SELECTION, 0);
+  // something else is owned, so this exercises the per-selection check
+  // rather than the "never wrote anything" shortcut
+  await writer.clipboard.write('unrelated');
+
+  await writer.clipboard.clear('NTK_TEST_FOREIGN');
+
+  const owner = await new Promise((resolve, reject) =>
+    writer.X.GetSelectionOwner(SELECTION, (err, id) => (err ? reject(err) : resolve(id)))
+  );
+  assert.equal(owner, wid, 'the real owner keeps the selection');
+});
+
+test('clear() on a clipboard that never wrote anything touches the server at all', async () => {
+  const fresh = await connect();
+  try {
+    await fresh.clipboard.clear();
+    assert.equal(fresh.clipboard._window, null, 'no helper window created for a no-op');
+  } finally {
+    await fresh.close();
+  }
+});
+
+test('a transfer already in flight survives the release', async () => {
+  const clipboard = writer.clipboard;
+  const X = raw.client;
+  const wid = rawWindow(raw, x11.eventMask.PropertyChange);
+  const [CLIPBOARD, UTF8_STRING, INCR, PROP] = await Promise.all(
+    ['CLIPBOARD', 'UTF8_STRING', 'INCR', 'NTK_TEST_CLEAR_INCR'].map((n) => atom(X, n))
+  );
+  const text = `${'a'.repeat(4000)}κόσμε${'b'.repeat(4000)}`;
+  const payload = Buffer.from(text, 'utf8');
+  clipboard._transferLimit = 64;
+  try {
+    await clipboard.write(text);
+    const reply = await rawConvert(X, wid, CLIPBOARD, UTF8_STRING, PROP);
+    assert.equal(reply.property, PROP);
+
+    const collecting = rawIncrRead(X, wid, PROP);
+    const first = await getProperty(X, wid, PROP); // delete=1 starts the chunks
+    assert.equal(first.type, INCR);
+    // give the selection up mid-transfer: ICCCM 2.7.2 says the transfer
+    // still has to finish, and it does because it holds its own copy
+    await clipboard.clear();
+    assert.equal(clipboard._owned.has(CLIPBOARD), false, 'ownership is gone immediately');
+    assert.deepEqual(await collecting, payload, 'every byte still arrives');
+  } finally {
+    clipboard._transferLimit = null;
+  }
+});

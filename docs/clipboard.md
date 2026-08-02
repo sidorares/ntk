@@ -7,9 +7,8 @@ X has no clipboard buffer: "copy" means owning a **selection** (the
 `CLIPBOARD` atom for explicit copy/paste, `PRIMARY` for middle-click paste)
 and answering conversion requests from whichever client pastes; "paste"
 means asking the current owner to convert its data into a property and
-reading it back. `app.clipboard` hides that ICCCM dance behind two
-promises, using a hidden 1×1 never-mapped helper window as the selection
-endpoint.
+reading it back. `app.clipboard` hides that ICCCM dance behind promises,
+using a hidden 1×1 never-mapped helper window as the selection endpoint.
 
 ```js
 import { createClient } from 'ntk';
@@ -49,9 +48,10 @@ Takes ownership of a selection and serves `data` to anyone who pastes.
 - Resolves once the server confirms the ownership; rejects if it could not
   be acquired.
 - Ownership (and the data) is held until another client copies — the
-  server's `SelectionClear` then drops it — or the app closes. The data
-  lives in this process: unlike desktops with a clipboard manager, closing
-  the app makes the selection unavailable, which is normal X behavior.
+  server's `SelectionClear` then drops it — until [`clear()`](#appclipboardclearselection--promise)
+  gives it up, or until the app closes. The data lives in this process:
+  unlike desktops with a clipboard manager, closing the app makes the
+  selection unavailable, which is normal X behavior.
 
 Requestors are offered the three targets ICCCM 2.6.2 makes mandatory —
 `TARGETS`, `TIMESTAMP` (the ownership timestamp, as an `INTEGER`) and
@@ -69,6 +69,36 @@ them. This is transparent to both sides — nothing in the API changes with
 size. A requestor that abandons a transfer is dropped after 10 seconds of
 silence.
 
+## `app.clipboard.clear([selection]) → Promise`
+
+Gives a selection back: stops owning it, and stops answering for it.
+
+```js
+await app.clipboard.clear(); // CLIPBOARD
+await app.clipboard.clear('XdndSelection'); // at the end of a drag
+```
+
+The counterpart to `write()`, which otherwise holds a selection until another
+client takes it or the app exits. Two things want it: a drag source, which
+should stop offering its payload once the drag is over — a stale offer
+answered afterwards is what XDND's "throw out extremely old data" rule is
+about — and apps that clear the clipboard deliberately, a password manager
+being the usual example.
+
+- `selection` — selection atom name, default `'CLIPBOARD'`. One selection at
+  a time: clearing `CLIPBOARD` leaves `PRIMARY` alone.
+- Clearing a selection this app does not own does nothing, and in particular
+  **sends nothing**. `SetSelectionOwner(None)` from a non-owner would take
+  the selection away from whichever client legitimately holds it.
+- Released with the timestamp the selection was acquired with, as ICCCM
+  2.3.1 requires — not a fresh one. The server ignores a release whose time
+  is earlier than the selection's current last-change time, so if another
+  client has taken the selection meanwhile this correctly does nothing,
+  where a fresh timestamp would have taken it away from them.
+- A transfer already in flight still completes: an `INCR` transfer holds its
+  own copy of the payload (ICCCM 2.7.2), exactly as when another client takes
+  the selection from us.
+
 ## `app.clipboard.read([options]) → Promise<string>`
 
 Reads the current text of a selection from whoever owns it.
@@ -76,8 +106,15 @@ Reads the current text of a selection from whoever owns it.
 - `options.selection` — as above, default `'CLIPBOARD'`.
 - `options.timeout` — ms to wait for the owner at each protocol step,
   default 2000.
+- `options.time` — the server timestamp of the event that asked for the
+  paste (the `time` field of the key or button event you handled). ICCCM
+  2.4 says to convert with it rather than `CurrentTime`, so that an owner
+  which has replaced its data since can tell the request is for the older
+  value. Omitting it means `CurrentTime`, which every mainstream owner
+  accepts and a strict one may not.
 - Conversion is requested as `UTF8_STRING` first; if the owner refuses
-  (old Xt/Motif apps), it is retried once as latin-1 `STRING`.
+  (old Xt/Motif apps), it is retried once as latin-1 `STRING`. The retry is
+  part of the same paste, so it carries the same timestamp.
 - Incremental (`INCR`) transfers are followed transparently, so pasting
   data larger than the server's single-transfer limit works.
 - Rejects with a descriptive error when the selection has no owner, when
@@ -86,6 +123,20 @@ Reads the current text of a selection from whoever owns it.
 
 Concurrent `read()` calls on one app are serialized internally (they share
 one transfer property on the helper window).
+
+### Reading a specific target
+
+`options.target` reads one named target instead of text, and resolves with a
+`Buffer` — the mirror of offering one to `write()`:
+
+```js
+const png = await app.clipboard.read({ target: 'image/png' });
+const html = await app.clipboard.read({ target: 'text/html' });
+html.toString('utf8');
+```
+
+`INCR` applies here too, so a payload larger than one request reassembles
+transparently. Rejects naming the target when the owner cannot convert to it.
 
 ## `app.clipboard.watch(selection, handler) → Promise<function>`
 
@@ -128,19 +179,6 @@ with `console.warn` and does not cost the other watchers their event.
 Built on XFixes `SelectSelectionInput`. Every X server since about 2004 has
 the extension; on one that does not, `watch()` rejects saying so, rather than
 silently never firing.
-### Reading a specific target
-
-`options.target` reads one named target instead of text, and resolves with a
-`Buffer` — the mirror of offering one to `write()`:
-
-```js
-const png = await app.clipboard.read({ target: 'image/png' });
-const html = await app.clipboard.read({ target: 'text/html' });
-html.toString('utf8');
-```
-
-`INCR` applies here too, so a payload larger than one request reassembles
-transparently. Rejects naming the target when the owner cannot convert to it.
 
 ## `app.clipboard.targets([options]) → Promise<string[]>`
 
@@ -157,6 +195,9 @@ Ask this before `read({ target })`: an owner answers `TARGETS` cheaply, where
 guessing costs a failed conversion per guess. Resolves with `[]` when nothing
 owns the selection.
 
+Takes `options.selection`, `options.timeout` and `options.time`, all with the
+same meaning as in [`read()`](#appclipboardreadoptions--promisestring).
+
 ## Limitations
 
 - Nothing negotiates with a clipboard manager (`SAVE_TARGETS`), so the data
@@ -171,4 +212,5 @@ routes `SetSelectionOwner` / `ConvertSelection` / `SendEvent` since x11
 3.1.0) — see [xserver.md](xserver.md) and `test/clipboard.test.js`, where
 two ntk clients and raw node-x11 clients (a `STRING`-only legacy owner, an
 `INCR` owner, requestors asking for `TARGETS`, `TIMESTAMP`, `MULTIPLE` and
-`INCR` payloads) pass data to each other hermetically.
+`INCR` payloads, and owners that record the timestamp each conversion
+arrives with) pass data to each other hermetically.

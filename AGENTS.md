@@ -45,7 +45,8 @@ lib/keyboard.js            key event -> keysym/codepoint: XKB group from the
                            event state, CapsLock only on cased keys
 lib/clipboard.js           app.clipboard: ICCCM selection/clipboard transfer
                            (CLIPBOARD/PRIMARY, required targets, INCR both
-                           ways, multi-format ownership)
+                           ways, multi-format ownership, acquire/release
+                           and conversion timestamps)
 lib/renderingcontext_2d.js canvas-like context (XRender); CanvasGradient
 lib/path.js                Path2D, SVG path-data parser, affine matrices,
                            adaptive bezier flattening
