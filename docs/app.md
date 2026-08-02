@@ -54,7 +54,7 @@ const app2 = await createClient({ display: ':1' });
 - `app.X` — the raw node-x11 client, for direct protocol requests
 - `app.fonts` — lazy [FontManager](fonts.md): font matching/loading, shaping
 - `app.clipboard` — lazy [Clipboard](clipboard.md): selection/clipboard
-  text transfer (`write()`/`read()`)
+  transfer (`write()`/`read()`), text or arbitrary targets
 - `app.rasterizer` — the Rasterizer small fills and strokes go through;
   writable, `null` sends every drawing to the server
   ([context-2d.md](context-2d.md#swapping-the-rasterizer))
