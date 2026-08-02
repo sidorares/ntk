@@ -48,5 +48,8 @@
     "esbuild": "^0.28.1",
     "events": "^3.3.0",
     "process": "^0.11.10"
+  },
+  "overrides": {
+    "serialize-javascript": "7.0.3"
   }
 }
