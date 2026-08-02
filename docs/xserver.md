@@ -15,7 +15,8 @@ const server = createServer({ width: 640, height: 480 });
 const [serverEnd, clientEnd] = createStreamPair();
 server.addClientStream(serverEnd);
 
-const app = await createClient({ stream: clientEnd, fontSource });
+// no display, and no fontconfig either: name the faces the test ships
+const app = await createClient({ stream: clientEnd, fontSource: './test/fonts' });
 ```
 
 Everything the 2d context does — path fills (trapezoids), text

@@ -35,8 +35,10 @@ ctx.font = 'bold italic 40px "DejaVu Sans", sans-serif';
 ctx.fillText('Hello', 10, 50);
 ```
 
-Requires `fc-match` on the system (any Linux with X11 has it; macOS:
-`brew install fontconfig`). Matches are cached.
+Requires `fc-match` on the system and font files for it to find. A Linux
+desktop has both; a slim container, a single-file build and stock macOS do
+not — see [Environments without fontconfig](#environments-without-fontconfig).
+Matches are cached.
 
 ## Loading a font file directly
 
@@ -73,6 +75,20 @@ const app = await createClient({ fontSource: source });   // per-app
 setDefaultFontSource(source);
 ```
 
+All three of those also take a **font spec** — a shorthand for the same
+thing, when the fonts are files or bytes you already have:
+
+```js
+await createClient({ fontSource: '/app/fonts' });     // every face in a directory
+await createClient({ fontSource: './Inter.ttf' });    // one file
+await createClient({ fontSource: [bytes, more] });    // bytes, no filesystem
+await createClient({ fontSource: 'system' });         // the default, said out loud
+```
+
+`createFontSource(spec)` is that resolution on its own, and it is idempotent
+— a FontSource passes straight through — which is why the same value works
+everywhere a source does.
+
 `StaticFontSource` matches with fontconfig-like semantics: requested
 families first (in list order), then closest weight and style; every added
 face doubles as a fallback candidate with real coverage data, so
@@ -94,8 +110,173 @@ a path, `loadImage()` accepts encoded bytes, `HtmlView` takes a
 `loadResource` callback, and TeX rendering accepts injected KaTeX assets
 via `configureTex({ katex, fonts })` ([tex.md](tex.md)).
 
+## Environments without fontconfig
+
+The default lookup needs two things from the host: the **`fc-match` binary**,
+and **font files** for it to find. **ntk ships neither.** Which typefaces an
+app draws with is the app's decision, so the toolkit has no fonts of its own
+to fall back on.
+
+Both are missing more often than a desktop suggests:
+
+| | |
+| --- | --- |
+| `node:*-slim`, `*-alpine` | neither, until you install them |
+| `gcr.io/distroless/*`, `scratch` | no package manager to install them with |
+| single-executable builds | one file, shipped to a machine you do not control |
+| kiosk / embedded images | fonts trimmed for size |
+| CI runners | often have fontconfig and no font packages |
+| stock macOS | 370-odd fonts in `/System/Library/Fonts` and no `fc-match` — it arrives with Homebrew or XQuartz |
+
+They are missing **independently**: a `fonts-*` package does not pull in
+fontconfig, and fontconfig does not pull in fonts. An image that picked up
+`libfontconfig1` through cairo or pango still has no `fc-match` CLI. Each
+combination gets its own message, all of them carrying `code:
+'ERR_NTK_NO_FONTS'`:
+
+```
+ntk: no fonts available — the fc-match CLI (fontconfig) is not installed here.
+…
+```
+
+Catch it if you would rather show something than crash:
+
+```js
+try {
+  app.fonts.match('sans-serif');
+} catch (err) {
+  if (err.code === 'ERR_NTK_NO_FONTS') showFontSetupScreen();
+  else throw err;
+}
+```
+
+### Where there is a package manager, install one
+
+This is the honest first answer and it needs no ntk API at all:
+
+```dockerfile
+RUN apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core
+# Alpine: apk add fontconfig font-dejavu
+```
+
+Two lines against any amount of application code. Note that
+`fonts-dejavu-core` ships six faces and no italics; add `fonts-dejavu-extra`
+if you draw italic text.
+
+### Otherwise, hand ntk the faces
+
+Copy the fonts in and point at them. No fontconfig, nothing to install:
+
+```dockerfile
+COPY fonts/ /app/fonts/
+```
+
+```js
+const app = await createClient({ fontSource: '/app/fonts' });
+```
+
+A directory is read once, at connect — so a wrong path is a rejected
+`createClient` rather than a surprise inside your first paint. Entries are
+sorted by name before anything is parsed, because the filesystem must never
+be what decides which face `sans-serif` lands on. Subdirectories need
+`{ fonts: dir, recursive: true }`.
+
+**Point it at your own faces, not at a system font tree.** Every file found
+is parsed and then held for the life of the process, which is right for the
+handful an app ships and wrong for `/usr/share/fonts` — on macOS a single
+`Apple Color Emoji.ttc` is 188 MB. Past 64 files ntk stops and says so;
+`maxFiles` raises it if you mean it.
+
+### Single-executable builds
+
+A SEA resolves built-in modules only, so there is nothing to read at runtime
+and no optional font package to import — the faces have to be *in* the
+binary, as assets:
+
+```json
+{ "main": "app.cjs", "output": "app",
+  "assets": { "DejaVuSans.ttf": "./fonts/DejaVuSans.ttf" } }
+```
+
+```js
+const sea = process.getBuiltinModule('node:sea');
+const app = await createClient({ fontSource: [sea.getRawAsset('DejaVuSans.ttf')] });
+```
+
+`getRawAsset` hands back an `ArrayBuffer` with no copy. Name the keys
+explicitly rather than enumerating them: `getAsset`/`getRawAsset` are
+available from Node 20.12, but `getAssetKeys()` only from 22.20.
+
+### Generic families
+
+`sans-serif`, `serif` and `monospace` are what every widget default asks for,
+so a source built from a spec infers them: `monospace` from the font's own
+metrics (`isFixedPitch`, then whether `i` and `W` are the same width — fonts
+lie about the flag), `sans-serif` and `serif` from the family name in the
+font's `name` table, never the filename.
+
+A generic with no evidence is deliberately **left unaliased** rather than
+guessed at. Inspect what was decided, and override it:
+
+```js
+const source = createFontSource('/app/fonts');
+source.aliases;   // { 'sans-serif': 'dejavu sans', monospace: 'dejavu sans mono' }
+
+await createClient({ fontSource: { fonts: '/app/fonts', alias: { serif: 'Charter' } } });
+```
+
+Explicit aliases always win. A hand-built `StaticFontSource` infers nothing
+unless it calls `inferGenerics()`.
+
+### Two things that surprise people
+
+**Registering fonts is not the same as replacing the source.**
+`app.fonts.load()` wins for the exact family string you register it under —
+and nothing else:
+
+```js
+app.fonts.load('/app/fonts/DejaVuSans.ttf', { family: 'sans-serif' });
+ctx.font = '16px sans-serif';   // fine
+ctx.font = '16px Arial';        // still goes to the source, and still fails
+```
+
+The same is true of any codepoint that face lacks: a bullet or a curly quote
+sends ntk to the source for a fallback. Where there is no source to ask, that
+now draws `.notdef` — a visible empty box — instead of throwing, but the way
+to actually get those glyphs is to give the source the fonts.
+
+**A `.ttc` collection contributes its first face only** when found by path or
+directory scan. Name the others explicitly:
+
+```js
+fontSource: [{ path: './Iosevka.ttc', postscriptName: 'Iosevka-Term' }]
+```
+
+And a `/usr/share/fonts` that is not empty can still yield "no fonts": ntk
+reads `.ttf`, `.otf`, `.woff`, `.woff2`, `.ttc` and `.dfont`, and bitmap
+`.pcf`/`.bdf` fonts are not among them.
+
+### The determinism dividend
+
+Supplying the faces buys more than portability. ntk's rasterizer has no
+hinting and computes exact analytic coverage, and a `StaticFontSource` never
+borrows a face from the host — so with a fixed set of fonts, text rasterizes
+to identical bytes on every machine. That is the precondition for
+image-snapshot testing an ntk app, and it is also the fix for
+family-resolution surprises: on a Mac with fontconfig installed,
+`fc-match sans-serif` answers Hiragino Sans — a CJK face.
+
+The guarantee holds across machines **at a pinned ntk version**, not across
+versions — the rasterizer has shifted text antialiasing before. Pin ntk
+exactly in a snapshot suite. System fonts make ntk *run*; they never make it
+reproducible.
+
 ## Font objects and matching
 
+- `createFontSource(spec)` → `FontSource` — resolve a font spec; idempotent,
+  and `null`/`undefined` pass through
+- `StaticFontSource`: `add(bytes, opts)`, `alias(generic, family)`,
+  `inferGenerics()`, `aliases`, `skipped` (files a spec could not parse)
 - `app.fonts.match(family, { weight, style })` → `Font`
 - `app.fonts.fallbackFor(codepoint, family, opts)` → `Font | null` — best
   installed font covering a codepoint (fontconfig coverage data, confirmed

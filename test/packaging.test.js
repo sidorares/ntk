@@ -36,6 +36,26 @@ test('nothing in lib/ imports the top-level-await yoga entry', () => {
   );
 });
 
+test('nothing in lib/ statically imports a node builtin', () => {
+  // docs/packaging.md and AGENTS.md both promise this: lib/ bundles for the
+  // browser, so a node builtin has to be fetched lazily through
+  // `process.getBuiltinModule` behind a capability check. A static import
+  // breaks the bundle at build time, a long way from whoever added it.
+  // node:events is the one exception — lib/drawable.js extends EventEmitter.
+  const offenders = [];
+  for (const path of sources(libDir)) {
+    const imports = readFileSync(path, 'utf8').matchAll(/from\s+['"](node:[\w/]+)['"]/g);
+    for (const [, mod] of imports) {
+      if (mod !== 'node:events') offenders.push(`${path.slice(libDir.length + 1)}: ${mod}`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "use globalThis.process?.getBuiltinModule?.('node:…') inside the function that needs it"
+  );
+});
+
 test('importing ntk does not load the layout WebAssembly', async () => {
   // startup cost aside, this is what keeps the graph free of top-level await:
   // the assembly is fetched by createClient(), not by module evaluation

@@ -44,7 +44,10 @@ Two rules follow from "the main is CommonJS":
 Inside a SEA, `require()` and `import()` resolve **built-in modules only** —
 a `data:` or `file:` URL import fails with `ERR_UNKNOWN_BUILTIN_MODULE`. That
 is fine for a bundle, which has nothing left to resolve, but it rules out
-loading anything at runtime.
+loading anything at runtime, including any optional package sitting on disk
+beside the binary. `fs` itself is unrestricted; it is the module loader that
+is sandboxed. This is why fonts reach a SEA as **assets** (below) rather than
+as a package ntk could resolve for you.
 
 ntk itself is built for this: nothing in `lib/` uses top-level await, and
 `test/packaging.test.js` keeps it that way. The one thing that would take it
@@ -63,7 +66,35 @@ The binary is large (~140 MB): most of it is node itself.
   `wmClass`, or the desktop groups your windows under the wrong icon
   ([window.md](window.md#application-identity--setclassinstance-class--wmclass)).
 - **Icons** under `usr/share/icons/hicolor/<size>/apps/`.
-- **Fonts**, if the target may not have fontconfig: `StaticFontSource` takes
-  font bytes directly and needs no `fc-match`
-  ([fonts.md](fonts.md#pluggable-font-sources)). Bundling the faces you draw
-  with also makes rendering identical across machines.
+- **Fonts.** ntk ships none, and the default lookup needs both the `fc-match`
+  binary and host font files — neither of which a slim image, a kiosk build or
+  a `.desktop`-launched app on macOS can be assumed to have
+  ([fonts.md](fonts.md#environments-without-fontconfig)).
+
+Fonts are the one item on that list that stops the app rather than making it
+look wrong, so, in order of preference:
+
+```dockerfile
+# where there is a package manager, this is the whole fix
+RUN apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core
+```
+
+```dockerfile
+# otherwise ship the faces …
+COPY fonts/ /app/fonts/
+```
+
+```js
+// … and point at them
+await createClient({ fontSource: '/app/fonts' });
+```
+
+```js
+// in a single file there is no directory to read — the faces are assets
+// { "assets": { "DejaVuSans.ttf": "./fonts/DejaVuSans.ttf" } } in sea-config.json
+const sea = process.getBuiltinModule('node:sea');
+await createClient({ fontSource: [sea.getRawAsset('DejaVuSans.ttf')] });
+```
+
+Shipping the faces you draw with also makes rendering identical across
+machines, which is what makes image-snapshot tests of an ntk app possible.

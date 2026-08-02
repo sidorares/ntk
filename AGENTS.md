@@ -62,7 +62,8 @@ lib/rasterize.js           pure-JS coverage rasterizer (signed-area
 lib/trapezoid.js           polygon -> XRender trapezoids (non-zero/even-odd;
                            vector text and all 2d path fills)
 lib/fontconfig.js          font matching + fallback chain via fc-match CLI
-lib/text/fontsource.js     pluggable FontSource seam: FontconfigFontSource
+lib/text/fontsource.js     pluggable FontSource seam and the font-spec
+                           resolver: FontconfigFontSource
                            (default), StaticFontSource (data-based, browser-
                            safe), process-wide default override
 lib/text/font.js           Font: fontkit face — metrics, coverage, shaping

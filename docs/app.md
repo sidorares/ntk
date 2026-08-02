@@ -13,8 +13,10 @@ const app2 = await createClient({ display: ':1' });
 
 - `options` is passed through to `x11.createClient` (e.g. `{ display: ':1' }`).
   ntk additionally understands:
-  - `fontSource` — pluggable system-font lookup for `app.fonts`
-    (see [fonts.md](fonts.md#pluggable-font-sources));
+  - `fontSource` — where fonts come from: a FontSource, or a font spec such
+    as `'/app/fonts'` or `[bytes]` naming the faces the app ships, which is
+    what an environment without fontconfig needs
+    (see [fonts.md](fonts.md#environments-without-fontconfig));
   - `rasterizer` / `rasterPolicy` — where fills and strokes are rasterized,
     and the thresholds for that choice (see
     [context-2d.md](context-2d.md#where-drawings-are-rasterized));
