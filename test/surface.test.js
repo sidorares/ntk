@@ -275,3 +275,58 @@ describe('context teardown', () => {
     assert.deepEqual(px(2, 2), [255, 0, 255, 255]);
   });
 });
+
+describe('server resources are not leaked', () => {
+  /** count the requests a body issues, by name */
+  function countX(names, body) {
+    const X = app.X;
+    const counts = Object.fromEntries(names.map((n) => [n, 0]));
+    const saved = {};
+    for (const name of names) {
+      saved[name] = X[name];
+      X[name] = (...a) => {
+        counts[name]++;
+        return saved[name].apply(X, a);
+      };
+    }
+    try {
+      body();
+    } finally {
+      for (const name of names) X[name] = saved[name];
+    }
+    return counts;
+  }
+
+  test('drawing a node-canvas source repeatedly allocates once, not per call', () => {
+    // this used to create a GC, a pixmap and a picture per call and free
+    // none of them, so an animation loop leaked three resources a frame
+    const ctx = target();
+    const fake = {
+      width: 4,
+      height: 4,
+      context: {
+        getImageData: () => ({
+          width: 4,
+          height: 4,
+          data: new Uint8ClampedArray(4 * 4 * 4).fill(200),
+        }),
+      },
+    };
+    ctx.drawImage(fake, 0, 0); // first call may create the shared upload GC
+    const counts = countX(['CreateGC', 'CreatePixmap', 'FreePixmap'], () => {
+      for (let i = 0; i < 5; i++) ctx.drawImage(fake, 0, 0);
+    });
+    assert.equal(counts.CreateGC, 0, 'the upload GC is shared across calls');
+    assert.equal(counts.CreatePixmap, 5, 'one scratch pixmap per call');
+    assert.equal(counts.FreePixmap, 5, 'and every one of them freed again');
+  });
+
+  test('destroy() frees the GCs it allocated', () => {
+    const pixmap = app.createPixmap({ width: 8, height: 8, depth: 32 });
+    const ctx = pixmap.getContext('2d');
+    ctx.fillStyle = '#123456';
+    ctx.fillRect(0, 0, 8, 8);
+    const counts = countX(['FreeGC'], () => ctx.destroy());
+    assert.ok(counts.FreeGC >= 1, `at least the target GC, got ${counts.FreeGC}`);
+  });
+});
