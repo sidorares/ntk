@@ -372,21 +372,63 @@ test('the ellipsis stands for the text after it, for caret purposes', () => {
   assert.ok(end.x <= line.width, 'the caret does not wander past the line');
 });
 
-test('an rtl paragraph puts the ellipsis on the left', needsFonts, () => {
+test('an rtl paragraph puts the ellipsis on the left', () => {
+  // `direction` rather than Hebrew text, so this asserts the paragraph-level
+  // rule on any machine, whatever fonts it has
+  const fonts = fixedFonts();
+  const style = { family: 'sans-serif', size: 16 };
+  const rtl = new TextLayout(fonts, LONG, style, { maxWidth: 160, maxLines: 1, overflow: 'ellipsis', direction: 'rtl' });
+  assert.equal(rtl.truncated, true);
+  assert.equal(rtl.baseLevel, 1);
+  assert.equal(marker(rtl.lines[0]), rtl.lines[0].runs[0], 'leading edge of an rtl line is its left');
+  assert.equal(marker(rtl.lines[0]).x, 0);
+
+  // the same content with an ltr base keeps the marker on the right, so it
+  // is the paragraph direction talking, not the script of the trailing run
+  const ltr = new TextLayout(fonts, LONG, style, { maxWidth: 160, maxLines: 1, overflow: 'ellipsis', direction: 'ltr' });
+  const line = ltr.lines[0];
+  assert.equal(marker(line), line.runs[line.runs.length - 1]);
+});
+
+test('a cut inside a word keeps that word at its own bidi level', () => {
+  // Regression: the force-break re-shaped its prefix at level 0 no matter
+  // what level the text was, so a cut inside an rtl word produced an
+  // ltr-shaped run — glyphs backwards, and an even level that stopped
+  // reorderRuns from placing it. Visible as the ellipsis landing on the
+  // wrong side, but wrong on master too for any force-broken rtl word.
+  // Hebrew characters, so the bidi levels are genuinely odd — the test font
+  // has no Hebrew glyphs and does not need any, because levels come from the
+  // text and this is asserting levels, not shapes
+  const fonts = fixedFonts();
+  const style = { family: 'sans-serif', size: 16 };
+  const unbroken = 'שלוםעולםוברוכיםהבאיםלכאןועודטקסטארוךמאוד'; // no break opportunity
+  for (const opts of [
+    { maxWidth: 90 }, // plain force-break, no elision: wrong on master too
+    { maxWidth: 90, maxLines: 1, overflow: 'ellipsis' }
+  ]) {
+    const layout = new TextLayout(fonts, unbroken, style, opts);
+    for (const r of layout.lines[0].runs) {
+      assert.equal(r.run.level & 1, 1, `run ${JSON.stringify(r.run.text)} lost its rtl level`);
+      assert.equal(r.run.direction, 'rtl');
+    }
+  }
+  const elided = new TextLayout(fonts, unbroken, style, { maxWidth: 90, maxLines: 1, overflow: 'ellipsis' });
+  assert.equal(marker(elided.lines[0]), elided.lines[0].runs[0], 'and the marker still lands on the left');
+});
+
+test('real rtl script elides on the left, at a word and mid-word', needsFonts, () => {
   const fonts = new FontManager();
   const style = { family: 'sans-serif', size: 16 };
   const opts = { maxWidth: 90, maxLines: 1, overflow: 'ellipsis' };
-  const rtl = new TextLayout(fonts, 'שלום עולם וברוכים הבאים לכאן', style, opts);
-  assert.equal(rtl.truncated, true);
-  const line = rtl.lines[0];
-  assert.equal(marker(line), line.runs[0], 'leading edge of an rtl line is its left');
-  assert.equal(marker(line).x, 0);
-
-  // the same layout with an ltr base keeps it on the right, so this is the
-  // paragraph direction talking and not the script of the trailing run
-  const mixed = new TextLayout(fonts, 'Hello שלום עולם וברוכים הבאים', style, { ...opts, maxWidth: 100 });
-  const mline = mixed.lines[0];
-  assert.equal(marker(mline), mline.runs[mline.runs.length - 1]);
+  for (const text of [
+    'שלום עולם וברוכים הבאים לכאן', // the cut can land on a space
+    'שלוםעולםוברוכיםהבאיםלכאןועודטקסט' // one long word: the cut is mid-token
+  ]) {
+    const layout = new TextLayout(fonts, text, style, opts);
+    assert.equal(layout.truncated, true, text);
+    assert.equal(marker(layout.lines[0]), layout.lines[0].runs[0], text);
+    assert.equal(marker(layout.lines[0]).x, 0, text);
+  }
 });
 
 test('TextLayout aligns center and right', needsFonts, () => {
