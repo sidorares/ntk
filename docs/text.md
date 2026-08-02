@@ -178,7 +178,9 @@ const layout = app.fonts.layout(content, style, {
   maxWidth: 400,      // target container width (the requested extension)
   align: 'start',     // left | right | center | start | end
   lineHeight: 1.35,   // multiplier over natural font line height
-  direction: 'auto'   // base paragraph direction
+  direction: 'auto',  // base paragraph direction
+  maxLines: 2,        // cap the line count (default: unlimited)
+  overflow: 'clip'    // clip | ellipsis — what the cap looks like
 });
 ```
 
@@ -192,16 +194,68 @@ app.fonts.layout([
 ```
 
 Results are inspectable before drawing: `layout.width`, `layout.height`,
-`layout.lines[] = { x, y, baseline, width, ascent, descent, runs, start,
-end }` where `runs[] = { x, width, run, span, start, end }` in visual order
-(`start`/`end` are the logical UTF-16 ranges the line/run covers).
-`layout.draw(ctx, x, y)` draws, batching consecutive same-color runs into
-single requests.
+`layout.truncated`, `layout.lines[] = { x, y, baseline, width, ascent,
+descent, runs, start, end }` where `runs[] = { x, width, run, span, start,
+end }` in visual order (`start`/`end` are the logical UTF-16 ranges the
+line/run covers). `layout.draw(ctx, x, y)` draws, batching consecutive
+same-color runs into single requests.
 
 Line breaking is UAX#14 (`linebreak` package); `\n` forces breaks; a word
-wider than `maxWidth` force-breaks at the widest cluster prefix that fits;
+wider than `maxWidth` force-breaks at the widest grapheme prefix that fits;
 trailing whitespace at line ends is stripped (and doesn't count against
 `maxWidth` during fitting, CSS-style).
+
+#### Capping lines, and eliding
+
+`maxLines` bounds the line count; `overflow` says what the cut looks like.
+The card title, the list row and the one-line label are all the same option
+pair — single-line elision is just `maxLines: 1`:
+
+```js
+const layout = app.fonts.layout(title, style, {
+  maxWidth: 320,
+  maxLines: 2,
+  overflow: 'ellipsis'
+});
+
+if (layout.truncated) showTooltip(title);   // there was more to say
+```
+
+- **`overflow: 'clip'`** (the default) keeps the first `maxLines` lines and
+  drops the rest. `layout.height` counts only the kept lines, so a
+  fixed-height container matches what it shows.
+- **`overflow: 'ellipsis'`** additionally rebuilds the last kept line so
+  that content plus `…` fits `maxWidth`. Content is dropped from the
+  **logical** end and the shortened tail is re-shaped, because kerning and
+  ligatures across the cut change widths, and in a mixed-direction line the
+  visually-last run is not the logically-last one.
+- **`layout.truncated`** says whether anything was dropped — the signal for
+  a tooltip, an expander, or a "show more" affordance. It is `true` for a
+  `'clip'` cut as well.
+
+Details worth knowing before relying on it:
+
+- The ellipsis takes the **paragraph** direction, not the direction of the
+  text it follows, which is where a neutral at the end of a paragraph
+  resolves under UAX#9. It sits at the right of an LTR line and at the
+  **left** of an RTL one.
+- It is shaped in the style of the line's logically-trailing span, so a line
+  ending in a larger or bolder run gets a matching ellipsis. That span is
+  picked before the cut — picking it after would make the ellipsis width
+  depend on a cut that depends on the ellipsis width.
+- When neither the span's font nor any fallback covers U+2026, three
+  periods stand in. Drawing the real character through a font that lacks it
+  would produce a `.notdef` box, which is a poor way to say "there is more".
+- Cuts land on grapheme-cluster boundaries, so a combining mark is never
+  separated from its base and an emoji ZWJ sequence is never halved.
+- Whitespace at the cut is dropped rather than left in front of the
+  ellipsis.
+- If the ellipsis alone is wider than `maxWidth` it is still drawn, and the
+  line overflows — the same call CSS makes. A truncation with no visible
+  marker is worse than a narrow overflow.
+- For caret purposes the ellipsis stands for the text it replaces:
+  `indexAt` anywhere on it returns the last visible index, and
+  `caretPosition` for an index past the cut clamps there.
 
 #### Caret positioning and hit testing
 
