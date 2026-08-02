@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,6 +89,140 @@ test('fonts fc-match found but fontkit cannot parse are named as such', () => {
   assert.equal(err.code, 'ERR_NTK_NO_FONTS');
   assert.match(err.message, /matched no font ntk can parse/);
   assert.match(err.message, /bitmap \.pcf\/\.bdf fonts are not usable/);
+});
+
+// The prewarm (issue #182): the fc-match spawn for the default pattern runs
+// asynchronously when the fontconfig source is chosen, so the first text
+// layout finds the match cache already seeded instead of blocking first
+// paint on a child process. These run everywhere, fc-match or not: each
+// probe puts a stub on its child's PATH, and — because both exec paths read
+// process.env at spawn time — swaps PATH mid-script to tell the async spawn
+// apart from the sync one.
+
+/**
+ * Run a probe script in a child process. `stubs` maps a name to an fc-match
+ * script body; each becomes its own PATH directory, exposed to the probe as
+ * BIN.<name>. EMPTY is a directory with no fc-match at all (the child starts
+ * there), and PATTERN is the pattern FontManager.match('sans-serif') asks
+ * fontconfig for — the one the prewarm must seed for a first paint to hit it.
+ */
+function prewarmProbe(body, stubs = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'ntk-prewarm-'));
+  const bins = {};
+  for (const [name, stub] of Object.entries(stubs)) {
+    const bin = join(dir, name);
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'fc-match'), stub);
+    chmodSync(join(bin, 'fc-match'), 0o755);
+    bins[name] = bin;
+  }
+  const empty = join(dir, 'empty');
+  mkdirSync(empty);
+  const script = join(dir, 'probe.mjs');
+  writeFileSync(
+    script,
+    `import { matchSortedSync, prewarm } from ${JSON.stringify(join(root, 'lib/fontconfig.js'))};\n` +
+      `import { FontconfigFontSource } from ${JSON.stringify(join(root, 'lib/text/fontsource.js'))};\n` +
+      `const BIN = ${JSON.stringify(bins)};\n` +
+      `const EMPTY = ${JSON.stringify(empty)};\n` +
+      "const PATTERN = { family: 'sans-serif', weight: 400, style: 'normal' };\n" +
+      body
+  );
+  const run = spawnSync(process.execPath, [script], { env: { PATH: empty }, encoding: 'utf8' });
+  assert.equal(run.status, 0, `probe failed: ${run.stderr}`);
+  return JSON.parse(run.stdout);
+}
+
+// prints one match and counts its invocations next to itself, so a probe can
+// assert a spawn did not happen rather than merely not crash. $0 stands in
+// for dirname: the probe's PATH holds only stub directories, no coreutils.
+const counting = (path) =>
+  '#!/bin/sh\n' + 'echo x >> "$0.spawns"\n' + `printf "${path}\\tStub\\t20-7e\\n"\n`;
+
+test('prewarm seeds the cache the sync path reads', () => {
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.warm;\n' +
+      'await prewarm(PATTERN);\n' +
+      'process.env.PATH = EMPTY; // any spawn after this point would throw ENOENT\n' +
+      'const [best] = matchSortedSync(PATTERN);\n' +
+      'console.log(JSON.stringify({ path: best.path }));\n',
+    { warm: counting('/warmed/A.ttf') }
+  );
+  assert.equal(out.path, '/warmed/A.ttf');
+});
+
+test('a sync call racing the prewarm wins; the late async result is discarded', () => {
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.slow;\n' +
+      'const warmed = prewarm(PATTERN); // spawns now, answers in ~300ms\n' +
+      'process.env.PATH = BIN.fast;\n' +
+      'const [duringRace] = matchSortedSync(PATTERN);\n' +
+      'await warmed;\n' +
+      'const [after] = matchSortedSync(PATTERN);\n' +
+      'console.log(JSON.stringify({ duringRace: duringRace.path, after: after.path }));\n',
+    {
+      // sleep by absolute path — the stub's PATH has no coreutils. Best
+      // effort: even an unslept child's exit callback cannot run before the
+      // probe's synchronous block finishes, so the assertion holds either way
+      slow:
+        '#!/bin/sh\n' +
+        '{ /bin/sleep 0.3 || /usr/bin/sleep 0.3; } 2>/dev/null\n' +
+        'printf "/async/LATE.ttf\\tLate\\t20-7e\\n"\n',
+      fast: '#!/bin/sh\nprintf "/sync/WINNER.ttf\\tWinner\\t20-7e\\n"\n'
+    }
+  );
+  assert.equal(out.duringRace, '/sync/WINNER.ttf');
+  assert.equal(out.after, '/sync/WINNER.ttf', 'the async result must not evict the sync one');
+});
+
+test('prewarm for an already-cached pattern spawns nothing', () => {
+  const out = prewarmProbe(
+    "import { readFileSync } from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      'process.env.PATH = BIN.count;\n' +
+      'matchSortedSync(PATTERN);\n' +
+      'await prewarm(PATTERN);\n' +
+      "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n').length;\n" +
+      'console.log(JSON.stringify({ spawns }));\n',
+    { count: counting('/counted/A.ttf') }
+  );
+  assert.equal(out.spawns, 1, 'only the sync call may spawn');
+});
+
+test('a missing fc-match leaves prewarm silent and the sync diagnosis intact', () => {
+  const out = prewarmProbe(
+    'await prewarm(PATTERN); // PATH is still EMPTY: the spawn fails with ENOENT\n' +
+      'let result;\n' +
+      'try {\n' +
+      '  matchSortedSync(PATTERN);\n' +
+      '  result = { ok: true };\n' +
+      '} catch (err) {\n' +
+      '  result = { code: err.code, cause: err.cause?.code };\n' +
+      '}\n' +
+      'console.log(JSON.stringify(result));\n'
+  );
+  assert.equal(out.code, 'ERR_NTK_NO_FONTS');
+  assert.equal(out.cause, 'ENOENT', 'the sync throw still carries its own spawn failure');
+});
+
+test('constructing FontconfigFontSource starts the prewarm', () => {
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.warm;\n' +
+      'new FontconfigFontSource();\n' +
+      'process.env.PATH = EMPTY;\n' +
+      '// fire-and-forget from the constructor, so poll for the seeded cache\n' +
+      'let path = null;\n' +
+      'for (let i = 0; i < 200 && !path; i++) {\n' +
+      '  try {\n' +
+      '    path = matchSortedSync(PATTERN)[0].path;\n' +
+      '  } catch {\n' +
+      '    await new Promise((r) => setTimeout(r, 25));\n' +
+      '  }\n' +
+      '}\n' +
+      'console.log(JSON.stringify({ path }));\n',
+    { warm: counting('/constructed/A.ttf') }
+  );
+  assert.equal(out.path, '/constructed/A.ttf');
 });
 
 test('the docs anchor the error points at exists', () => {
