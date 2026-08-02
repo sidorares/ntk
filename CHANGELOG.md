@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.0.1](https://github.com/sidorares/ntk/compare/v6.0.0...v6.0.1) (2026-08-02)
+
+
+### Performance Improvements
+
+* **fonts:** prewarm fc-match for the default pattern off the event loop ([#189](https://github.com/sidorares/ntk/issues/189)) ([b92b806](https://github.com/sidorares/ntk/commit/b92b80670121e43a4003fb5cf5ab77e217dd6392))
+* rect-only clip stacks never materialize the a8 mask ([#185](https://github.com/sidorares/ntk/issues/185)) ([25627b3](https://github.com/sidorares/ntk/commit/25627b35da61e2344b9d2cf06798ac812ced5c85))
+* solid paints are one CreateSolidFill, cached per connection ([#190](https://github.com/sidorares/ntk/issues/190)) ([8a55431](https://github.com/sidorares/ntk/commit/8a554319922fc45b0351fb7808ff22f3a8ba5fee))
+* **text:** LRU-evict the shaping memo and route fillText through it ([#188](https://github.com/sidorares/ntk/issues/188)) ([58faf84](https://github.com/sidorares/ntk/commit/58faf84be8458f2ece1b452f1d2937252cfc6709))
+* **window:** headroom in the backing pixmap, so a drag-resize reallocates O(log) times ([#187](https://github.com/sidorares/ntk/issues/187)) ([115205d](https://github.com/sidorares/ntk/commit/115205d4465cf892a2321332b49f548c5e0d19ed))
+
 ## [6.0.0](https://github.com/sidorares/ntk/compare/v5.4.0...v6.0.0) (2026-08-02)
 
 
