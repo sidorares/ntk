@@ -83,11 +83,13 @@ cache of rendered things can satisfy it without ntk knowing the type.
 
 ## Context lifetime
 
-Contexts are not free: each one holds a GC, a Picture, and a 1x1 pixmap per
-fill colour it has seen. A context bound to a window normally lives as long
-as the window, so this rarely mattered — but creating them per surface makes
-it matter, which is why `RenderingContext2d` now has `destroy()` (and
-`Symbol.dispose`). `Surface.render()` calls it for you.
+Contexts are not free: each one holds a GC and a Picture (fill colours are
+cached on the `App` and shared by every context on the connection, so a
+colour costs its one server object no matter how many contexts use it). A
+context bound to a window normally lives as long as the window, so this
+rarely mattered — but creating them per surface makes it matter, which is
+why `RenderingContext2d` now has `destroy()` (and `Symbol.dispose`).
+`Surface.render()` calls it for you.
 
 ```js
 using ctx = surface.getContext('2d'); // or ctx.destroy() when done
