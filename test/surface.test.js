@@ -321,6 +321,25 @@ describe('server resources are not leaked', () => {
     assert.equal(counts.FreePixmap, 5, 'and every one of them freed again');
   });
 
+  test('solid fill colours are cached on the app, not rebuilt per context', () => {
+    // render() builds a context per call, so per-context solids used to make
+    // every render recreate its colours server-side (pixmap + fill + picture
+    // each). They now live on the app, one CreateSolidFill per colour ever.
+    const surface = new Surface(app, { width: 8, height: 8 });
+    const paint = (colour) => (ctx) => {
+      ctx.fillStyle = colour;
+      ctx.fillRect(0, 0, 8, 8);
+    };
+    surface.render(paint('#8090a0')); // primes the colour and the defaults
+    const counts = countRender(['CreateSolidFill'], () => {
+      surface.render(paint('#8090a0'));
+      surface.render(paint('#8090a0'));
+    });
+    assert.equal(counts.CreateSolidFill, 0, 'renders after the first create no solids');
+    const fresh = countRender(['CreateSolidFill'], () => surface.render(paint('#8191a1')));
+    assert.equal(fresh.CreateSolidFill, 1, 'a colour not seen before costs one request');
+  });
+
   test('destroy() frees the GCs it allocated', () => {
     const pixmap = app.createPixmap({ width: 8, height: 8, depth: 32 });
     const ctx = pixmap.getContext('2d');
