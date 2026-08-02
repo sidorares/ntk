@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.3.0](https://github.com/sidorares/ntk/compare/v5.2.0...v5.3.0) (2026-08-02)
+
+
+### Features
+
+* a cancellable 'close' event for WM_DELETE_WINDOW ([#155](https://github.com/sidorares/ntk/issues/155)) ([d6b12f0](https://github.com/sidorares/ntk/commit/d6b12f080128792adfe4b982f34f4b56a59405f0))
+* **clipboard:** INCR on the write side, required targets, any format ([#164](https://github.com/sidorares/ntk/issues/164)) ([2ced75e](https://github.com/sidorares/ntk/commit/2ced75e0fee3bc793b97c58698ff7a80133d804d))
+* **clipboard:** watch a selection instead of polling it ([#163](https://github.com/sidorares/ntk/issues/163)) ([420035d](https://github.com/sidorares/ntk/commit/420035d9a9890766f7069004c6c202238cec0d16))
+* setIcon/getIcon — the _NET_WM_ICON writer ([#154](https://github.com/sidorares/ntk/issues/154)) ([f08fe91](https://github.com/sidorares/ntk/commit/f08fe914f7f144daa0a2bcb78dd18ab10784c091))
+* Surface, and SVG documents that take their colour from the caller ([#157](https://github.com/sidorares/ntk/issues/157)) ([c74f684](https://github.com/sidorares/ntk/commit/c74f684ec47a1b70ed0adb17ebc2a9a9908a63b4))
+
+
+### Bug Fixes
+
+* **test:** a test timeout that unrefs itself cannot fire when it matters ([#162](https://github.com/sidorares/ntk/issues/162)) ([8811235](https://github.com/sidorares/ntk/commit/88112352646077977f170ea1b0bca824026ed692))
+
 ## [5.2.0](https://github.com/sidorares/ntk/compare/v5.1.0...v5.2.0) (2026-08-01)
 
 
