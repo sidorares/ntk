@@ -17,9 +17,9 @@ matching file here (see AGENTS.md).
 - [Window](window.md) — window creation, properties, methods, events,
   keyboard input, frame pacing / event coalescing, `requestAnimationFrame`
 - [Pixmap](pixmap.md) — offscreen drawables
-- [Clipboard](clipboard.md) — `app.clipboard.write()/read()`: transfer over
-  the CLIPBOARD/PRIMARY selections (ICCCM), multi-format ownership, INCR
-  both ways
+- [Clipboard](clipboard.md) — `app.clipboard.write()/read()/clear()`:
+  transfer over the CLIPBOARD/PRIMARY selections (ICCCM), multi-format
+  ownership, INCR both ways
 - [2d rendering context](context-2d.md) — canvas-like drawing API over XRender
 - [Images](images.md) — PNG/JPEG loading (`loadImage`), the `Image` object,
   `drawImage`
