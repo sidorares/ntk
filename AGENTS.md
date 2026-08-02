@@ -166,6 +166,51 @@ What that means in practice:
 - Server-side resources (windows, pixmaps, pictures, glyphsets) must offer
   `destroy()`, `Symbol.dispose` and a `FinalizationRegistry` GC fallback.
 
+## An error you hit is an error a consumer will hit
+
+Whenever an error turns up while researching, benchmarking or sketching —
+even in throwaway code, even when it was your own mistake — stop and ask two
+questions:
+
+1. **Can a consumer reach this?** If the answer is yes, you have found a bug
+   report before anyone filed it. Ambient facts about the machine — a missing
+   CLI, an absent display, an unset variable, a permission — are the ones to
+   look hardest at, because your box is not the deployment target.
+2. **Can the error say what to do about it?** Turn it into a fix
+   instruction, the diagnostics needed to work out the fix, or a link to the
+   page that explains it. Say what was expected, what was found, and what to
+   change.
+
+A raw error from a layer the consumer never called is the failure mode to
+watch for: it names something they have never heard of, arrives from a stack
+that mentions nothing they wrote, and gives them nothing to search for. The
+worked example is issue #121 — a missing `fc-match` surfaced as `spawnSync
+fc-match ENOENT`, thrown from inside the first text layout, naming neither
+ntk nor fonts nor a remedy. It now names the cause, the fix, the cheaper
+alternative and the doc page, and carries a `code` so a host can branch on it
+rather than match message text.
+
+This is not a licence to rewrite every throw. The bar:
+
+- **The consumer can hit it**, on some machine, in some supported
+  environment. A failure only reachable by editing ntk is not one.
+- **They can act on what it says.** If there is nothing they could do
+  differently, extra prose is noise — fix the bug instead.
+- **The remedy is specific.** "Pass a custom fontSource" is a hint; a
+  four-line snippet, the `apt-get` line and a URL is a fix. Long messages are
+  fine when they are thrown once into a situation the reader does not yet
+  understand.
+- **Recommend the cheapest real fix first**, even when it is not ours. A
+  library that hides a two-line Dockerfile answer to advertise its own API is
+  not being helpful.
+- **Distinguish "your environment has nothing" from "your call is wrong"**,
+  and give the first an error `code` when anything upstream may need to
+  degrade rather than crash.
+
+Where the fix is more than a sentence, the message links to `docs/` and a
+test asserts that anchor still exists — a URL in a string literal is the one
+kind of doc link nothing else in CI checks.
+
 ## Docs must stay in sync
 
 `docs/` documents the entire public API surface, split by area with an index
