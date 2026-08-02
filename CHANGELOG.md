@@ -1,5 +1,21 @@
 # Changelog
 
+## [6.0.0](https://github.com/sidorares/ntk/compare/v5.4.0...v6.0.0) (2026-08-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* distribute leading above and below the text, not only below ([#175](https://github.com/sidorares/ntk/issues/175))
+
+### Features
+
+* **text:** TextLayout maxLines and ellipsis truncation ([#173](https://github.com/sidorares/ntk/issues/173)) ([d5eb6b5](https://github.com/sidorares/ntk/commit/d5eb6b56fcf59caeda1f44d810f6be5b599e462b))
+
+
+### Bug Fixes
+
+* distribute leading above and below the text, not only below ([#175](https://github.com/sidorares/ntk/issues/175)) ([50202ce](https://github.com/sidorares/ntk/commit/50202cea04f1f38aca44503eb663bd2d21ac8f3c))
+
 ## [5.4.0](https://github.com/sidorares/ntk/compare/v5.3.0...v5.4.0) (2026-08-02)
 
 
