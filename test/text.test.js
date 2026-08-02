@@ -549,6 +549,39 @@ test('shaping cache reuses results across layouts', needsFonts, () => {
   assert.equal(fonts._shapeCache.size, cacheSize, 'relayout added no new shaping work');
 });
 
+test('shaping cache evicts its stale half on overflow, not everything', () => {
+  const fonts = fixedFonts();
+  const style = { font: fonts.match('sans-serif'), family: 'sans-serif', size: 16 };
+  const keep = fonts._shapeCached('keep', style);
+  const drop = fonts._shapeCached('drop', style);
+  // fill to the bound with distinct entries, then refresh 'keep' so it sits
+  // at the recently-used end when the sweep runs
+  let i = 0;
+  while (fonts._shapeCache.size <= 4000) fonts._shapeCached(`w${i++}`, style);
+  assert.equal(fonts._shapeCached('keep', style), keep, 'hit before overflow');
+  const before = fonts._shapeCache.size;
+  fonts._shapeCached('straw', style); // one past the bound: triggers the sweep
+  assert.ok(fonts._shapeCache.size < before, 'the sweep ran');
+  assert.ok(fonts._shapeCache.size > before / 4, 'and kept the recent half');
+  assert.equal(fonts._shapeCached('keep', style), keep, 'recently-used entry survived');
+  assert.notEqual(fonts._shapeCached('drop', style), drop, 'stale entries were evicted');
+});
+
+test('fillText-path shaping reuses the memo and keeps the paragraph level', () => {
+  const fonts = fixedFonts();
+  const style = { font: fonts.match('sans-serif'), family: 'sans-serif', size: 16 };
+  const first = fonts._shapeCachedWhole('hello', style);
+  assert.equal(fonts._shapeCachedWhole('hello', style), first, 'ltr string shapes once');
+  // rtl: the memoed entry alone reads back as an even base level, and
+  // start/end alignment flips for rtl strings if the paragraph level is lost
+  const rtl = fonts._shapeCachedWhole('שלום', style);
+  const direct = shapeText(fonts, 'שלום', style);
+  assert.equal(rtl.baseLevel & 1, 1, 'rtl paragraph level preserved');
+  assert.equal(rtl.baseLevel, direct.baseLevel);
+  assert.equal(rtl.width, direct.width);
+  assert.equal(fonts._shapeCachedWhole('שלום', style).runs, rtl.runs, 'rtl shaping still cached');
+});
+
 // ---------- markdown parser ----------
 
 test('parseMarkdown: blocks', () => {

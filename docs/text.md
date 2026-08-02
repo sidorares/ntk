@@ -83,7 +83,10 @@ XRender glyph ids are client-assigned, and ntk exploits that:
   budget is exceeded, the least-recently-drawn (face, size) page is freed
   server-side with `FreeGlyphSet`, so transient sizes don't accumulate.
 - `TextLayout` memoizes shaping per word, so re-wrapping on window resize
-  re-uses shaped glyphs and sends only composition requests.
+  re-uses shaped glyphs and sends only composition requests. `ctx.fillText`
+  draws through the same memo, so repainting a label shapes it once, not
+  once per frame. The memo is LRU-bounded (4000 entries): on overflow the
+  least-recently-used half is dropped, so what is on screen stays shaped.
 
 For scale: a 60-character line of 16px Latin text is ~70 bytes of
 `CompositeGlyphs` after warm-up. The one-time glyph upload for a full
