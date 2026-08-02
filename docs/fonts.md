@@ -38,7 +38,11 @@ ctx.fillText('Hello', 10, 50);
 Requires `fc-match` on the system and font files for it to find. A Linux
 desktop has both; a slim container, a single-file build and stock macOS do
 not — see [Environments without fontconfig](#environments-without-fontconfig).
-Matches are cached.
+Matches are cached, and the match for the default pattern (`sans-serif`,
+regular weight) is prewarmed with a non-blocking `fc-match` while
+`createClient` connects, so the first text layout does not stall on the
+spawn. Other patterns still pay one synchronous `fc-match` (~50ms) the
+first time they are used.
 
 ## Loading a font file directly
 
