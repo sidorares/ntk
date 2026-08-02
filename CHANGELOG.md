@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.4.0](https://github.com/sidorares/ntk/compare/v5.3.0...v5.4.0) (2026-08-02)
+
+
+### Features
+
+* **clipboard:** conversion timestamps, and clear() to give a selection back ([#172](https://github.com/sidorares/ntk/issues/172)) ([0f79862](https://github.com/sidorares/ntk/commit/0f79862d60b99e0da045f48969404f42e6b0c598))
+* **fonts:** a font spec, for environments without fontconfig ([#167](https://github.com/sidorares/ntk/issues/167)) ([4084c93](https://github.com/sidorares/ntk/commit/4084c939a5aeb9ecc523976f84674f0eea20fc64))
+
+
+### Bug Fixes
+
+* stop leaking GCs, pixmaps and pictures from the 2d context ([#165](https://github.com/sidorares/ntk/issues/165)) ([545e450](https://github.com/sidorares/ntk/commit/545e450f4ecf27522598b739f5e1bbba97be302d))
+
 ## [5.3.0](https://github.com/sidorares/ntk/compare/v5.2.0...v5.3.0) (2026-08-02)
 
 
