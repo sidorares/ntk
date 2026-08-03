@@ -55,6 +55,8 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 - `coalesceEvents: false` — deliver every noisy event individually (see
   [Frames, coalescing and slow connections](#frames-coalescing-and-slow-connections))
 - `frameSync: false` — don't pace frames with a server round-trip fence
+- `present: true` — blit with the Present extension instead of `CopyArea`
+  (see [Blitting with Present](#blitting-with-present--present-true))
 - `frameInterval: ms` — minimum time between paced frames, and the minimum
   time between blits (default `16`, ~60 fps; `0` disables both gates). Also
   writable later as `wnd.frameInterval`.
@@ -85,6 +87,41 @@ automatically (opt out with `createWindow({ backingStore: false })`):
 
 Foreign windows (`{ id }`) and windows drawing via the `'opengl'` or
 `'x11'` contexts are not double-buffered.
+
+### Blitting with Present — `present: true`
+
+By default a frame's dirty rectangles go out as one `CopyArea` each, and
+because each rectangle costs a request, scattered damage is collapsed into
+the box around it when the split stops paying for itself (see
+`scrollRegion` above and the note on blit lists). With
+`createWindow({ present: true })` the frame becomes a single `PresentPixmap`
+carrying an update region instead:
+
+```js
+const wnd = app.createWindow({ width: 800, height: 600, present: true });
+// or, to know whether it took effect:
+await wnd.enablePresent();
+```
+
+Two things follow. A frame is a fixed two requests however fragmented the
+damage is — measured here, eight scattered rectangles went from 8 requests to
+2 — and the exact rectangles are sent, so the bounding-box collapse is no
+longer needed and pixels outside the damage are never touched. Presents are
+also scheduled by the server against the display's refresh rather than run on
+arrival, so a burst cannot produce more updates than the output can show; the
+server drops superseded frames itself.
+
+Worth being precise about what this does **not** do: under a compositing
+window manager the window is redirected, so this schedules the server's copy
+into the redirect pixmap — the compositor still composites on its own
+schedule. Aligning with *that* is what the extended counters of
+[`_NET_WM_SYNC_REQUEST`](#resize-synchronization--syncrequest--enablesyncrequest)
+are for, and ntk implements the basic form only.
+
+Opt-in, and inert unless both Present and XFixes are available — blits fall
+back to `CopyArea`, which stays correct at all times, so the two paths can
+even alternate. The frame clock is unchanged: frames are still paced by the
+fence and the interval, not by the display's refresh.
 
 ### `wnd.scrollRegion(rect, dx, dy)` → boolean
 
