@@ -203,9 +203,13 @@ discrete input's response *inside* the handler, so the pixels leave with the
 handler's own requests rather than on the next paced frame — a click's
 `:active` flip is one paint of a few hundred microseconds, and waiting a
 frame interval for it buys nothing. `wnd.frameInFlight()` is the gate to
-make that decision with: `false` means the server is caught up and drawing
-now costs nothing extra, `true` means a frame is already on its way and the
-present would only be deferred and coalesced with it. Gating on it saves the
+make that decision with: `false` means no blit is queued and drawing now
+costs nothing extra, `true` means one already is — because the fence is
+unanswered or because the minimum inter-blit interval is still running — and
+a paint now would only coalesce into it. Both gates are reported, since which
+one bites depends on the connection: the fence on a slow one, the inter-blit
+interval on a fast local server, where the fence for one wheel notch is
+answered before the next notch is even read. Gating on it saves the
 *painting* work in a burst — the blit itself is bounded either way, since the
 minimum inter-blit interval already folds a burst's followers into one
 catch-up frame (the first wheel notch still paints immediately).
@@ -280,9 +284,11 @@ All return `this` unless noted.
 - `getContext(name)` — `'2d'`, `'opengl'` or `'x11'`; see the context docs
 - `requestAnimationFrame(cb)` — returns an id, does not return `this`;
   `cancelAnimationFrame(id)` (see above)
-- `frameInFlight()` — returns a boolean, not `this`: whether the last frame's
-  fence is still unanswered. The gate for painting a discrete input's
-  response from its own handler instead of on the next paced frame (see
+- `frameInFlight()` — returns a boolean, not `this`: whether a blit this
+  window owes is still waiting to go out, because the last frame's fence is
+  unanswered or a present is deferred behind the inter-blit interval. The gate
+  for painting a discrete input's response from its own handler instead of on
+  the next paced frame (see
   [above](#frames-coalescing-and-slow-connections))
 - `createWindow(params)` — child window (`parent` preset to this window)
 - `createPixmap(params)` — pixmap defaulting to this window's size, depth 32

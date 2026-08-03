@@ -266,6 +266,43 @@ test('a discrete handler that draws sees the gate open, then closed', async () =
   wnd.destroy();
 });
 
+// The same gate with the minimum inter-blit interval in play — which is the
+// default, and the case #195 added. On a local server the fence for one notch
+// is answered long before the next notch is read, so the fence alone reads
+// "draw it now" for the whole burst; the interval is what actually holds the
+// blits back, and the gate has to say so or every notch does its painting for
+// a present that coalesces the work away.
+test('the gate shuts behind a deferred blit, not just behind the fence', async () => {
+  const { wnd, calls, fences, nextCopy } = backedWindow({ frameInterval: 20 });
+  const gate = [];
+  wnd.on('mousedown', () => {
+    const shut = wnd.frameInFlight();
+    gate.push(shut);
+    if (!shut) wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 }); // as painting would
+  });
+  const notch = () => wnd.emit('event', { type: 4, x: 1, y: 1, keycode: 4 });
+
+  // one notch to start the interval running: nothing gates this one, so it
+  // blits with the handler's own requests and arms a fence
+  notch();
+  assert.equal(calls.CopyArea, 1, 'the first notch blitted');
+  fences.shift()(null); // as a local server does, between one notch and the next
+  const settled = nextCopy();
+
+  // three more, all inside the interval the first one started
+  notch();
+  notch();
+  notch();
+  assert.deepEqual(gate, [false, false, true, true], 'shut once a blit is queued');
+  assert.equal(calls.CopyArea, 1, 'and nothing more went out inside the burst');
+
+  await settled;
+  assert.equal(calls.CopyArea, 2, 'the burst caught up in one deferred blit');
+  fences.shift()(null);
+  assert.equal(wnd.frameInFlight(), false, 'and the gate is open again');
+  wnd._teardownFrame();
+});
+
 test('frameInFlight stays false when frameSync is off', async () => {
   const { app, fences } = makeMockApp();
   const wnd = new Window(app, { frameSync: false, frameInterval: 0 });
