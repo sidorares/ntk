@@ -266,6 +266,35 @@ rasterize({ polys, triangles, width, height, rule, dx, dy }) → Uint8Array | Bu
 Thresholds are tunable the same way: `createClient({ rasterPolicy })` or
 `app.rasterPolicy`, merged over `DEFAULT_RASTER_POLICY`.
 
+### Shared memory (MIT-SHM)
+
+On a local connection ntk moves **bulk pixel transfers** through shared memory
+instead of the X socket, which node-x11 provides with no extra dependency (an
+unlinked `/dev/shm` segment handed to the server; see node-x11's
+`docs/ext/shm.md`). It is used automatically for the transfers that are large
+enough to benefit and falls back to ordinary `PutImage`/`GetImage` everywhere
+else — a remote display, an old server, or a transfer too small to matter:
+
+- **`drawImage` of an `Image`** and **`putImageData`** — the image upload,
+  above ~64 KB.
+- **`getImageData` / `readPixels`** — the readback, above ~16 KB. This is the
+  biggest win: a plain `GetImage` ships the whole region back over the socket
+  and can stall the server for tens of milliseconds; shared memory skips that.
+
+Nothing in your code changes. Disable it with `createClient({ shm: false })`,
+or plug in a zero-copy provider (see node-x11); `app.shm` is the helper.
+
+**Coverage masks deliberately stay on the socket.** It is tempting to also send
+the a8 fill mask (the `PutImage` in the local-rasterization route above) through
+shared memory, and to then let `routeRaster` push more drawings local. Measured,
+it is not worth it: coverage is one byte per pixel, so every mask the rasterizer
+produces stays under the size where shared memory beats the socket (a full
+256×256 mask is 64 KB and saves ~0.1 ms; a typical icon mask saves microseconds
+lost in the round trip). The masks large enough to benefit are exactly the
+simple, large shapes `routeRaster` already sends to the server, where a handful
+of trapezoids still beat uploading the coverage. So enabling shared memory does
+**not** change `DEFAULT_RASTER_POLICY`; the coverage path is unchanged.
+
 The default `ScanlineRasterizer` uses signed-area accumulation (the font-rs /
 stb_truetype v2 algorithm) — exact analytic antialiasing, no supersampling,
 no dependencies, and it works in a browser bundle. `CoverageAccumulator` is
