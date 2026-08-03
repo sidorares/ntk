@@ -58,6 +58,9 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 - `frameInterval: ms` — minimum time between paced frames, and the minimum
   time between blits (default `16`, ~60 fps; `0` disables both gates). Also
   writable later as `wnd.frameInterval`.
+- `syncRequest: true` — let the window manager pace interactive resizes to
+  this window's repaint rate (see
+  [Resize synchronization](#resize-synchronization--syncrequest--enablesyncrequest))
 
 ## Double buffering (backing store)
 
@@ -368,7 +371,42 @@ app.createWindow({ protocols: ['WM_DELETE_WINDOW'] });
 
 For `WM_DELETE_WINDOW` specifically there is no need to do this by hand:
 listening for [`close`](#closing--onclose-ev--evpreventdefault) advertises
-it for you.
+it for you. `_NET_WM_SYNC_REQUEST` has its own opt-in too, below — adding
+that atom here on its own advertises a protocol the window cannot answer,
+which is worse than staying quiet, because the counter a window manager
+then looks for is not there.
+
+### Resize synchronization — `syncRequest` / `enableSyncRequest()`
+
+Without this, a window manager driving an interactive resize has no idea
+when the client has actually repainted: it sends `ConfigureNotify` as fast
+as the pointer moves and the window lags behind the frame being dragged.
+`_NET_WM_SYNC_REQUEST` (EWMH §6.2) closes that loop — the WM sends a serial
+before each resize and waits for the window to echo it back once the new
+size is on screen, so the resize runs at the rate the client can paint.
+
+```js
+const wnd = app.createWindow({ width: 800, height: 600, syncRequest: true });
+wnd.map();
+
+// or, when map() follows immediately and the ordering matters:
+await wnd.enableSyncRequest();
+wnd.map();
+```
+
+The counter and its `_NET_WM_SYNC_REQUEST_COUNTER` property must exist
+before the window leaves the withdrawn state, because that is when the
+window manager reads them — hence the awaitable form. Everything after that
+is automatic: the acknowledgement is queued behind the requests that
+repaint, so the WM hears about a frame only once the server has drawn it,
+and a request that needs no repaint (a move, or a resize to the size the
+window already is) is answered by a watchdog rather than left hanging.
+
+Opt-in, and silently inert when the server has no SYNC extension or the
+window manager does not use the protocol. Only basic (single-counter)
+synchronization is implemented; the extended two-counter form is about
+frame-timing feedback rather than resize pacing, and a compositor that
+supports it falls back to basic mode on its own.
 
 The property is a **set**, so these are read-modify-write and return
 promises: `addProtocol`, `removeProtocol`, `setProtocols(names)` to replace
