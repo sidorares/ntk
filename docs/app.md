@@ -17,8 +17,8 @@ const app2 = await createClient({ display: ':1' });
     as `'/app/fonts'` or `[bytes]` naming the faces the app ships, which is
     what an environment without fontconfig needs
     (see [fonts.md](fonts.md#environments-without-fontconfig));
-  - `rasterizer` / `rasterPolicy` — where fills and strokes are rasterized,
-    and the thresholds for that choice (see
+  - `rasterizer` / `rasterPolicy` — where fills, strokes and clip masks are
+    rasterized, and the thresholds for that choice (see
     [context-2d.md](context-2d.md#where-drawings-are-rasterized));
   - `glxVisual` — visual id `getContext('opengl')` should use instead of
     querying the server for one (see [context-opengl.md](context-opengl.md));
@@ -57,8 +57,8 @@ const app2 = await createClient({ display: ':1' });
 - `app.fonts` — lazy [FontManager](fonts.md): font matching/loading, shaping
 - `app.clipboard` — lazy [Clipboard](clipboard.md): selection/clipboard
   transfer (`write()`/`read()`/`clear()`), text or arbitrary targets
-- `app.rasterizer` — the Rasterizer small fills and strokes go through;
-  writable, `null` sends every drawing to the server
+- `app.rasterizer` — the Rasterizer small fills, strokes and clip masks go
+  through; writable, `null` sends every drawing to the server
   ([context-2d.md](context-2d.md#swapping-the-rasterizer))
 - `app.rasterPolicy` — the thresholds for that choice, merged over
   `DEFAULT_RASTER_POLICY`

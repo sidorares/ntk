@@ -225,6 +225,15 @@ An icon-sized drawing takes the local route, and a wall of 400 of them costs
 (a full-window rounded rectangle) takes the server route, where a handful of
 trapezoids beat a megabyte of coverage.
 
+The same choice covers the a8 mask a **non-rectangular clip** builds: a
+`clip()` whose path is not a rectangle rasterizes its coverage into a temp the
+size of its bounding box, locally or as trapezoids, by the same policy. A
+rectangle-only clip stack still rasterizes nothing at all, so this is only
+reached by rounded corners and genuine paths. It matters where trapezoids are
+a software fallback: a screen of
+rounded cards can hold more clip masks than fills, and before this they were
+the one drawing no policy could move.
+
 Because what crosses the wire is **coverage, not colour**, the route is
 invisible to everything else: gradients, solid fills, `globalAlpha`, clip and
 composite ops all work identically either way, and a widget that draws through
