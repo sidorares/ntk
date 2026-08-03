@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.2.0](https://github.com/sidorares/ntk/compare/v6.1.0...v6.2.0) (2026-08-03)
+
+
+### Features
+
+* **window:** tag 'resize' with what actually changed ([#184](https://github.com/sidorares/ntk/issues/184)) ([#193](https://github.com/sidorares/ntk/issues/193)) ([bd309b1](https://github.com/sidorares/ntk/commit/bd309b16405e85acd47fbd27549117c19b07e41b))
+
 ## [6.1.0](https://github.com/sidorares/ntk/compare/v6.0.1...v6.1.0) (2026-08-03)
 
 
