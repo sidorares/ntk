@@ -1,5 +1,18 @@
 # Changelog
 
+## [6.3.0](https://github.com/sidorares/ntk/compare/v6.2.0...v6.3.0) (2026-08-03)
+
+
+### Features
+
+* _NET_WM_SYNC_REQUEST, so window managers can pace interactive resizes ([#197](https://github.com/sidorares/ntk/issues/197)) ([84d849a](https://github.com/sidorares/ntk/commit/84d849a37641f08448e78f4fb572793563886d21))
+* blit with the Present extension, opt-in per window ([#198](https://github.com/sidorares/ntk/issues/198)) ([c50fc14](https://github.com/sidorares/ntk/commit/c50fc141667a67fe7693955a0868903bb5cc6704))
+
+
+### Performance Improvements
+
+* pace discrete-event blits with a minimum inter-blit interval ([#195](https://github.com/sidorares/ntk/issues/195)) ([551817e](https://github.com/sidorares/ntk/commit/551817eb13bd39d1772cfef2d0900bf145d35ce9))
+
 ## [6.2.0](https://github.com/sidorares/ntk/compare/v6.1.0...v6.2.0) (2026-08-03)
 
 
