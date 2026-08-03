@@ -55,9 +55,9 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 - `coalesceEvents: false` — deliver every noisy event individually (see
   [Frames, coalescing and slow connections](#frames-coalescing-and-slow-connections))
 - `frameSync: false` — don't pace frames with a server round-trip fence
-- `frameInterval: ms` — minimum time between paced frames (default `16`,
-  ~60 fps; `0` disables the timer gate). Also writable later as
-  `wnd.frameInterval`.
+- `frameInterval: ms` — minimum time between paced frames, and the minimum
+  time between blits (default `16`, ~60 fps; `0` disables both gates). Also
+  writable later as `wnd.frameInterval`.
 
 ## Double buffering (backing store)
 
@@ -114,7 +114,7 @@ arrives as bursts of `Expose` rectangles. Reacting to each one queues more
 drawing than the connection can drain, and the window plays back a trail of
 stale intermediate states — most visibly over ssh-forwarded / networked
 displays. ntk therefore delivers noisy events and repaints in **paced
-frames**, gated by two independent mechanisms:
+frames**, gated by three independent mechanisms:
 
 - **a fence** — after each frame the library sends a cheap request with a
   reply (`GetInputFocus`). X processes requests strictly in order, so the
@@ -125,6 +125,15 @@ frames**, gated by two independent mechanisms:
   backlog builds up. Disable with `frameSync: false`.
 - **a timer** — at most one paced frame per `frameInterval` ms (default 16),
   so a local server isn't asked to redraw at input-device rate.
+- **a minimum inter-blit interval** — also `frameInterval`. Blits that are
+  *not* part of a paced frame (the one at the end of a discrete event's
+  handler, below) skip the timer for latency, and used to be bounded only by
+  the fence: on a local server that answers in a few hundred microseconds, a
+  stream of discrete events blitted several hundred times a second, and under
+  a compositor every blit is a texture-from-pixmap recomposite. The first blit
+  after a quiet moment is still immediate; any that follow within
+  `frameInterval` are held back and coalesce into one. `frameInterval: 0`
+  turns this off with the timer gate.
 
 While a frame is pending, noisy events **coalesce** instead of queueing:
 
@@ -141,7 +150,13 @@ While a frame is pending, noisy events **coalesce** instead of queueing:
 Discrete events (`mousedown`, `keydown`, …) are never coalesced and are
 delivered immediately — any buffered noisy events are flushed first so
 handlers observe them in the order they happened. Blits of an already-drawn
-backing store still respect the fence, but skip the timer for latency.
+backing store skip the frame timer for latency, so the response to a discrete
+input goes out with the handler's own requests; they are still bounded by the
+fence and by the minimum inter-blit interval above. A discrete input arriving
+out of the blue is always more than `frameInterval` after the last blit, so
+the interval never taxes the case that latency matters for — it only stops a
+*burst* (a spun wheel sends a press and a release per notch) from blitting
+faster than the display can show.
 
 A toolkit that schedules its own painting can go one better and draw a
 discrete input's response *inside* the handler, so the pixels leave with the
@@ -150,9 +165,10 @@ handler's own requests rather than on the next paced frame — a click's
 frame interval for it buys nothing. `wnd.frameInFlight()` is the gate to
 make that decision with: `false` means the server is caught up and drawing
 now costs nothing extra, `true` means a frame is already on its way and the
-present would only be deferred and coalesced with it. Gating on it is what
-keeps a burst sane — the first wheel notch paints immediately, the rest fold
-into one catch-up frame.
+present would only be deferred and coalesced with it. Gating on it saves the
+*painting* work in a burst — the blit itself is bounded either way, since the
+minimum inter-blit interval already folds a burst's followers into one
+catch-up frame (the first wheel notch still paints immediately).
 
 ```js
 wnd.on('mousedown', (ev) => {
@@ -164,8 +180,8 @@ wnd.on('mousedown', (ev) => {
 Escape hatches, from mildest to rawest:
 
 - `frameInterval = 0` — fence-only pacing (fastest delivery that cannot
-  fall behind the server)
-- `frameSync: false` — timer-only pacing
+  fall behind the server), and unpaced blits
+- `frameSync: false` — timer-only pacing, for frames and for blits
 - `coalesceEvents: false` — per-event delivery, no merging at all
 - `wnd.on('event', ev => ...)` — the raw X event stream for this window,
   before any name mapping or coalescing
@@ -205,7 +221,8 @@ round-trip on slow connections — write the loop once, it behaves everywhere.
 - `wnd.id` — X window id
 - `wnd.width`, `wnd.height`, `wnd.x`, `wnd.y` — geometry, kept in sync on `resize`
 - `wnd.frameLatency` — last fence round-trip, ms (`null` before the first frame)
-- `wnd.frameInterval` — minimum ms between paced frames (writable)
+- `wnd.frameInterval` — minimum ms between paced frames, and between blits
+  (writable)
 - `wnd.app`, `wnd.X`, `wnd.display` — owning app / raw client shortcuts
 
 ## Methods

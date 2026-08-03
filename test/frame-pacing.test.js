@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { setImmediate as tick, setTimeout as sleep } from 'node:timers/promises';
 
 import Window from '../lib/window.js';
+import { withTimeout } from './helpers/async.js';
 
 // the wrapper cache is keyed per connection, so ids only have to be unique
 // within one mock app — keeping them unique across all of them anyway makes
@@ -16,6 +17,11 @@ let nextId = 0xa000;
 function makeMockApp() {
   const calls = { CopyArea: 0, copies: [] };
   const fences = []; // pending GetInputFocus callbacks, released by tests
+  // Waiters for the next blit. A blit held back by the minimum inter-blit
+  // interval lands on a timer, so `await tick()` is not enough to observe it;
+  // awaiting the blit itself works whether it is immediate or deferred, and
+  // fails loudly (named) if it is dropped altogether.
+  let copyWaiters = [];
   const X = {
     _closing: false,
     stream: { destroyed: false, writableEnded: false },
@@ -35,13 +41,18 @@ function makeMockApp() {
     CopyArea(src, dst, gc, sx, sy, dx, dy, width, height) {
       calls.CopyArea++;
       calls.copies.push({ x: dx, y: dy, w: width, h: height });
+      const wake = copyWaiters;
+      copyWaiters = [];
+      for (const resolve of wake) resolve();
     },
     GetInputFocus(cb) {
       fences.push(cb);
     }
   };
   const display = { client: X, screen: [{ root: 1, root_depth: 24, white_pixel: 0xffffff }] };
-  return { app: { X, display }, fences, calls };
+  const nextCopy = () =>
+    withTimeout(new Promise((resolve) => copyWaiters.push(resolve)), 2000, 'blit');
+  return { app: { X, display }, fences, calls, nextCopy };
 }
 
 const motion = (x, y) => ({ type: 6, x, y });
@@ -310,16 +321,16 @@ test('interactive resize drives one paced draw per frame', async () => {
 // The list is capped, and collapsed back to its box when splitting would not
 // save enough to pay for the extra requests.
 
-function backedWindow() {
-  const { app, fences, calls } = makeMockApp();
-  const wnd = new Window(app, { width: 200, height: 100 });
+function backedWindow(args) {
+  const { app, fences, calls, nextCopy } = makeMockApp();
+  const wnd = new Window(app, { width: 200, height: 100, ...args });
   wnd.width = 200;
   wnd.height = 100;
   // the backing store is normally allocated by getContext('2d'); there is no
   // real context here, so stand one in and drive _markDirty directly
   wnd._backing = { id: 0xb000, width: 200, height: 100 };
   wnd._presentGc = 0xc000;
-  return { wnd, fences, calls };
+  return { wnd, fences, calls, nextCopy };
 }
 
 test('a present copies only the region the drawing reported', async () => {
@@ -460,14 +471,17 @@ test('one unreported operation gives up the bound for the whole frame', async ()
 });
 
 test('the region does not leak into the next frame', async () => {
-  const { wnd, fences, calls } = backedWindow();
+  const { wnd, fences, calls, nextCopy } = backedWindow();
   wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
   await tick();
   assert.deepEqual(calls.copies[0], { x: 0, y: 0, w: 10, h: 10 });
   // release the fence the first present armed, so the second is not deferred
   while (fences.length) fences.shift()();
+  // the second blit follows the first inside one frameInterval, so it is held
+  // back by the minimum inter-blit interval — wait for the blit, not a tick
+  const blitted = nextCopy();
   wnd._markDirty({ x: 100, y: 50, w: 10, h: 10 });
-  await tick();
+  await blitted;
   assert.equal(calls.CopyArea, 2);
   assert.deepEqual(
     calls.copies[1],
@@ -482,4 +496,111 @@ test('a reported region is clamped to the window', async () => {
   wnd._markDirty({ x: -20, y: -5, w: 400, h: 300 });
   await tick();
   assert.deepEqual(calls.copies[0], { x: 0, y: 0, w: 200, h: 100 });
+});
+
+// Minimum inter-blit interval (issue #180).
+//
+// Discrete events blit at the end of their handler rather than waiting for the
+// next paced frame — that latency is the point. But nothing used to bound how
+// often that could happen: on a local server the fence answers in a few
+// hundred microseconds, so a stream of discrete events blitted hundreds of
+// times a second, and under a compositor every blit is a recomposite. The
+// first blit after a quiet moment is still immediate; the ones behind it are
+// held back to one per `frameInterval` and coalesce.
+
+test('the first blit after a quiet moment is immediate', async () => {
+  const { wnd, calls } = backedWindow();
+  // no await: the latency-critical path must not even wait for a microtask
+  wnd._markDirtyNow = true;
+  wnd._dirty = true;
+  wnd._dirtyRegion = [{ x: 0, y: 0, w: 10, h: 10 }];
+  wnd._present();
+  assert.equal(calls.CopyArea, 1, 'blitted synchronously');
+});
+
+test('a burst of discrete blits is paced to one per frameInterval', async () => {
+  const { wnd, fences, calls } = backedWindow({ frameInterval: 20, frameSync: false });
+  const start = Date.now();
+  // ~10 "events", each in its own turn, well inside one interval
+  for (let i = 0; i < 10; i++) {
+    wnd._dirty = true;
+    wnd._dirtyRegion = [{ x: i, y: 0, w: 5, h: 5 }];
+    wnd._present();
+    await sleep(2);
+  }
+  const elapsed = Date.now() - start;
+  assert.equal(fences.length, 0, 'frameSync: false sends no fence, so only the interval paces');
+  // shape, not an exact count: one blit per interval plus the immediate first
+  assert.ok(
+    calls.CopyArea <= Math.ceil(elapsed / 20) + 1,
+    `paced: ${calls.CopyArea} blits in ${elapsed}ms at a 20ms interval`
+  );
+  assert.ok(calls.CopyArea < 10, `fewer blits than events (got ${calls.CopyArea})`);
+});
+
+test('the last blit of a burst still lands', async () => {
+  const { wnd, calls, nextCopy } = backedWindow({ frameInterval: 20, frameSync: false });
+  wnd._dirty = true;
+  wnd._dirtyRegion = [{ x: 0, y: 0, w: 5, h: 5 }];
+  wnd._present(); // immediate
+  const settled = nextCopy();
+  // a second mark right behind it is deferred, and nothing else follows: the
+  // deferral timer is the only thing that can still put it on screen
+  wnd._dirty = true;
+  wnd._dirtyRegion = [{ x: 150, y: 80, w: 20, h: 15 }];
+  wnd._present();
+  await settled;
+  assert.equal(calls.CopyArea, 2, 'the deferred blit was not dropped');
+  assert.deepEqual(
+    calls.copies[1],
+    { x: 150, y: 80, w: 20, h: 15 },
+    'and it carried the final region'
+  );
+  assert.equal(wnd._dirty, false, 'no dirt left behind');
+  assert.equal(wnd._presentPending, false, 'no present left pending');
+});
+
+test('regions marked during a deferral coalesce into the one present that follows', async () => {
+  const { wnd, calls, nextCopy } = backedWindow({ frameInterval: 20, frameSync: false });
+  wnd._dirty = true;
+  wnd._dirtyRegion = [{ x: 0, y: 0, w: 5, h: 5 }];
+  wnd._present(); // immediate, starts the interval
+  const first = calls.CopyArea;
+  const settled = nextCopy();
+  wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
+  wnd._markDirty({ x: 180, y: 90, w: 10, h: 10 });
+  await settled;
+  await tick();
+  // one present, which may still split into a copy per rectangle (_blitList) —
+  // what matters is that both marks made it into that single deferred present
+  const after = calls.copies.slice(first);
+  const covers = (x, y) =>
+    after.some((r) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h);
+  assert.ok(covers(5, 5), `the top-left mark was blitted (got ${JSON.stringify(after)})`);
+  assert.ok(covers(185, 95), `the bottom-right mark was blitted (got ${JSON.stringify(after)})`);
+  assert.equal(wnd._dirty, false, 'nothing left dirty');
+});
+
+test('frameInterval: 0 keeps the old unpaced blit behaviour', async () => {
+  const { wnd, calls } = backedWindow({ frameInterval: 0, frameSync: false });
+  for (let i = 0; i < 5; i++) {
+    wnd._dirty = true;
+    wnd._dirtyRegion = [{ x: i, y: 0, w: 5, h: 5 }];
+    wnd._present();
+  }
+  assert.equal(calls.CopyArea, 5, 'every present blits when the timer gate is off');
+});
+
+test('destroy() cancels a blit held back by the interval', async () => {
+  const { wnd, calls } = backedWindow({ frameInterval: 20, frameSync: false });
+  wnd._dirty = true;
+  wnd._dirtyRegion = [{ x: 0, y: 0, w: 5, h: 5 }];
+  wnd._present(); // immediate
+  wnd._dirty = true;
+  wnd._dirtyRegion = [{ x: 50, y: 50, w: 5, h: 5 }];
+  wnd._present(); // deferred
+  const before = calls.CopyArea;
+  wnd._teardownFrame();
+  await sleep(60);
+  assert.equal(calls.CopyArea, before, 'the deferred blit did not fire after teardown');
 });
