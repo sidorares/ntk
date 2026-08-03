@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.4.0](https://github.com/sidorares/ntk/compare/v6.3.0...v6.4.0) (2026-08-03)
+
+
+### Features
+
+* **glx:** explain why getContext('opengl') failed ([#200](https://github.com/sidorares/ntk/issues/200)) ([0139d9c](https://github.com/sidorares/ntk/commit/0139d9c45ecbf5dcdfdb3dd1f5a872104b44c141))
+
 ## [6.3.0](https://github.com/sidorares/ntk/compare/v6.2.0...v6.3.0) (2026-08-03)
 
 
