@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.1.0](https://github.com/sidorares/ntk/compare/v6.0.1...v6.1.0) (2026-08-03)
+
+
+### Features
+
+* **shm:** route bulk pixel transfers through MIT-SHM on local connections ([#191](https://github.com/sidorares/ntk/issues/191)) ([b427535](https://github.com/sidorares/ntk/commit/b42753539c578c0bf16931ff49b9549e2302f77d))
+
 ## [6.0.1](https://github.com/sidorares/ntk/compare/v6.0.0...v6.0.1) (2026-08-02)
 
 
