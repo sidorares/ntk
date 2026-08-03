@@ -251,3 +251,85 @@ describe("getContext('opengl')", () => {
     wnd.destroy();
   });
 });
+
+// The configuration nearly every desktop actually has: GLX is present and
+// every query answers normally, and only CreateContext is refused. What the
+// user sees here is the whole diagnosis, so it is worth pinning down.
+describe('a server with indirect GLX disabled', () => {
+  let strict = null;
+  const strictXErrors = [];
+
+  before(async () => {
+    const server = createServer({ width: 320, height: 240 });
+    server.registerExtension(
+      'GLX',
+      createGlxExtension({ backend: new RecordingBackend(), indirectContexts: false })
+    );
+    const [serverEnd, clientEnd] = createStreamPair();
+    server.addClientStream(serverEnd);
+    strict = await createClient({
+      stream: clientEnd,
+      fontSource: new StaticFontSource(),
+      onXError: (err) => strictXErrors.push(err)
+    });
+  });
+
+  after(async () => {
+    if (strict) await strict.close();
+  });
+
+  test('the visual query still succeeds — the extension is there', async () => {
+    const config = await strict.chooseGLXConfig();
+    assert.ok(config.visual, 'a GL-capable visual is offered');
+    assert.equal(strictXErrors.length, 0);
+  });
+
+  test("getContext('opengl') fails with a diagnosis instead of a cascade", async () => {
+    const config = await strict.chooseGLXConfig();
+    const wnd = strict.createWindow({
+      width: 32,
+      height: 32,
+      visual: config.visual,
+      depth: config.depth
+    });
+
+    const warnings = [];
+    const realWarn = console.warn;
+    console.warn = (...args) => warnings.push(args.join(' '));
+    let err = null;
+    try {
+      const gl = wnd.getContext('opengl', config);
+      await gl.ready.then(
+        () => assert.fail('setup should not succeed on a server without +iglx'),
+        (e) => {
+          err = e;
+        }
+      );
+      await new Promise((resolve) =>
+        strict.X.GetInputFocus(() => setImmediate(() => strict.X.GetInputFocus(() => resolve())))
+      );
+    } finally {
+      console.warn = realWarn;
+    }
+
+    assert.equal(err.code, 'GLX_INDIRECT_DISABLED', 'the cause is named, not guessed at');
+    assert.match(err.message, /refuses to create indirect GLX contexts/);
+    assert.match(err.hint, /\+iglx/, 'the remedy travels with the error');
+    assert.equal(err.cause?.error, 2, 'the underlying BadValue is kept for anyone who wants it');
+
+    // MakeCurrent is never sent, so there is no GLXBadContext to confuse
+    // the report, and CreateContext's own error is claimed rather than
+    // reaching the app as an unattributed X error
+    assert.deepEqual(
+      strictXErrors.map((e) => e.message),
+      [],
+      'nothing leaks to onXError'
+    );
+    assert.equal(warnings.length, 1, 'one warning, not three');
+    assert.match(warnings[0], /refuses to create indirect GLX contexts/);
+    assert.match(warnings[0], /Xwayland :5 \+iglx/, 'it says what to do about it');
+    assert.doesNotMatch(warnings[0], /GLXBadContext/);
+
+    wnd.destroy();
+  });
+});

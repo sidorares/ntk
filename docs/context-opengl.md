@@ -6,7 +6,8 @@ serialized to the X server, no client-side GL library needed.
 
 > ⚠️ Indirect GLX is disabled by default on many modern X servers; you may
 > need `+iglx` / `AllowIndirectGLX`. See
-> [node-x11#117](https://github.com/sidorares/node-x11/issues/117#issuecomment-214762185).
+> [node-x11#117](https://github.com/sidorares/node-x11/issues/117#issuecomment-214762185)
+> and [Why setup fails](#why-setup-fails) below.
 > `app.display.GLX` is `null` when the extension is unavailable.
 
 ```js
@@ -74,9 +75,59 @@ gl.contextId; // the GLX context XID
 gl.config; // the config in use
 ```
 
-A failed setup (no GLX, no matching visual, indirect GLX disabled) rejects
-`gl.ready`, records `gl.error`, drops the queued commands and warns on the
-console.
+A failed setup rejects `gl.ready`, records `gl.error`, drops the queued
+commands and warns on the console.
+
+## Why setup fails
+
+Every error from `chooseGLXConfig` and from the context setup carries a
+`code` from `GLXError`, and usually a `hint` — the multi-line remedy the
+console warning prints. Branch on the code; the message is for humans.
+
+| `err.code` | what happened |
+| --- | --- |
+| `GLX_NO_EXTENSION` | the server has no GLX at all (built without it, or `-extension GLX`) |
+| `GLX_INDIRECT_DISABLED` | GLX is there, but the server refuses indirect contexts |
+| `GLX_NO_CONFIG` | no visual or fbconfig matches the requested attributes |
+| `GLX_CONTEXT_FAILED` | anything else in setup (a rejected `MakeCurrent`, …) |
+
+```js
+import { GLXError } from 'ntk';
+
+const gl = wnd.getContext('opengl', glx);
+try {
+  await gl.ready;
+} catch (err) {
+  if (err.code === GLXError.INDIRECT_DISABLED) showSoftwareFallback(err.hint);
+  else throw err;
+}
+```
+
+`GLX_INDIRECT_DISABLED` is the one you will actually hit. It is worth
+knowing what it looks like from the outside: the extension is present,
+`QueryVersion` says GLX 1.4, `GetFBConfigs` offers a full set of configs,
+and `chooseGLXConfig` returns a perfectly good visual. Only `CreateContext`
+is refused, with `BadValue`. That is the sole signal, which is why ntk sends
+`CreateContext` on its own and waits for it, instead of going on to
+`MakeCurrent` and reporting the `GLXBadContext` that follows from a context
+that was never created.
+
+To get a server that allows it:
+
+```sh
+Xwayland :5 +iglx &   # nested, under Wayland
+Xephyr :5 +iglx &     # nested, under X
+DISPLAY=:5 node your-app.js
+```
+
+On Xorg, `+iglx` on the command line or `Option "AllowIndirectGLX" "on"`;
+on XQuartz, `defaults write org.xquartz.X11 enable_iglx -bool true`.
+
+One caveat worth setting expectations on: current Linux distro X servers
+often ship with the indirect GL *engine* gone even when `+iglx` is accepted.
+Contexts are created and nothing rasterizes, and some builds (Ubuntu 24.04's
+Xvfb and Xwayland among them) segfault on indirect `MakeCurrent`. XQuartz
+still has a working indirect path.
 
 ## Notes
 
