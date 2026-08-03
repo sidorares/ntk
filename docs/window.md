@@ -132,7 +132,9 @@ While a frame is pending, noisy events **coalesce** instead of queueing:
   kept in `ev.coalesced` (oldest first, like the DOM's
   `getCoalescedEvents()`), for e.g. freehand drawing that wants the full
   pointer trail. `wnd.width/height/x/y` always track the newest
-  `ConfigureNotify` immediately, even before the event is delivered.
+  `ConfigureNotify` immediately, even before the event is delivered. A
+  delivered `resize` also says what the merged burst actually changed —
+  see [`resize` fires for moves](#resize-fires-for-moves).
 - `expose` — damage accumulates: `ev.x/y/width/height` is the bounding box
   of all merged rectangles and `ev.rects` lists each one.
 
@@ -815,7 +817,7 @@ constructor arg) automatically extends the window's X event mask.
 | `focus` / `blur` | FocusIn/FocusOut | keyboard focus arrived at or left this window — usually because the window manager moved it. `ev.detail`/`ev.mode` carry the X notify detail and mode |
 | `expose` | Expose | `ev.x/y/width/height` of the damaged area, coalesced per frame (bounding box; rect list in `ev.rects`); on double-buffered windows only emitted when a real repaint is needed (see above) |
 | `draw` | — | synthetic repaint request on double-buffered windows (same payload as the accompanying `expose`) |
-| `resize` | ConfigureNotify | coalesced per frame (last state wins); updates `wnd.width/height/x/y` first |
+| `resize` | ConfigureNotify | **fires for moves too** — check `ev.resized` / `ev.moved`, see [below](#resize-fires-for-moves). Coalesced per frame (last state wins); updates `wnd.width/height/x/y` first |
 | `map` / `unmap` | Map/UnmapNotify | |
 | `destroy` | DestroyNotify | wrapper is removed from the cache |
 | `map_request`, `configure_request` | SubstructureRedirect | for window managers |
@@ -824,6 +826,43 @@ constructor arg) automatically extends the window's X event mask.
 | `property`, `reparent`, `message`, `selection*` | | |
 
 Every event object gets `ev.window` and `ev.target` set to the `Window`.
+
+### `resize` fires for moves
+
+`resize` is X's `ConfigureNotify`, and X reports *any* geometry change with
+it: a pure move, a reparent by the window manager, or a restatement of
+geometry that did not change at all. Under an opaque-move window manager
+(Compiz, KWin, Mutter, …) dragging a window by its title bar delivers one
+per pointer step, all of them the same size.
+
+So a handler that re-lays-out or reallocates on every `resize` does that
+work per step of a drag. The event says which change it was:
+
+| | |
+|---|---|
+| `ev.resized` | the size differs from the last delivered `resize` |
+| `ev.moved` | the position does |
+| `ev.previous` | that event's `{x, y, width, height}` — `null` on an adopted window whose geometry is not known yet, where both flags read `true` because nothing can be ruled out |
+
+```js
+wnd.on('resize', (ev) => {
+  if (ev.resized) relayout(ev.width, ev.height); // not on a drag
+  if (ev.moved) repositionPopups();
+});
+```
+
+The flags compare against the last **delivered** event, not the last raw
+one, so coalescing cannot hide a change: a frame that merges two moves and a
+resize reports both. For the same reason the merged raw events in
+`ev.coalesced` are not tagged — the flags describe the delivery.
+
+Position is compared as reported. A reparenting window manager sends real
+`ConfigureNotify` in frame coordinates and synthetic ones in root
+coordinates (ICCCM 4.2.3), so the frame's own offset can read as a move on
+the first event after the switch — spurious work, never missed work. The
+alternative is a `TranslateCoordinates` round trip per event, which is the
+cost these flags exist to avoid; ask for one explicitly if you need the true
+screen origin.
 
 ## Keyboard input
 
