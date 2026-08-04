@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.5.0](https://github.com/sidorares/ntk/compare/v6.4.0...v6.5.0) (2026-08-04)
+
+
+### Features
+
+* support Node 18.19 by reaching builtins through a version-tolerant helper ([#205](https://github.com/sidorares/ntk/issues/205)) ([9fc2e72](https://github.com/sidorares/ntk/commit/9fc2e72cf7d269c11da5b8762bf51070e7edda4d))
+
+
+### Bug Fixes
+
+* **window:** frameInFlight reports a present deferred by the inter-blit interval ([#204](https://github.com/sidorares/ntk/issues/204)) ([d604b9e](https://github.com/sidorares/ntk/commit/d604b9e1becb5636285f3d452d819a5504b9ba44))
+
+
+### Performance Improvements
+
+* **clip:** route non-rectangular clip masks through the local rasterizer ([#202](https://github.com/sidorares/ntk/issues/202)) ([59b9d89](https://github.com/sidorares/ntk/commit/59b9d895bbac6a87c3839e7eac69e8fd256aa4ee))
+
 ## [6.4.0](https://github.com/sidorares/ntk/compare/v6.3.0...v6.4.0) (2026-08-03)
 
 
