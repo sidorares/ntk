@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.6.0](https://github.com/sidorares/ntk/compare/v6.5.0...v6.6.0) (2026-08-04)
+
+
+### Features
+
+* **window:** ARGB visual discovery and transparent windows ([#206](https://github.com/sidorares/ntk/issues/206)) ([67c21b5](https://github.com/sidorares/ntk/commit/67c21b5ef07276ce2b3a2212bbf314917a01b07a))
+
 ## [6.5.0](https://github.com/sidorares/ntk/compare/v6.4.0...v6.5.0) (2026-08-04)
 
 
