@@ -41,12 +41,20 @@ test('nothing in lib/ statically imports a node builtin', () => {
   // browser, so a node builtin has to be fetched lazily through
   // `process.getBuiltinModule` behind a capability check. A static import
   // breaks the bundle at build time, a long way from whoever added it.
-  // node:events is the one exception — lib/drawable.js extends EventEmitter.
+  //
+  // Two files are sanctioned exceptions, each for one specifier in that one
+  // file — anywhere else the same specifier is still an offender:
+  //   node:events — drawable.js extends EventEmitter.
+  //   node:module — builtin.js's createRequire is the Node < 20.16 fallback
+  //     for getBuiltinModule itself, guarded on process.versions.node and
+  //     never evaluated in a browser (a browser build stubs this one
+  //     specifier). See lib/builtin.js.
+  const ALLOW = { 'node:events': 'drawable.js', 'node:module': 'builtin.js' };
   const offenders = [];
   for (const path of sources(libDir)) {
-    const imports = readFileSync(path, 'utf8').matchAll(/from\s+['"](node:[\w/]+)['"]/g);
-    for (const [, mod] of imports) {
-      if (mod !== 'node:events') offenders.push(`${path.slice(libDir.length + 1)}: ${mod}`);
+    const rel = path.slice(libDir.length + 1);
+    for (const [, mod] of readFileSync(path, 'utf8').matchAll(/from\s+['"](node:[\w/]+)['"]/g)) {
+      if (ALLOW[mod] !== rel) offenders.push(`${rel}: ${mod}`);
     }
   }
   assert.deepEqual(
