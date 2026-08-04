@@ -64,6 +64,37 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   this window's repaint rate (see
   [Resize synchronization](#resize-synchronization--syncrequest--enablesyncrequest))
 
+## Transparent windows
+
+`app.findArgbVisual([screen])` looks for a 32-bit TrueColor visual and
+returns `{ visual, depth: 32 }`, or `null` where the server has none
+(XQuartz). Spread it into `createWindow` with a transparent background and
+the window has a real alpha channel: whatever it does not paint is blended
+away by the compositor.
+
+```js
+const argb = app.findArgbVisual();
+const wnd = app.createWindow({ ...argb, backgroundPixel: 0, width: 320, height: 180 });
+const ctx = wnd.getContext('2d');
+wnd.on('draw', () => {
+  ctx.clearRect(0, 0, 320, 180);        // transparent, not white — the window has alpha
+  ctx.fillStyle = 'rgba(32, 32, 36, 0.92)';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, 320, 180, 16);    // the corners it skips stay empty
+  ctx.fill();
+});
+```
+
+That is a rounded window with **antialiased** edges, and no Shape extension
+anywhere: the corners are alpha, not a 1-bit mask. `backgroundPixel: 0` is
+transparent black rather than the server's white, so nothing flashes before
+the first paint — and the backing store clears to the same.
+
+The client does nothing else. No Composite extension calls, no EWMH
+property: a compositing manager blends any ARGB window automatically.
+Without one running, X shows the raw pixels and the transparent regions come
+out **black**. See `examples/transparent-popup.js`.
+
 ## Double buffering (backing store)
 
 Requesting a 2d context on a window you created enables double buffering
