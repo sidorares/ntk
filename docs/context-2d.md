@@ -115,7 +115,12 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
 - `fillRect(x, y, w, h)` — respects clip, transform, `globalAlpha` and the
   composite op
 - `strokeRect(x, y, w, h)` — outlines a rect without touching the current path
-- `clearRect(x, y, w, h)` — resets to opaque white (honors clip + transform)
+- `clearRect(x, y, w, h)` — resets to nothing (honors clip + transform).
+  What "nothing" is depends on the target: **transparent black** on a
+  drawable with an alpha channel — a depth-32 ARGB window, see
+  [Transparent windows](window.md#transparent-windows) — so a compositor
+  shows what is behind it, and **opaque white** anywhere else, since a
+  depth-24 window has no alpha to write and white is the paper it starts from
 - `drawImage(image, dx, dy)` / `drawImage(image, dx, dy, dw, dh)` /
   `drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)` — draws an ntk
   [`Image`](images.md) (decoded PNG/JPEG). The image uploads to the server
