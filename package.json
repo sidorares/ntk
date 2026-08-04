@@ -30,7 +30,7 @@
     "lib"
   ],
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=18.19.0"
   },
   "dependencies": {
     "bidi-js": "^1.0.3",

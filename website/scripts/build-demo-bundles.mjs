@@ -92,6 +92,9 @@ await esbuild.build({
     'node:path': path.join(shimsDir, 'path.js'),
     util: path.join(shimsDir, 'util.js'),
     'node:util': path.join(shimsDir, 'util.js'),
+    // createRequire, imported by lib/builtin.js for its node-only fallback
+    module: path.join(shimsDir, 'module.js'),
+    'node:module': path.join(shimsDir, 'module.js'),
     // heavy optional deps no playground demo needs
     // both entries: ntk imports the WASM-free 'yoga-layout/load'
     'yoga-layout': path.join(stubsDir, 'yoga-layout.js'),

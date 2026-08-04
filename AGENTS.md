@@ -156,14 +156,20 @@ What that means in practice:
   markdown parser and syntax highlighter were subtly wrong (e.g. intra-word
   `_` emphasis) and are now thin adapters over `marked` and `highlight.js`,
   the same way math rendering uses `katex`.
-- **ESM**, Node >= 20.19. No TypeScript for now (a possible later migration —
-  keep JSDoc accurate instead).
+- **ESM**, Node >= 18.19. No TypeScript for now (a possible later migration —
+  keep JSDoc accurate instead). `process.getBuiltinModule` (Node >= 20.16) is
+  reached through `lib/builtin.js`, which falls back to `createRequire` below
+  that. `Symbol.dispose`/`using` (Node >= 20.4) degrade gracefully on 18: the
+  method is parked but inert, and `destroy()` + the GC fallback still run.
 - **Browser-bundleable lib/**: never statically import node builtins in
-  `lib/` — fetch them lazily via `process.getBuiltinModule('node:...')`
-  behind a capability check, and route environment-dependent behavior
-  through the pluggable hooks (FontSource for font lookup, `configureTex`
-  for KaTeX assets, HtmlView's `loadResource`, `createClient({ glxVisual })`)
-  so browser playgrounds can substitute implementations.
+  `lib/` — fetch them lazily via `builtin('node:...')` (which wraps
+  `process.getBuiltinModule` behind a capability check) and route
+  environment-dependent behavior through the pluggable hooks (FontSource for
+  font lookup, `configureTex` for KaTeX assets, HtmlView's `loadResource`,
+  `createClient({ glxVisual })`) so browser playgrounds can substitute
+  implementations. The only sanctioned static node imports are `node:events`
+  in `drawable.js` and `node:module` in `builtin.js` (enforced by
+  test/packaging.test.js).
 - Server-side resources (windows, pixmaps, pictures, glyphsets) must offer
   `destroy()`, `Symbol.dispose` and a `FinalizationRegistry` GC fallback.
 

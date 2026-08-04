@@ -3,6 +3,7 @@
 // Hermetic: runs against node-x11's in-process pure-JS X server and reads
 // the properties back over the wire.
 import assert from 'node:assert/strict';
+import { hostname } from 'node:os';
 import { after, before, test } from 'node:test';
 
 import xserver from 'x11/lib/xserver/index.js';
@@ -527,12 +528,11 @@ test('createWindow takes hint names at the top level and under hints', async () 
 // ---------------------------------------------------------------------
 
 test('a top-level window declares its process and host', async () => {
-  const os = process.getBuiltinModule('node:os');
   const wnd = app.createWindow({ width: 40, height: 40 });
   await settle();
 
   const machine = await getProp(wnd.id, app.X.atoms.WM_CLIENT_MACHINE);
-  assert.equal(machine.data.toString('latin1'), os.hostname());
+  assert.equal(machine.data.toString('latin1'), hostname());
   const pid = await wnd.getProperty('_NET_WM_PID', { as: 'numbers' });
   assert.deepEqual(pid, [process.pid]);
 });

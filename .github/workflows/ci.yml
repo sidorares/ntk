@@ -34,7 +34,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22, 24]
+        # 18.19 is the engines floor and lacks process.getBuiltinModule
+        # (added in 20.16), so it exercises builtin.js's createRequire fallback.
+        node: ['18.19', 20, 22, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
