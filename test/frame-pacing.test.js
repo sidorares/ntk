@@ -16,6 +16,8 @@ let nextId = 0xa000;
 
 function makeMockApp() {
   const calls = { CopyArea: 0, copies: [] };
+  /** Ids of pixmaps this mock handed out, so a copy *to* one is not a blit. */
+  const pixmaps = new Set();
   const fences = []; // pending GetInputFocus callbacks, released by tests
   // Waiters for the next blit. A blit held back by the minimum inter-blit
   // interval lands on a timer, so `await tick()` is not enough to observe it;
@@ -35,10 +37,16 @@ function makeMockApp() {
     ChangeWindowAttributes() {},
     ChangeProperty() {},
     CreateGC() {},
-    CreatePixmap() {},
+    CreatePixmap(id) {
+      pixmaps.add(id);
+    },
     FreePixmap() {},
     PolyFillRectangle() {},
     CopyArea(src, dst, gc, sx, sy, dx, dy, width, height) {
+      // A *present* is a copy to the window. Growing the backing store also
+      // copies — old pixmap to new, to carry the drawn content across a
+      // resize — and that is bookkeeping, not a frame going out.
+      if (pixmaps.has(dst)) return;
       calls.CopyArea++;
       calls.copies.push({ x: dx, y: dy, w: width, h: height });
       const wake = copyWaiters;
