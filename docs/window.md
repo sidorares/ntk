@@ -110,9 +110,26 @@ automatically (opt out with `createWindow({ backingStore: false })`):
   the window emits `draw` and `expose` (once per tick, with full-window
   geometry and `ev.synthetic = true`). Existing `wnd.on('expose', draw)`
   code keeps working, it just runs far less often.
-- The backing pixmap grows monotonically with the window (fresh area is
-  white); `ctx.getImageData` reads it directly, so results are valid even
+- The backing pixmap grows monotonically with the window, and what is
+  already drawn is **copied across** a grow — only the area the grow adds is
+  cleared. `ctx.getImageData` reads it directly, so results are valid even
   where the window is occluded on screen.
+- **What that area is cleared to follows the window's `backgroundPixel`**,
+  which is also what the server paints into exposed area on a window with no
+  backing store. Without one it is the screen's white, or transparent on a
+  depth-32 ARGB window. This matters more than it sounds: the pixmap is
+  rounded up to a 128px granularity, so a window dragged a little larger
+  grows into area that was cleared when the pixmap was created and is never
+  reallocated — a window that draws itself dark and left this at white shows
+  a white strip until something damages it.
+
+  ```js
+  const wnd = app.createWindow({ width: 400, height: 300, backgroundPixel: 0x1e2228 });
+  wnd.setBackgroundPixel(0xffffff);   // later — both the attribute and the clear
+  ```
+
+  `setBackgroundPixel` also recolours the pixmap's headroom, which holds no
+  content yet, so a later grow does not expose the previous colour.
 - Windows are created with NorthWest `bit-gravity`, so the server keeps old
   content anchored during a resize instead of clearing to background.
 
