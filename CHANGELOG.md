@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.6.1](https://github.com/sidorares/ntk/compare/v6.6.0...v6.6.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **window:** the backing store cleared to white, whatever the window's background ([#209](https://github.com/sidorares/ntk/issues/209)) ([5d5e758](https://github.com/sidorares/ntk/commit/5d5e758f3059a87cff4c5579ae02304a203df801))
+
 ## [6.6.0](https://github.com/sidorares/ntk/compare/v6.5.0...v6.6.0) (2026-08-04)
 
 
