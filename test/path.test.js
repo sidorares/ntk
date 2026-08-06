@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   Path2D,
+  arcSegmentCount,
   parseSvgPath,
   flattenPath,
   transformCommands,
@@ -119,7 +120,16 @@ test('Path2D full circle area approximates πr²', () => {
   p.arc(50, 50, 20, 0, Math.PI * 2);
   const area = pathArea(p);
   const exact = Math.PI * 400;
-  assert.ok(Math.abs(area - exact) / exact < 0.01, `${area} vs ${exact}`);
+  // A flattened circle is the inscribed polygon on the chords the tolerance
+  // allows, so its area is short of πr² by a knowable amount rather than an
+  // arbitrary one: assert it is exactly the n-gon, with n from the same
+  // formula the flattener uses. Since the chords are minimal now, this is
+  // the largest deficit the 0.25px contract permits — ~1.6% at r=20.
+  const n = arcSegmentCount(2 * Math.PI, 20);
+  const ngon = 0.5 * n * 400 * Math.sin((2 * Math.PI) / n);
+  assert.ok(Math.abs(area - ngon) < 1e-6, `${area} vs inscribed ${n}-gon ${ngon}`);
+  assert.ok(area < exact, 'inscribed: never larger than the true circle');
+  assert.ok(Math.abs(area - exact) / exact < 0.02, `${area} vs ${exact}`);
 });
 
 test('Path2D from SVG string equals the equivalent built path', () => {
