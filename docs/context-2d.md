@@ -204,7 +204,11 @@ Full canvas path surface:
   style) do not double-darken at the overlaps. Disks are sized by the same
   flatness tolerance as any other arc, so a 1px round cap is a triangle and
   a very thick one stays smooth past where the old fixed ceiling of 32
-  segments started to show
+  segments started to show. A **closed** subpath is cut in the middle of one
+  of its edges before extrusion, so every one of its vertices is a join and
+  none of them is an end — a stroked rectangle has four identical corners,
+  and `lineCap` has nothing to apply to (per the spec, caps belong to the
+  ends of open subpaths)
 - `clip([path][, fillRule])` — intersects the clip region; restored by
   `restore()`
 - `isPointInPath([path, ]x, y[, fillRule])` — hit test in canvas (device)
