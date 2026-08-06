@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.7.0](https://github.com/sidorares/ntk/compare/v6.6.1...v6.7.0) (2026-08-06)
+
+
+### Features
+
+* recognize rounded-rect fill/stroke and emit corner glyphs + FillRectangles ([#212](https://github.com/sidorares/ntk/issues/212)) ([c33908a](https://github.com/sidorares/ntk/commit/c33908a652f911f7f40bababf08b36ef8e9d0cfe)), closes [#211](https://github.com/sidorares/ntk/issues/211)
+
+
+### Bug Fixes
+
+* a closed subpath's seam is a join, not two loose ends ([#216](https://github.com/sidorares/ntk/issues/216)) ([3bb8e32](https://github.com/sidorares/ntk/commit/3bb8e32375e572d7e0b8d19bf3b397c8170499e4))
+
+
+### Performance Improvements
+
+* flatten arcs from their own geometry instead of bisecting their cubics ([#215](https://github.com/sidorares/ntk/issues/215)) ([ca24183](https://github.com/sidorares/ntk/commit/ca24183250af0e0fe7cdf763fadd15e7067821b4)), closes [#213](https://github.com/sidorares/ntk/issues/213)
+
 ## [6.6.1](https://github.com/sidorares/ntk/compare/v6.6.0...v6.6.1) (2026-08-05)
 
 
