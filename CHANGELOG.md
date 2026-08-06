@@ -1,5 +1,23 @@
 # Changelog
 
+## [7.0.0](https://github.com/sidorares/ntk/compare/v6.7.0...v7.0.0) (2026-08-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **window:** `present: true` was opt-in and is now the default for double-buffered windows, which changes both how a frame is sent and what paces it. Pass `present: false` for the old behaviour, or `frameClock: 'fence'` to keep the old clock while still presenting.
+
+### Features
+
+* **app:** default the frame interval to the display's refresh rate ([#221](https://github.com/sidorares/ntk/issues/221)) ([28c73d8](https://github.com/sidorares/ntk/commit/28c73d89380f8543da62c14d7ec876765bb41586))
+* **window:** present by default, and clock frames on the display ([#222](https://github.com/sidorares/ntk/issues/222)) ([a021a9f](https://github.com/sidorares/ntk/commit/a021a9f8f7d5d1fc75b352218e301a3fa1e26eb1))
+
+
+### Performance Improvements
+
+* an odd border width belongs on the rounded-stroke fast path ([#218](https://github.com/sidorares/ntk/issues/218)) ([a952e09](https://github.com/sidorares/ntk/commit/a952e096b7c39b76723c6ee4cc1404b692d46d41))
+* **window:** clock frames on Present's CompleteNotify ([#220](https://github.com/sidorares/ntk/issues/220)) ([a929e62](https://github.com/sidorares/ntk/commit/a929e625029bb0ab25054cedda7d65ce110b1434))
+
 ## [6.7.0](https://github.com/sidorares/ntk/compare/v6.6.1...v6.7.0) (2026-08-06)
 
 
