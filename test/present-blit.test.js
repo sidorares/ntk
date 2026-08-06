@@ -179,7 +179,10 @@ test('falls back to CopyArea when XFixes is missing', async () => {
   wnd.destroy();
 });
 
-test('a window that did not opt in keeps using CopyArea', async () => {
+test('a blit before the extension has answered uses CopyArea', async () => {
+  // enablePresent is asynchronous, so the first frames of a window's life can
+  // land before it resolves — they have to be correct anyway, which is the
+  // property that lets the two paths alternate at all
   const { app, calls } = makeMockApp();
   const wnd = new Window(app, { width: 200, height: 100 });
   wnd.width = 200;
@@ -190,6 +193,52 @@ test('a window that did not opt in keeps using CopyArea', async () => {
   await tick();
   assert.deepEqual(calls.presents, []);
   assert.equal(calls.copies.length, 1);
+  wnd.destroy();
+});
+
+test('a double-buffered window presents without being asked', async () => {
+  // the decision rides on the backing store, so it is taken where one is
+  // created rather than in the constructor
+  const { app, calls } = makeMockApp();
+  const wnd = new Window(app, { width: 200, height: 100 });
+  assert.equal(calls.selects.length, 0, 'nothing before there is a pixmap to present');
+  wnd._enableBackingStore();
+  await tick();
+  assert.ok(wnd._presentExt, 'the extension is up');
+  assert.equal(wnd.frameClock, 'present', 'and the display is the clock');
+
+  wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
+  await tick();
+  assert.equal(calls.presents.length, 1, 'blits go out as presents');
+  assert.deepEqual(calls.copies, []);
+  wnd.destroy();
+});
+
+test('present: false opts out of both the blit and the clock', async () => {
+  const { app, calls } = makeMockApp();
+  const wnd = new Window(app, { width: 200, height: 100, present: false });
+  wnd._enableBackingStore();
+  await tick();
+  assert.equal(wnd._presentExt, null, 'no extension');
+  assert.equal(wnd.frameClock, 'fence');
+
+  wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
+  await tick();
+  assert.deepEqual(calls.presents, []);
+  assert.equal(calls.copies.length, 1, 'CopyArea, as before');
+  wnd.destroy();
+});
+
+test('a window with no backing store pays nothing for the default', async () => {
+  // an 'opengl' or 'x11' context draws to the window directly: there is no
+  // pixmap to present, so an update region and an event selection would be
+  // bought and never used
+  const { app, calls } = makeMockApp();
+  const wnd = new Window(app, { width: 200, height: 100 });
+  await tick();
+  assert.equal(wnd._presentExt, null);
+  assert.deepEqual(calls.selects, []);
+  assert.deepEqual(calls.regions, []);
   wnd.destroy();
 });
 

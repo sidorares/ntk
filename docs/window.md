@@ -56,9 +56,9 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   [Frames, coalescing and slow connections](#frames-coalescing-and-slow-connections))
 - `frameSync: false` — don't pace frames on the server at all: no round-trip
   fence, and no waiting for the display either
-- `present: true` — blit with the Present extension instead of `CopyArea`,
-  and take the frame clock from the display
-  (see [Blitting with Present](#blitting-with-present--present-true))
+- `present: false` — blit with `CopyArea` instead of the Present extension,
+  and keep the frame clock off the display
+  (see [Blitting with Present](#blitting-with-present))
 - `frameClock: 'fence'` — keep the round-trip clock on a window that presents
   (see [What ends a frame](#what-ends-a-frame))
 - `frameInterval: ms` — minimum time between paced frames, and the minimum
@@ -144,19 +144,28 @@ automatically (opt out with `createWindow({ backingStore: false })`):
 Foreign windows (`{ id }`) and windows drawing via the `'opengl'` or
 `'x11'` contexts are not double-buffered.
 
-### Blitting with Present — `present: true`
+### Blitting with Present
 
-By default a frame's dirty rectangles go out as one `CopyArea` each, and
-because each rectangle costs a request, scattered damage is collapsed into
-the box around it when the split stops paying for itself (see
-`scrollRegion` above and the note on blit lists). With
-`createWindow({ present: true })` the frame becomes a single `PresentPixmap`
-carrying an update region instead:
+A double-buffered window blits through the Present extension: a frame's dirty
+rectangles become a single `PresentPixmap` carrying an update region. The
+alternative — and the fallback wherever Present is unavailable — is one
+`CopyArea` per rectangle, where because each rectangle costs a request,
+scattered damage is collapsed into the box around it when the split stops
+paying for itself (see `scrollRegion` above and the note on blit lists).
+
+This is set up when the window gets its backing store, so a window drawing
+through the `'opengl'` or `'x11'` contexts never pays for it. Nothing is
+required of the caller:
 
 ```js
-const wnd = app.createWindow({ width: 800, height: 600, present: true });
-// or, to know whether it took effect:
+const wnd = app.createWindow({ width: 800, height: 600 });
+wnd.getContext('2d'); // presents from here on
+
+// to know whether it took effect, or to have it up before the first paint:
 await wnd.enablePresent();
+
+// to stay on CopyArea:
+const plain = app.createWindow({ width: 800, height: 600, present: false });
 ```
 
 Two things follow. A frame is a fixed two requests however fragmented the
@@ -243,14 +252,16 @@ frames**, gated by three independent mechanisms:
 
 ### What ends a frame
 
-A window that presents (`present: true`) takes its frame clock from the
-display. Every frame goes out as a `PresentPixmap`, and the server sends back
-a `CompleteNotify` when it has *executed* that copy, at a vertical blank —
+A window that presents — which is every double-buffered window unless it
+opted out — takes its frame clock from the display. Every frame goes out as
+a `PresentPixmap`, and the server sends back a `CompleteNotify` when it has
+*executed* that copy, at a vertical blank —
 so that event, rather than a timer or a socket round-trip, is what starts the
 next frame:
 
 ```js
-const wnd = app.createWindow({ width: 800, height: 600, present: true });
+const wnd = app.createWindow({ width: 800, height: 600 });
+wnd.getContext('2d');
 // wnd.frameClock === 'present' once the extension has answered
 ```
 
@@ -296,7 +307,7 @@ back to the fence, and the next completion to arrive takes it again.
 how you ask for less than the display offers:
 
 ```js
-const wnd = app.createWindow({ present: true, frameInterval: 33 }); // ~30 fps
+const wnd = app.createWindow({ frameInterval: 33 }); // ~30 fps on any display
 wnd.frameInterval = 0; // back to the display's rate
 ```
 
@@ -398,7 +409,8 @@ for the display to report back, so those frames fall back to the timer, at
 `refreshInterval` where one has been measured.
 
 ```js
-const wnd = app.createWindow({ width: 800, height: 600, present: true });
+const wnd = app.createWindow({ width: 800, height: 600 });
+const ctx = wnd.getContext('2d');
 const step = () => {
   draw(); // your painting; the blit goes out with the frame
   wnd.requestAnimationFrame(step);
