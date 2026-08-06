@@ -311,6 +311,27 @@ const wnd = app.createWindow({ frameInterval: 33 }); // ~30 fps on any display
 wnd.frameInterval = 0; // back to the display's rate
 ```
 
+#### What the display's clock costs
+
+A present holds the backing store until the server executes the copy, so a
+repaint raised *part-way* through a frame — a click during a scroll, a
+keystroke while something is moving — cannot go out until the completion
+arrives. On the fence clock it went out immediately and reached the same
+vertical blank; here it can miss that blank and land on the next one.
+
+Measured end to end on a ~15 ms refresh, with an animation running so there
+is always a frame in flight to be caught behind, that is worth **2–4 ms at
+the median** — a fraction of a period rather than a whole one, because a
+repaint raised early in a frame still catches the same blank. It scales with
+the period, so it shrinks on a faster display. `scripts/bench-present-latency.mjs`
+measures it per machine; the numbers move by ~1.5 ms between runs, so read
+the difference between the two clocks rather than either column.
+
+Worth knowing about rather than worth avoiding: `frameClock: 'fence'` buys
+those milliseconds back and gives up rate-matching, phase-locking and the
+throttling of windows nobody can see. If the latency matters more than any of
+that — a drawing surface tracking a stylus, say — it is the escape hatch.
+
 While a frame is pending, noisy events **coalesce** instead of queueing:
 
 - `resize`, `mousemove` — the newest event wins. Every merged raw event is
@@ -357,6 +378,16 @@ wnd.on('mousedown', (ev) => {
   if (!wnd.frameInFlight()) paint(); // else leave it to the frame clock
 });
 ```
+
+The same gate is what keeps drawing off a backing store the server is busy
+with. A present owns the pixmap until the copy executes (see
+[What the display's clock costs](#what-the-displays-clock-costs)), and ntk
+holds back the blits it controls — the one after an event handler, the one
+ending a frame — until it is handed back. Drawing raised from neither place,
+a bare `setTimeout` that paints, is outside that and can land in a pixmap
+mid-copy. Paint from an event handler or a `requestAnimationFrame` callback
+and this never arises; if you must paint from a timer, gate it on
+`frameInFlight()` the same way.
 
 Escape hatches, from mildest to rawest:
 
