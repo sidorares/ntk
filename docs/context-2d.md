@@ -345,9 +345,11 @@ app.shapePolicy = { maxRadius: 0 };      // disable the route entirely
 
 `NTK_NO_SHAPE_GLYPHS=1` in the environment disables it too (for A/B
 measurement — `examples/rounded-boxes.js` and
-`scripts/bench-rounded-boxes.mjs` draw the comparison, and
+`scripts/bench-rounded-boxes.mjs` draw the comparison,
 `scripts/bench-odd-border.mjs` sweeps a bordered card wall by border width
-alone). The corner cache is per connection and evicts by resetting the page
+alone, and `examples/odd-border.js` puts both routes side by side with the
+corners magnified, for eyeballing parity rather than timing it). The corner
+cache is per connection and evicts by resetting the page
 when the budget is exceeded, so an adversarial animated-radius load stays
 bounded; a real UI's population (a design system's radii × border widths) is
 a few dozen tiny bitmaps that never approach it.
