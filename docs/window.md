@@ -62,10 +62,12 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 - `frameClock: 'fence'` — keep the round-trip clock on a window that presents
   (see [What ends a frame](#what-ends-a-frame))
 - `frameInterval: ms` — minimum time between paced frames, and the minimum
-  time between blits (default `16`, ~60 fps; `0` disables both gates). Under
-  the vblank clock this is a *cap* on top of the display's rate and the
-  default does not apply — see [What ends a frame](#what-ends-a-frame). Also
-  writable later as `wnd.frameInterval`.
+  time between blits. Defaults to the display's own period where the
+  connection could find it out — `app.refreshRate`, see [app.md](app.md) — and
+  to `16` until it has; `0` disables both gates. Under the vblank clock this
+  is a *cap* on top of the display's rate and the default does not apply —
+  see [What ends a frame](#what-ends-a-frame). Also writable later as
+  `wnd.frameInterval`.
 - `syncRequest: true` — let the window manager pace interactive resizes to
   this window's repaint rate (see
   [Resize synchronization](#resize-synchronization--syncrequest--enablesyncrequest))
@@ -220,7 +222,8 @@ frames**, gated by three independent mechanisms:
   automatically degrade to one per round-trip — the latest state is always
   the next thing drawn, and no backlog builds up. Disable with
   `frameSync: false`.
-- **a timer** — at most one paced frame per `frameInterval` ms (default 16),
+- **a timer** — at most one paced frame per `frameInterval` ms, which defaults
+  to the display's own period (`app.refreshRate`, `16` until that is known),
   so a local server isn't asked to redraw at input-device rate. Under the
   vblank clock the display sets the rate instead, and this is only what runs
   the next frame when one drew nothing at all (there is no present to report

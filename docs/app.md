@@ -62,6 +62,21 @@ const app2 = await createClient({ display: ':1' });
   ([context-2d.md](context-2d.md#swapping-the-rasterizer))
 - `app.rasterPolicy` — the thresholds for that choice, merged over
   `DEFAULT_RASTER_POLICY`
+- `app.refreshRate` — the fastest refresh rate any active output is running
+  at, in Hz; `null` until the display has been asked, and on a server with no
+  RandR or no mode worth pacing to
+- `app.frameInterval` — that rate as a period in ms, which is what windows on
+  this connection take as their default `frameInterval` (see
+  [window.md](window.md#frames-coalescing-and-slow-connections)); `null`
+  alongside `refreshRate`
+
+The rate is probed once per connection, in the background, when the first
+window is created — three RandR round trips that no window waits for. Windows
+built before the answer lands adopt it when it does, unless they were given a
+`frameInterval` of their own. The *fastest* output rather than the one a given
+window sits on, because what this feeds is a rate ceiling: a window paced
+faster than its own monitor is bounded by the next gate along, whereas one
+paced slower can never reach the rate its display offers.
 
 ## Methods
 
