@@ -186,7 +186,10 @@ Full canvas path surface:
 - `arc(x, y, r, a0, a1[, ccw])`, `ellipse(x, y, rx, ry, rot, a0, a1[, ccw])`,
   `arcTo(x1, y1, x2, y2, r)`
 - `rect(x, y, w, h)`, `roundRect(x, y, w, h, radii)` — radii like the spec:
-  a number, or an array of 1–4 numbers / `{x, y}` pairs
+  a number, or an array of 1–4 numbers / `{x, y}` pairs. A rounded rect on
+  integer geometry fills/strokes through cached server-side corner glyphs
+  instead of rasterization (see
+  [Rounded rectangles: corner glyphs](#rounded-rectangles-corner-glyphs))
 - `fill([path][, fillRule])` — `'nonzero'` (default) or `'evenodd'`;
   rasterized here or on the server depending on size (see
   [Where drawings are rasterized](#where-drawings-are-rasterized))
@@ -244,6 +247,63 @@ invisible to everything else: gradients, solid fills, `globalAlpha`, clip and
 composite ops all work identically either way, and a widget that draws through
 `fill()`/`stroke()` — `SvgView`, `HtmlView`, anything of your own — is routed
 without knowing this exists.
+
+### Rounded rectangles: corner glyphs
+
+A third route sits in front of both of the above and skips rasterization
+entirely. A `fill()` or `stroke()` whose path is exactly one `roundRect()` on
+integer, axis-aligned geometry is recognized and emitted as **corner glyphs +
+`FillRectangles`**: the box's only curved ink — the corners — becomes XRender
+glyphs, cached server-side after first use and keyed by `(radius, border
+width, corner)` but **not** by the box size, so an animating pill or progress
+bar keeps its glyphs while the rectangles stretch. Only the top-left corner of
+each family is ever rasterized; the other three are mirror flips of its
+bitmap, which also makes the four corners of a box pixel-exact mirror images.
+The straight runs between the corners are plain `FillRectangles`. A steady
+state card — background plus 1px border — is 4 small requests (two
+`CompositeGlyphs`, two `FillRectangles`), with nothing rasterized and nothing
+uploaded. The pieces partition the pixels, so translucent colours composite
+once, never twice.
+
+The recognizer only fires when it can reproduce the polygon route's output:
+
+- the path is one `roundRect()` (the tag any other path verb clears), drawn
+  under a translate-only transform;
+- the fill/stroke style is a solid colour (`globalAlpha` folds into it) and
+  the composite op is `source-over`;
+- box position, size and radii are integers, radii within the policy cap;
+- the clip stack is absent or rectangular (applied server-side as a picture
+  clip, the way text glyph runs already do);
+- strokes additionally need a uniform circular radius, no dashes, a border
+  no thicker than the corner radius — and the band on pixel boundaries:
+  `x ± lineWidth/2` integral, which a 1px border drawn the correct way (path
+  inset by half the width) satisfies. A 1px stroke on integer coordinates is
+  genuinely a two-row 50% band and keeps the polygon route.
+- `strokeRect()` and radius-0 strokes lower further, to 4 `FillRectangles`
+  with no glyphs at all.
+
+Everything else falls through to the two routes above, unchanged. Every
+bail-out is counted on the context — `ctx.shapeStats` is
+`{ hits, misses: { gradient, transform, 'clip-mask', fractional, dashes,
+'radius-cap', … } }` — and `NTK_DEBUG_SHAPES=1` prints the process-wide
+tally at exit, because a silent fall-off from this route is a perf cliff
+worth noticing.
+
+Policy, beside `rasterPolicy`/`textPolicy`:
+
+```js
+app.shapePolicy = { maxRadius: 64,       // corners above this fall back
+                    cacheBytes: 256 << 10 }; // server-side corner-bitmap budget
+app.shapePolicy = { maxRadius: 0 };      // disable the route entirely
+```
+
+`NTK_NO_SHAPE_GLYPHS=1` in the environment disables it too (for A/B
+measurement — `examples/rounded-boxes.js` and
+`scripts/bench-rounded-boxes.mjs` draw the comparison). The corner cache is
+per connection and evicts by resetting the page when the budget is exceeded,
+so an adversarial animated-radius load stays bounded; a real UI's population
+(a design system's radii × border widths) is a few dozen tiny bitmaps that
+never approach it.
 
 ### Swapping the rasterizer
 
