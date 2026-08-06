@@ -184,7 +184,10 @@ Full canvas path surface:
   (error-bounded subdivision in device pixels, so curves stay smooth at any
   transform scale)
 - `arc(x, y, r, a0, a1[, ccw])`, `ellipse(x, y, rx, ry, rot, a0, a1[, ccw])`,
-  `arcTo(x1, y1, x2, y2, r)`
+  `arcTo(x1, y1, x2, y2, r)` — arcs are flattened from their own geometry
+  rather than by subdividing the curves they lower to, so they cost the
+  fewest chords the tolerance allows instead of the next power of two (see
+  [How curves are flattened](#how-curves-are-flattened))
 - `rect(x, y, w, h)`, `roundRect(x, y, w, h, radii)` — radii like the spec:
   a number, or an array of 1–4 numbers / `{x, y}` pairs. A rounded rect on
   integer geometry fills/strokes through cached server-side corner glyphs
@@ -198,11 +201,49 @@ Full canvas path surface:
   the composite op. Round-cap/join disks overlap the stroke body, so their
   coverage is accumulated in a clamped a8 mask and composited in a single
   pass — semi-transparent strokes (`globalAlpha < 1` or an alpha stroke
-  style) do not double-darken at the overlaps
+  style) do not double-darken at the overlaps. Disks are sized by the same
+  flatness tolerance as any other arc, so a 1px round cap is a triangle and
+  a very thick one stays smooth past where the old fixed ceiling of 32
+  segments started to show
 - `clip([path][, fillRule])` — intersects the clip region; restored by
   `restore()`
 - `isPointInPath([path, ]x, y[, fillRule])` — hit test in canvas (device)
   coordinates
+
+## How curves are flattened
+
+Everything curved is a polyline by the time it reaches a rasterizer, and how
+many segments that polyline has decides the cost of everything downstream:
+roughly a trapezoid per edge for a fill, a pair of triangles per segment for
+a stroke. The budget is a **flatness tolerance** — the furthest the polyline
+may stray from the true curve, `0.25` device pixels by default and the last
+argument of `flattenPath(cmds, matrix, tol)`.
+
+Curves get there two ways:
+
+- **Beziers** — `bezierCurveTo`, `quadraticCurveTo`, SVG curve data, font
+  outlines — are bisected until each piece is flat enough. The test is the
+  guaranteed bound on how far a cubic leaves its chord, three quarters of
+  the larger control-point distance.
+- **Arcs** — `arc`, `ellipse`, `arcTo`, `roundRect`, SVG `A` — lower to
+  cubics but remember the arc they came from, and are split into equal
+  angular steps straight from the sagitta: a chord spanning `θ` of a circle
+  of radius `R` misses by `R·(1 - cos(θ/2))`, so the fewest chords is
+  `ceil(sweep / 2·acos(1 - tol/R))`. Bisection could only land on powers of
+  two and overshot this by up to 2x — a quarter circle at r=256 took 32
+  chords where 18 are within tolerance.
+
+The arc tag carries the ellipse as a centre plus two semi-axis *vectors*,
+which an affine map takes to the same form, so the exact route survives any
+transform — rotation, non-uniform scale and shear included — and the
+tolerance is always measured in device pixels. Ellipses are bounded by their
+semi-major axis, which is exact for circles and conservative for eccentric
+ones. Arc endpoints stay bit-identical to the lowering, so a rounded
+corner still meets the straight edge it joins.
+
+A consequence worth knowing: the flattened polygon is *inscribed*, so a
+filled circle is short of `πr²` by up to what the tolerance allows (~1.6% at
+r=20) and never larger. Pass a smaller `tol` where that matters.
 
 ## Where drawings are rasterized
 
