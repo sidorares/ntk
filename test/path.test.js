@@ -138,7 +138,12 @@ test('Path2D ellipse honors counterclockwise sweep normalization', () => {
   half.ellipse(0, 0, 10, 10, 0, 0, Math.PI);
   half.closePath();
   const area = pathArea(half);
-  assert.ok(Math.abs(area - Math.PI * 50) / (Math.PI * 50) < 0.01);
+  // What this guards is the sweep: a wrong normalization yields ~0 or ~2x
+  // the area, orders beyond this bound. The bound itself is set by the
+  // flattener — a half circle at r=10 flattens to ~8 chords within the
+  // 0.25px tolerance, and the inscribed polygon under-measures the disc by
+  // a few percent.
+  assert.ok(Math.abs(area - Math.PI * 50) / (Math.PI * 50) < 0.05);
 });
 
 test('Path2D arcTo rounds a corner (path stays connected)', () => {
