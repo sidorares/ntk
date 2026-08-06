@@ -54,11 +54,17 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   ```
 - `coalesceEvents: false` — deliver every noisy event individually (see
   [Frames, coalescing and slow connections](#frames-coalescing-and-slow-connections))
-- `frameSync: false` — don't pace frames with a server round-trip fence
-- `present: true` — blit with the Present extension instead of `CopyArea`
+- `frameSync: false` — don't pace frames on the server at all: no round-trip
+  fence, and no waiting for the display either
+- `present: true` — blit with the Present extension instead of `CopyArea`,
+  and take the frame clock from the display
   (see [Blitting with Present](#blitting-with-present--present-true))
+- `frameClock: 'fence'` — keep the round-trip clock on a window that presents
+  (see [What ends a frame](#what-ends-a-frame))
 - `frameInterval: ms` — minimum time between paced frames, and the minimum
-  time between blits (default `16`, ~60 fps; `0` disables both gates). Also
+  time between blits (default `16`, ~60 fps; `0` disables both gates). Under
+  the vblank clock this is a *cap* on top of the display's rate and the
+  default does not apply — see [What ends a frame](#what-ends-a-frame). Also
   writable later as `wnd.frameInterval`.
 - `syncRequest: true` — let the window manager pace interactive resizes to
   this window's repaint rate (see
@@ -168,8 +174,11 @@ are for, and ntk implements the basic form only.
 
 Opt-in, and inert unless both Present and XFixes are available — blits fall
 back to `CopyArea`, which stays correct at all times, so the two paths can
-even alternate. The frame clock is unchanged: frames are still paced by the
-fence and the interval, not by the display's refresh.
+even alternate.
+
+Presenting also changes what ends a frame: the server reports each present
+back when it has executed it, and that report becomes this window's frame
+clock. See [What ends a frame](#what-ends-a-frame).
 
 ### `wnd.scrollRegion(rect, dx, dy)` → boolean
 
@@ -204,15 +213,18 @@ stale intermediate states — most visibly over ssh-forwarded / networked
 displays. ntk therefore delivers noisy events and repaints in **paced
 frames**, gated by three independent mechanisms:
 
-- **a fence** — after each frame the library sends a cheap request with a
-  reply (`GetInputFocus`). X processes requests strictly in order, so the
-  reply confirms the server has consumed everything the frame drew. At most
-  one fence is ever in flight: on a fast local connection this costs
-  nothing, on a slow link frames automatically degrade to one per
-  round-trip — the latest state is always the next thing drawn, and no
-  backlog builds up. Disable with `frameSync: false`.
+- **the end of the last frame** — either the display reporting that it showed
+  it, or a server round-trip confirming it was consumed. Which one is
+  [below](#what-ends-a-frame). At most one frame is ever outstanding: on a
+  fast local connection this costs nothing, on a slow link frames
+  automatically degrade to one per round-trip — the latest state is always
+  the next thing drawn, and no backlog builds up. Disable with
+  `frameSync: false`.
 - **a timer** — at most one paced frame per `frameInterval` ms (default 16),
-  so a local server isn't asked to redraw at input-device rate.
+  so a local server isn't asked to redraw at input-device rate. Under the
+  vblank clock the display sets the rate instead, and this is only what runs
+  the next frame when one drew nothing at all (there is no present to report
+  back), or a cap you asked for explicitly.
 - **a minimum inter-blit interval** — also `frameInterval`. Blits that are
   *not* part of a paced frame (the one at the end of a discrete event's
   handler, below) skip the timer for latency, and used to be bounded only by
@@ -221,7 +233,69 @@ frames**, gated by three independent mechanisms:
   a compositor every blit is a texture-from-pixmap recomposite. The first blit
   after a quiet moment is still immediate; any that follow within
   `frameInterval` are held back and coalesce into one. `frameInterval: 0`
-  turns this off with the timer gate.
+  turns this off with the timer gate. The vblank clock needs no such interval
+  and does not apply the default one — a frame the display has not shown yet
+  is a truer statement of "too soon" than any number of milliseconds, and it
+  does not make a click wait 16 ms on a 165 Hz screen.
+
+### What ends a frame
+
+A window that presents (`present: true`) takes its frame clock from the
+display. Every frame goes out as a `PresentPixmap`, and the server sends back
+a `CompleteNotify` when it has *executed* that copy, at a vertical blank —
+so that event, rather than a timer or a socket round-trip, is what starts the
+next frame:
+
+```js
+const wnd = app.createWindow({ width: 800, height: 600, present: true });
+// wnd.frameClock === 'present' once the extension has answered
+```
+
+Frames then run at the output's own rate, phase-locked to it, whatever that
+rate is — 60 fps on a 60 Hz panel and 165 on a 165 Hz one, with nothing to
+configure and no rate written down anywhere. A fixed `frameInterval` cannot
+do this: 16 ms is 62.5 fps on any display, and even set to 5.5 ms it would
+free-run against a 180 Hz output rather than lock to it, because Node's
+timers have millisecond granularity and no knowledge of when a vertical blank
+actually is.
+
+Everything else follows from the display being honest about what it showed:
+
+- **the refresh period is measured, not queried.** Completions carry the time
+  and frame count of the presentation, so consecutive ones give the period
+  directly. `wnd.refreshInterval` reports it in ms (`null` until known), and
+  it follows the window to another monitor or through a mode change on its
+  own.
+- **a window nobody can see stops rendering.** A Wayland compositor answers
+  an occluded window about once a second, so its animation loop runs about
+  once a second — measured at ~1 fps under Mutter, against the ~56 fps the
+  same loop burns on the fence clock. Nothing is dropped: the frame that was
+  drawn is still the one shown when the window comes back.
+- **frames the display went through without you are counted.**
+  `wnd.droppedFrames` grows when the frame counter skips, on servers whose
+  counter tracks vertical blanks. Where it counts presents instead
+  (Xwayland), a miss is not observable and it stays at 0 rather than guessing.
+- **the backing store is not redrawn under a copy in progress.** A present
+  with `Option.Copy` owns the pixmap until the copy executes; waiting for the
+  completion is also waiting for it to be handed back.
+
+The fence — a cheap request with a reply (`GetInputFocus`), whose in-order
+answer confirms the server consumed the frame — is what ends a frame
+everywhere else: no Present extension, `frameClock: 'fence'`, or a blit that
+fell back to `CopyArea`. It is also the fallback when completions stop
+arriving: a present the server never executes would otherwise leave the window
+permanently stale, so one that goes unanswered for two seconds hands the clock
+back to the fence, and the next completion to arrive takes it again.
+`wnd.frameClock` reads `'present'` or `'fence'` accordingly, and is assignable
+(`'auto'` / `'fence'`) if you want to pin it.
+
+`frameInterval` still applies as a cap when you set one explicitly, which is
+how you ask for less than the display offers:
+
+```js
+const wnd = app.createWindow({ present: true, frameInterval: 33 }); // ~30 fps
+wnd.frameInterval = 0; // back to the display's rate
+```
 
 While a frame is pending, noisy events **coalesce** instead of queueing:
 
@@ -252,12 +326,13 @@ handler's own requests rather than on the next paced frame — a click's
 `:active` flip is one paint of a few hundred microseconds, and waiting a
 frame interval for it buys nothing. `wnd.frameInFlight()` is the gate to
 make that decision with: `false` means no blit is queued and drawing now
-costs nothing extra, `true` means one already is — because the fence is
-unanswered or because the minimum inter-blit interval is still running — and
-a paint now would only coalesce into it. Both gates are reported, since which
-one bites depends on the connection: the fence on a slow one, the inter-blit
-interval on a fast local server, where the fence for one wheel notch is
-answered before the next notch is even read. Gating on it saves the
+costs nothing extra, `true` means one already is — because the last frame is
+unanswered (its fence unreplied, or its present not yet on the display) or
+because the minimum inter-blit interval is still running — and a paint now
+would only coalesce into it. Every gate is reported, since which one bites
+depends on the connection: the fence on a slow one, the inter-blit interval
+on a fast local server, where the fence for one wheel notch is answered
+before the next notch is even read. Gating on it saves the
 *painting* work in a burst — the blit itself is bounded either way, since the
 minimum inter-blit interval already folds a burst's followers into one
 catch-up frame (the first wheel notch still paints immediately).
@@ -271,28 +346,34 @@ wnd.on('mousedown', (ev) => {
 
 Escape hatches, from mildest to rawest:
 
-- `frameInterval = 0` — fence-only pacing (fastest delivery that cannot
-  fall behind the server), and unpaced blits
-- `frameSync: false` — timer-only pacing, for frames and for blits
+- `frameClock: 'fence'` — the round-trip clock on a window that presents
+- `frameInterval = 0` — no timer gate and no inter-blit interval (fastest
+  delivery that cannot fall behind the server)
+- `frameSync: false` — timer-only pacing, for frames and for blits: no fence,
+  and no waiting on the display either
 - `coalesceEvents: false` — per-event delivery, no merging at all
 - `wnd.on('event', ev => ...)` — the raw X event stream for this window,
   before any name mapping or coalescing
 
-`wnd.frameLatency` reports the last measured fence round-trip in
-milliseconds (`null` until the first frame) — a live estimate of connection
-+ server latency, useful for adapting rendering quality or animation rates.
-Note that with request buffering on (the default, see
-[app.md](app.md)) the fence reply
-also waits for the server to work through the frame it flushed, so this
-reads higher than it did when every request was written on its own — the
-frame *period* is what did not change.
+`wnd.frameLatency` reports how long the last frame took to be answered, in
+milliseconds (`null` until the first one) — useful for adapting rendering
+quality or animation rates. On the fence clock that is a round-trip, a live
+estimate of connection + server latency; on the vblank clock it is the time
+from the frame's requests going out to the server reporting it on the
+display, which *includes* the wait for the next vertical blank and so reads
+around one refresh period even on an idle local connection. Note also that
+with request buffering on (the default, see [app.md](app.md)) the fence reply
+waits for the server to work through the frame it flushed, so this reads
+higher than it did when every request was written on its own — the frame
+*period* is what did not change.
 
 A frame is emitted in one synchronous run, and the fence is a request with a
 reply, which is exactly what makes node-x11 flush: **one socket write per
 frame**, with no explicit flush call anywhere. A 200-rectangle frame is 203
 requests and 1 write; unbuffered it was 203 writes. `frameSync: false` gives
-up the fence, and the flush then happens when the event loop is about to
-poll — still one write per frame.
+up the fence, and so does the vblank clock (a completion is an event, not a
+reply); the flush then happens when the event loop is about to poll — still
+one write per frame.
 
 ### requestAnimationFrame
 
@@ -304,17 +385,39 @@ wnd.cancelAnimationFrame(id);
 ```
 
 The callback runs on the window's next paced frame (`now` is a
-`performance.now()` timestamp). A re-registering animation loop renders at
-~`1000/frameInterval` fps locally and self-throttles to one frame per
-round-trip on slow connections — write the loop once, it behaves everywhere.
+`performance.now()` timestamp). A re-registering animation loop renders one
+frame per vertical blank on a window that presents, at ~`1000/frameInterval`
+fps otherwise, and self-throttles to one frame per round-trip on slow
+connections — write the loop once, it behaves everywhere.
+
+A loop whose callback draws nothing at all still runs: there is no present
+for the display to report back, so those frames fall back to the timer, at
+`refreshInterval` where one has been measured.
+
+```js
+const wnd = app.createWindow({ width: 800, height: 600, present: true });
+const step = () => {
+  draw(); // your painting; the blit goes out with the frame
+  wnd.requestAnimationFrame(step);
+};
+wnd.requestAnimationFrame(step); // now runs at the display's rate
+```
 
 ## Properties
 
 - `wnd.id` — X window id
 - `wnd.width`, `wnd.height`, `wnd.x`, `wnd.y` — geometry, kept in sync on `resize`
-- `wnd.frameLatency` — last fence round-trip, ms (`null` before the first frame)
-- `wnd.frameInterval` — minimum ms between paced frames, and between blits
-  (writable)
+- `wnd.frameLatency` — how long the last frame took to be answered, ms
+  (`null` before the first frame; see above for what it measures on each clock)
+- `wnd.frameInterval` — minimum ms between paced frames, and between blits;
+  a cap on top of the display's rate under the vblank clock (writable)
+- `wnd.frameClock` — which clock is ending this window's frames, `'present'`
+  or `'fence'`; assignable as `'auto'` / `'fence'`
+- `wnd.refreshInterval` — measured display refresh period in ms; `null` on the
+  fence clock, and until two frames have landed one vertical blank apart —
+  so a window capped below the display's rate never measures it
+- `wnd.droppedFrames` — vertical blanks the display went through without a
+  frame from this window, where the server's counter can tell
 - `wnd.app`, `wnd.X`, `wnd.display` — owning app / raw client shortcuts
 
 ## Methods

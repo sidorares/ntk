@@ -11,11 +11,19 @@ import Window from '../lib/window.js';
 let nextId = 0xe000;
 
 function makeMockApp({ present = true, fixes = true } = {}) {
-  const calls = { copies: [], presents: [], regions: [], destroyedRegions: [] };
+  const calls = { copies: [], presents: [], regions: [], destroyedRegions: [], selects: [] };
   const Present = {
+    majorOpcode: 145,
     Option: { None: 0, Async: 1, Copy: 2, UST: 4, Suboptimal: 8 },
+    EventMask: { NoEvent: 0, ConfigureNotify: 1, CompleteNotify: 2, IdleNotify: 4 },
+    CompleteKind: { Pixmap: 0, NotifyMSC: 1 },
+    CompleteMode: { Copy: 0, Flip: 1, Skip: 2, SuboptimalCopy: 3 },
+    events: { ConfigureNotify: 0, CompleteNotify: 1, IdleNotify: 2 },
     Pixmap(window, pixmap, opts) {
       calls.presents.push({ window, pixmap, opts });
+    },
+    SelectInput(eid, window, eventMask) {
+      calls.selects.push({ eid, window, eventMask });
     }
   };
   const Fixes = {
@@ -64,9 +72,28 @@ function makeMockApp({ present = true, fixes = true } = {}) {
   return { app: { X, display, options: {} }, calls };
 }
 
+/**
+ * The CompleteNotify the server sends when it has executed a present, which
+ * is what ends a frame on a window using the vblank clock — a mock server
+ * that never sent one would hold the window at one frame forever.
+ */
+function complete(wnd, { msc = 1, ust = 1e6, mode = 0, kind = 0 } = {}) {
+  wnd.emit('event', {
+    type: 35,
+    extension: 145,
+    evtype: 1, // CompleteNotify
+    kind,
+    mode,
+    serial: wnd._presentSerial,
+    ust,
+    msc,
+    wid: wnd.id
+  });
+}
+
 async function presentWindow(opts) {
   const { app, calls } = makeMockApp(opts);
-  const wnd = new Window(app, { width: 200, height: 100 });
+  const wnd = new Window(app, { width: 200, height: 100, ...opts?.args });
   wnd.width = 200;
   wnd.height = 100;
   wnd._backing = { id: 0xb200, width: 200, height: 100, destroy() {} };
@@ -120,7 +147,7 @@ test('a second frame reuses the same region and bumps the serial', async () => {
   const { wnd, calls } = await presentWindow();
   wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
   await tick();
-  wnd._frame.lastPresentAt = -Infinity; // let the next blit through the pacer
+  complete(wnd); // the display consumed the first frame; the next may go out
   wnd._markDirty({ x: 20, y: 20, w: 10, h: 10 });
   await tick();
 
