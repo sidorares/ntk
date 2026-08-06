@@ -487,6 +487,10 @@ no per-size server cache — see
 - `textAlign` — `'start' | 'end' | 'left' | 'right' | 'center'`
 - `textBaseline` — `'alphabetic' | 'top' | 'hanging' | 'middle' | 'bottom' |
   'ideographic'`
+- `fontVariationSettings` — `'"wdth" 87.5'` or `{ wdth: 87.5 }`, for a
+  variable font. The `wght` axis needs none of this: a numeric weight in the
+  `font` shorthand already drives it (`ctx.font = '460 40px Inter'`). Set
+  either before or after `font` — see [fonts.md](fonts.md#variable-fonts)
 - `layoutText(content, options)` → `TextLayout` — ntk extension: wrap text
   (or styled spans) to a target width without drawing, inspect lines and
   metrics, then `layout.draw(ctx, x, y)`

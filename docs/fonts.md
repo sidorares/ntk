@@ -275,18 +275,86 @@ versions — the rasterizer has shifted text antialiasing before. Pin ntk
 exactly in a snapshot suite. System fonts make ntk *run*; they never make it
 reproducible.
 
+## Variable fonts
+
+A variable font is one file with a continuous design space — an axis per
+degree of freedom, `wght` from 100 to 900 being the common one — and a
+static *instance* of it is that design cut at a point. ntk instantiates on
+demand, and **a numeric weight is already an axis coordinate**:
+
+```js
+ctx.font = '460 40px monelogics'; // wght 460 — not "the nearest face"
+```
+
+Nothing else is required. Hand ntk a variable file through any font source
+and `weight` drives its `wght` axis, so a family with one file behaves like
+a family with nine faces — and like nine hundred, since the weights between
+the named instances are the point of an axis.
+
+The other axes are named directly, in a style or on the context:
+
+```js
+ctx.fontVariationSettings = '"wdth" 87.5'; // or { wdth: 87.5 }
+app.fonts.match('Recursive', { weight: 500, variations: { slnt: -8 } });
+new TextLayout(app.fonts, spans, { family: 'Inter', variations: { opsz: 32 } });
+```
+
+A span may carry its own, so one paragraph can move an axis mid-line.
+Settings for axes a font does not have are ignored and values are clamped to
+each axis's range, so any of this is safe to set without checking first —
+and `font.variationAxes` is there when you want to (`{}` for a static face).
+
+### What it costs
+
+An instance is a font in its own right: its own shaping, its own rasterized
+glyphs, its own server-side glyphset. So the design is that **nothing
+happens until something is drawn**:
+
+- instantiating touches tables, never glyphs;
+- glyphs rasterize one at a time, on first use, at the size drawn — the same
+  per-`(face, size)` page every static face uses, keyed by a font key that
+  carries the coordinates, so two points of an axis never collide;
+- a coordinate on its own axis default returns the base face rather than a
+  copy of it, and equal coordinates return the same instance;
+- coordinates are rounded to two decimals, so a slider handing over
+  `459.9999999` does not mint a face `460` will never hit again.
+
+Both caches are bounded. Client-side, a face keeps its 64 most recent
+instances; server-side, glyph pages are already under the `cacheBytes`
+budget of `app.textPolicy`. An app animating an axis therefore reaches a
+steady state instead of growing, and dropping an instance strands nothing:
+the key is derived from the coordinates, so the same point re-instantiated
+finds the same page.
+
+What this does *not* do is quantize for you. A slider bound straight to
+`wght` with `step={1}` really will ask for 801 distinct faces as it is
+dragged, and each is a legitimate rasterization at a size you are drawing.
+Step the control, not the font.
+
+### `.woff2` cannot be instantiated
+
+fontkit rebuilds the face from the original stream, which for a WOFF2 is
+still Brotli-compressed, so the instance comes back unusable. ntk detects
+this and says so at the call rather than letting it surface as a null
+dereference deep in shaping — but the fix is to ship the `.ttf`/`.otf` of a
+variable font rather than its `.woff2`. Static `.woff2` faces are unaffected;
+this is only about instantiating an axis.
+
 ## Font objects and matching
 
 - `createFontSource(spec)` → `FontSource` — resolve a font spec; idempotent,
   and `null`/`undefined` pass through
 - `StaticFontSource`: `add(bytes, opts)`, `alias(generic, family)`,
   `inferGenerics()`, `aliases`, `skipped` (files a spec could not parse)
-- `app.fonts.match(family, { weight, style })` → `Font`
+- `app.fonts.match(family, { weight, style, variations })` → `Font`
 - `app.fonts.fallbackFor(codepoint, family, opts)` → `Font | null` — best
   installed font covering a codepoint (fontconfig coverage data, confirmed
   against the parsed font)
 - `Font`: `familyName`, `postscriptName`, `unitsPerEm`, `hasGlyph(cp)`,
   `metrics(size)`, `shape(text, size, opts)`, `rasterize(glyphId, size)`
+- `Font`, variable faces: `variationAxes` (`{}` when static),
+  `variation(settings)` → `Font` (itself when the settings are a no-op),
+  and on an instance, `variationOf` / `variationCoords`
 
 `FontManager` and `Font` are exported from the package root; both work
 without an X connection (headless measurement/layout).
