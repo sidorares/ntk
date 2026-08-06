@@ -316,10 +316,15 @@ The recognizer only fires when it can reproduce the polygon route's output:
 - the clip stack is absent or rectangular (applied server-side as a picture
   clip, the way text glyph runs already do);
 - strokes additionally need a uniform circular radius, no dashes, a border
-  no thicker than the corner radius — and the band on pixel boundaries:
-  `x ± lineWidth/2` integral, which a 1px border drawn the correct way (path
-  inset by half the width) satisfies. A 1px stroke on integer coordinates is
-  genuinely a two-row 50% band and keeps the polygon route.
+  no thicker than the corner radius — and the band's *ink* on pixel
+  boundaries: `x ± lineWidth/2` integral and `lineWidth` itself integral,
+  which a border of any width drawn the correct way (path inset by half the
+  width) satisfies. The path *radius* is free to be fractional — nesting a
+  border inside a background corner of radius `R` means a path radius of
+  `R - lineWidth/2`, half-integer at every odd width, and the corner glyph
+  carries that half pixel the same way the polygon route does. A 1px stroke
+  on integer coordinates is a different shape — a genuine two-row 50% band —
+  and keeps the polygon route.
 - `strokeRect()` and radius-0 strokes lower further, to 4 `FillRectangles`
   with no glyphs at all.
 
@@ -340,11 +345,12 @@ app.shapePolicy = { maxRadius: 0 };      // disable the route entirely
 
 `NTK_NO_SHAPE_GLYPHS=1` in the environment disables it too (for A/B
 measurement — `examples/rounded-boxes.js` and
-`scripts/bench-rounded-boxes.mjs` draw the comparison). The corner cache is
-per connection and evicts by resetting the page when the budget is exceeded,
-so an adversarial animated-radius load stays bounded; a real UI's population
-(a design system's radii × border widths) is a few dozen tiny bitmaps that
-never approach it.
+`scripts/bench-rounded-boxes.mjs` draw the comparison, and
+`scripts/bench-odd-border.mjs` sweeps a bordered card wall by border width
+alone). The corner cache is per connection and evicts by resetting the page
+when the budget is exceeded, so an adversarial animated-radius load stays
+bounded; a real UI's population (a design system's radii × border widths) is
+a few dozen tiny bitmaps that never approach it.
 
 ### Swapping the rasterizer
 

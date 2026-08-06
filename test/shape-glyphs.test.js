@@ -288,7 +288,17 @@ const STROKE_CASES = [
   ['r=8 bw=2', { x: 20, y: 20, w: 110, h: 50, r: 8, bw: 2 }],
   ['r=6 bw=1 half-integer path', { x: 30.5, y: 30.5, w: 89, h: 29, r: 6, bw: 1 }],
   ['r=12 bw=4', { x: 20, y: 20, w: 110, h: 60, r: 12, bw: 4 }],
-  ['pill r=12 bw=2', { x: 40, y: 40, w: 100, h: 24, r: 12, bw: 2 }]
+  ['pill r=12 bw=2', { x: 40, y: 40, w: 100, h: 24, r: 12, bw: 2 }],
+  // an odd border inset by bw/2 nests inside a background corner of radius R
+  // with a path radius of R - bw/2 — half-integer, and the case issue #217
+  // was about. The outer band still lands on integers, which is the only
+  // alignment the route needs.
+  ['R=8 bw=1, path r=7.5', { x: 20.5, y: 20.5, w: 119, h: 59, r: 7.5, bw: 1 }],
+  ['R=8 bw=3, path r=6.5', { x: 21.5, y: 21.5, w: 117, h: 57, r: 6.5, bw: 3 }],
+  ['R=23 bw=1, path r=22.5', { x: 20.5, y: 20.5, w: 159, h: 119, r: 22.5, bw: 1 }],
+  // a fractional radius that is not even half-integer: the glyph box is cut
+  // at ceil(r + bw/2), and out to that cut the band is its straight run
+  ['R=12.2 bw=1, path r=11.7', { x: 20.5, y: 20.5, w: 119, h: 59, r: 11.7, bw: 1 }]
 ];
 
 for (const [name, g] of STROKE_CASES) {
@@ -331,6 +341,76 @@ for (const [name, g] of STROKE_CASES) {
     }
   });
 }
+
+// The assertion that carries the decomposition, checked where a border is
+// most likely to break it — an odd width, whose path radius is half-integer
+// and whose glyph box is cut a fraction outside the arc's tangent point. A
+// translucent border over white: a pixel covered once by ink at alpha 0.5 is
+// 128; a pixel the glyph and the FillRectangles both claimed would be 64.
+for (const bw of [1, 2, 3, 4, 5]) {
+  test(`an inset ${bw}px border paints no pixel twice`, async () => {
+    app.shapePolicy = null;
+    const ctx = freshCtx();
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = bw;
+    ctx.beginPath();
+    // background corner radius 10, so the inset path radius is 10 - bw/2
+    ctx.roundRect(20 + bw / 2, 20 + bw / 2, 150 - bw, 110 - bw, 10 - bw / 2);
+    ctx.stroke();
+    assert.equal(ctx.shapeStats.hits, 1, 'took the fast path');
+    const img = await ctx.getImageData(0, 0, W, H);
+    let min = 255;
+    let at = null;
+    for (let py = 0; py < H; py++) {
+      for (let px = 0; px < W; px++) {
+        const v = img.data[(py * W + px) * 4];
+        if (v < min) {
+          min = v;
+          at = `${px},${py}`;
+        }
+      }
+    }
+    assert.ok(min <= 129, `the band is there (darkest pixel ${min})`);
+    assert.ok(min >= 127, `no pixel painted twice (${min} at ${at}, doubled would be ~64)`);
+    // and the straight runs are whole rows: bw rows of full coverage at the
+    // top edge, nothing spilling above or below them
+    const midX = 20 + 75;
+    for (let row = 0; row < bw; row++) {
+      assert.ok(
+        Math.abs(img.data[((20 + row) * W + midX) * 4] - 128) <= 1,
+        `top band row ${row} fully covered`
+      );
+    }
+    assert.equal(img.data[((20 - 1) * W + midX) * 4], 255, 'nothing above the band');
+    assert.equal(img.data[((20 + bw) * W + midX) * 4], 255, 'nothing below the band');
+  });
+}
+
+test('a fractional lineWidth falls back even on an integer band', async () => {
+  // x = 0.75 with bw = 1.5 puts the outer band on integers, so the band tests
+  // pass; the straight runs would need fractional FillRectangles extents,
+  // which the wire cannot carry, so the width itself has to be integral
+  const draw = (ctx) => {
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(20.75, 20.75, 98.5, 58.5, 8);
+    ctx.stroke();
+  };
+  const { fast, slow, fastImg, slowImg } = await bothRoutes(draw);
+  assert.equal(fast.shapeStats.hits, 0, 'no fast path for a fractional width');
+  assert.equal(fast.shapeStats.misses.fractional, 1);
+  assert.equal(slow.shapeStats.hits, 0);
+  // both runs are the polygon route now, so the half-covered row survives
+  const { max } = diff(fastImg, slowImg);
+  assert.equal(max, 0, 'identical: both took the polygon route');
+  // the band's top edge is y = 20, so row 20 is full ink and row 21 half —
+  // the row the fast path used to drop
+  const mid = 70;
+  assert.ok(fastImg.data[(20 * W + mid) * 4] < 32, 'the full row is drawn');
+  const half = fastImg.data[(21 * W + mid) * 4];
+  assert.ok(half > 64 && half < 192, `the half-covered row is drawn (${half})`);
+});
 
 test('strokeRect lowers to four rectangles and squares every corner', async () => {
   app.shapePolicy = null;
