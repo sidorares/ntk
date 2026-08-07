@@ -1,5 +1,17 @@
 # Changelog
 
+## [7.2.0](https://github.com/sidorares/ntk/compare/v7.1.0...v7.2.0) (2026-08-07)
+
+
+### Features
+
+* **text:** textRendering, so a run can name its own glyph path ([#231](https://github.com/sidorares/ntk/issues/231)) ([9d75a20](https://github.com/sidorares/ntk/commit/9d75a2098fe47c4878830de9d84b54062dfe8952))
+
+
+### Bug Fixes
+
+* **text:** an animated axis is churn, and the router could not see it ([#230](https://github.com/sidorares/ntk/issues/230)) ([a3d1a54](https://github.com/sidorares/ntk/commit/a3d1a54f1c8bb2f00467535c406b7db089ec2110))
+
 ## [7.1.0](https://github.com/sidorares/ntk/compare/v7.0.0...v7.1.0) (2026-08-07)
 
 
