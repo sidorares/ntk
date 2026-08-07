@@ -108,10 +108,19 @@ So `drawGlyphRuns` routes each run (issue #45):
   at the exact size, decomposed into trapezoids (`lib/trapezoid.js`) and
   rendered server-side with one batched `AddTraps` + `Composite` through a
   shared scratch a8 mask per draw. Nothing is cached server-side;
-- **in between** — bitmaps, unless the size is fractional or a small
-  per-face ring of recently drawn sizes shows no reuse (an animation in
-  flight). Both signals route to vector, and an animation that settles
-  flips back to bitmaps on the next frame.
+- **in between** — bitmaps, unless the size is fractional or a small ring of
+  what the face has drawn recently shows no reuse (an animation in flight).
+  Both signals route to vector, and an animation that settles flips back to
+  bitmaps on the next frame.
+
+The ring is keyed by **face** and records the `(instance, size)` pairs a
+glyph page is keyed by, which is what has to repeat for caching to pay for
+itself. For a variable font the face is the one the instances were cut from,
+not the instances: every point on an axis is a `Font` of its own, so an
+animated axis would otherwise hand the router a fresh empty ring on every
+step — eight unrelated faces each drawn once, no churn to see — and stay on
+the bitmap path allocating a glyph page per step. A sweep of the `wght` axis
+and a sweep of the size are the same event, and read as one.
 
 Vector-path positioning is *not* rounded to whole pixels, so fractional
 sizes and fractional pen positions animate smoothly (the bitmap path rounds
