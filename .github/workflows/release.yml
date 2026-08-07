@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     branches: [master]
+  # A push that never reaches Actions — a throttled webhook during an incident,
+  # say — leaves master with releasable commits and no release PR, and GitHub
+  # does not backfill the run it dropped. Dispatch recovers without having to
+  # land an empty commit on master.
+  workflow_dispatch:
 
 permissions: {}
 
