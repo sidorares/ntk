@@ -1,5 +1,17 @@
 # Changelog
 
+## [7.1.0](https://github.com/sidorares/ntk/compare/v7.0.0...v7.1.0) (2026-08-07)
+
+
+### Features
+
+* **text:** variable fonts, instantiated on demand ([#227](https://github.com/sidorares/ntk/issues/227)) ([03539e9](https://github.com/sidorares/ntk/commit/03539e947f938b0bfe97beaaaeed22c91dd45971))
+
+
+### Bug Fixes
+
+* **app:** give each connection its own atom table ([#226](https://github.com/sidorares/ntk/issues/226)) ([5585aad](https://github.com/sidorares/ntk/commit/5585aad671087f4736f141ae910e94925fd2c2c5))
+
 ## [7.0.0](https://github.com/sidorares/ntk/compare/v6.7.0...v7.0.0) (2026-08-06)
 
 
