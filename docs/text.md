@@ -126,6 +126,49 @@ Vector-path positioning is *not* rounded to whole pixels, so fractional
 sizes and fractional pen positions animate smoothly (the bitmap path rounds
 both, which is correct for static UI text).
 
+### `textRendering`
+
+Size is a guess at intent, and a good one for UI text. It cannot know that a
+word is a headline whose weight is under a slider. `textRendering` is how a
+run says so, taking CSS's property and its values:
+
+```js
+ctx.textRendering = 'geometricPrecision';
+app.fonts.layout(spans, { family: 'Inter', size: 96, textRendering: 'geometricPrecision' });
+```
+
+| value                | route              |                                                     |
+| -------------------- | ------------------ | --------------------------------------------------- |
+| `auto` (default)     | thresholds decide  | today's behaviour                                   |
+| `geometricPrecision` | always vector      | exact glyph origins, nothing cached                 |
+| `optimizeSpeed`      | always bitmap      | cached glyphs at any size                           |
+| `optimizeLegibility` | thresholds decide  | accepted, means `auto` — ntk has no hinting to turn on |
+
+**Why display text wants `geometricPrecision`.** On the bitmap path a glyph
+origin rounds to a whole pixel, because a cached bitmap can only land on
+one, and each glyph's advance is baked into the glyphset as an integer. Slide
+a variable font's `wght` and the true advances move by hundredths of a pixel;
+those hundredths accumulate along the line until one glyph crosses a rounding
+boundary and jumps a whole pixel on its own while its neighbours stand still.
+Same font, same size, only the pen origin sliding by a tenth of a pixel:
+
+```
+bitmap   ink centroid over an 0.1px sweep:  6 distinct positions in 11 samples
+vector   ink centroid over the same sweep: 11 distinct positions in 11 samples
+```
+
+It is a **per-span** property, so one paragraph can hold a headline that
+wants exact positions and body text that wants its glyph cache — the two are
+partitioned into separate composites, which is what already happens when a
+paragraph crosses a size threshold.
+
+The cost is real and worth stating: the vector path rasterizes outlines on
+every draw and caches nothing. That is the right trade for text being
+animated, and the wrong one for a paragraph that never changes.
+
+`textPolicy.textRendering` sets an app-wide default for a window that is all
+display text; a run that names its own always wins.
+
 The thresholds and the cache budget are per-app configurable:
 
 ```js
