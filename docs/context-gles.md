@@ -126,7 +126,8 @@ not the message:
 | `GL_NO_ADDON` | `x11-dri` is not installed | `npm install x11-dri` |
 | `GL_NO_DRIVER` | no `libgbm`/`libEGL`/`libGLESv2`, or not Linux | install Mesa; direct rendering is Linux-only |
 | `GL_NO_DEVICE` | no readable `/dev/dri/renderD*` | map the device into the container, or join the `render` group |
-| `GL_REMOTE_DISPLAY` | the connection cannot pass a descriptor | direct rendering is local-only; use indirect over a network |
+| `GL_REMOTE_DISPLAY` | a TCP or forwarded display | direct rendering is local-only; use indirect over a network |
+| `GL_NO_FD_PASSING` | local display, but this runtime cannot pass a descriptor | run under Node — Bun does not implement the internal x11 uses |
 | `GL_NO_DRI3` | the server has no DRI3/Present | Xvfb, Xephyr and XQuartz have none |
 | `GL_IMPORT_FAILED` | the server refused the buffer | usually different DRM devices — set `devicePath` |
 | `GL_CONTEXT_FAILED` | GBM/EGL setup failed | the message says what did |
@@ -138,6 +139,21 @@ afterwards. Under the default policy it does not run at all, so an app that
 never asked pays nothing for it — but it also means that raising the policy
 *after* connecting needs one `await app.glCapabilities()` before a context can
 be created.
+
+### Runtimes
+
+Direct rendering needs a runtime that can send a file descriptor over a unix
+socket, because that is how DRI3 hands the server a buffer. `x11` does it
+through Node's internal `process.binding('pipe_wrap')`, so:
+
+| runtime | direct | indirect |
+| --- | --- | --- |
+| Node | yes | yes |
+| Bun | **no** — `process.binding('pipe_wrap')` is not implemented | yes |
+
+Under Bun the capability probe reports `GL_NO_FD_PASSING` and `'auto'` falls
+back to indirect GLX, which needs no descriptor passing at all. Nothing else
+about the display has to change.
 
 ## The API is not the GLX one
 
