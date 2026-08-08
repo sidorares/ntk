@@ -52,7 +52,7 @@
     "yoga-layout": "^3.2.1"
   },
   "optionalDependencies": {
-    "x11-dri": "^0.2.0"
+    "x11-dri": ">=0.2.0 <1"
   },
   "scripts": {
     "test": "NTK_STRICT_COLORS=1 node --test",
