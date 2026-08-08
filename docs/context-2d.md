@@ -30,7 +30,11 @@ ctx.fillRect(0, 0, 100, 100);
   **Color** below for what alpha does
 - `ctx.lineWidth`, `ctx.lineCap`, `ctx.lineJoin`, `ctx.miterLimit` — stroke
   geometry, including `'round'` caps and joins (rendered as triangle-fan
-  disks unioned with the stroke mesh)
+  disks unioned with the stroke mesh). A join whose inner corner would fall
+  outside the two segments meeting there — a hairpin, or any turn tight
+  relative to how short they are — is built from the segments' own ends
+  instead, so the stroke of a path stays within half a line width of it
+  (plus the miter itself, which `miterLimit` bounds)
 - `ctx.setLineDash(segments)`, `ctx.getLineDash()`, `ctx.lineDashOffset` —
   canvas-spec dashes: an empty list is solid, an odd-length list doubles,
   negative/non-finite values invalidate the call, `getLineDash()` returns a
@@ -228,7 +232,11 @@ Curves get there two ways:
 - **Beziers** — `bezierCurveTo`, `quadraticCurveTo`, SVG curve data, font
   outlines — are bisected until each piece is flat enough. The test is the
   guaranteed bound on how far a cubic leaves its chord, three quarters of
-  the larger control-point distance.
+  the larger control-point distance, *plus* a check that the curve does not
+  run past either end of the chord: a piece whose handles point back down
+  the chord can hug its line while overshooting an endpoint and returning,
+  which is within tolerance as a set of points but traversed in the wrong
+  direction — invisible in a fill and a spike in a stroke.
 - **Arcs** — `arc`, `ellipse`, `arcTo`, `roundRect`, SVG `A` — lower to
   cubics but remember the arc they came from, and are split into equal
   angular steps straight from the sagitta: a chord spanning `θ` of a circle

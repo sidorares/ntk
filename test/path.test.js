@@ -237,6 +237,48 @@ test('flattenPath subdivides curves adaptively (more points when scaled up)', ()
   assert.ok(big > small, `expected ${big} > ${small}`);
 });
 
+// A cubic whose handles point back down its own chord runs past an endpoint
+// and returns. Its distance from the chord *line* can stay well inside the
+// tolerance the whole way, so the perpendicular flatness test alone called it
+// flat and emitted one chord — a chord that ends up traversed in the opposite
+// direction to the curve. A fill never notices (the missed area is a sliver
+// within tolerance); a stroke does, because the join to whatever comes next is
+// then a ~180° cusp whose miter runs off to infinity (issue #233).
+test('flattenPath does not collapse a cubic that doubles back', () => {
+  const p = new Path2D();
+  p.moveTo(23, 15.9);
+  p.bezierCurveTo(22.5, 13.7, 12.8, 12, 14.3, 12);
+  const pts = flattenPath(p._cmds)[0].pts;
+  const n = pts.length;
+  // the curve leaves along P2 -> P3 = (+1.5, 0); the last chord must agree
+  const dx = pts[n - 2] - pts[n - 4];
+  const dy = pts[n - 1] - pts[n - 3];
+  assert.ok(dx * 1.5 + dy * 0 > 0, `last chord (${dx}, ${dy}) reverses the curve`);
+  // and it must reach the curve's own extreme, x = 14.1426, not stop at 14.3
+  let minX = Infinity;
+  for (let i = 0; i < n; i += 2) minX = Math.min(minX, pts[i]);
+  assert.ok(minX < 14.3, `flattened polyline never passes the endpoint (${minX})`);
+});
+
+test('flattenPath still spends no extra chords on ordinary curves', () => {
+  // the overshoot test above must be free where nothing overshoots: a
+  // straight cubic is one chord however its handles are spaced, and curves
+  // keep the counts the flatness bound alone gives them
+  const counts = [
+    [[0, 0, 10, 0, 20, 0, 30, 0], 1], // collinear, evenly spaced
+    [[0, 0, 30, 0, 0, 0, 30, 0], 1], // collinear, handles crossed but monotone
+    [[0, 0, 0, 55.23, 44.77, 100, 100, 100], 16], // quarter circle, r=100
+    [[0, 0, 50, 0, 0, 50, 50, 50], 14] // s-curve
+  ];
+  for (const [c, expected] of counts) {
+    const p = new Path2D();
+    p.moveTo(c[0], c[1]);
+    p.bezierCurveTo(c[2], c[3], c[4], c[5], c[6], c[7]);
+    const chords = flattenPath(p._cmds)[0].pts.length / 2 - 1;
+    assert.equal(chords, expected, `${c}`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // fill rules
 
