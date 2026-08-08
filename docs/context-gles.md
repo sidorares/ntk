@@ -11,6 +11,12 @@ what ntk has always used. They are different pipelines with different APIs,
 and which one a window gets is [`glPolicy`](#glpolicy) — whose default is
 still `indirect`, so nothing changes until you ask.
 
+![A shaded cube in an ntk window, its faces patterned by a fragment shader](img/direct-gl-cube.png)
+
+The pattern above is computed per fragment from the interpolated position —
+the kind of thing the fixed-function pipeline has no way to express, and the
+reason this backend exists.
+
 ```js
 const app = await createClient({ glPolicy: 'auto' });
 
