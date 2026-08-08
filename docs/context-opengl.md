@@ -1,4 +1,4 @@
-# OpenGL rendering context
+# OpenGL rendering context (indirect GLX)
 
 `wnd.getContext('opengl' [, config])` returns a context exposing most of the
 OpenGL 1.4 fixed-function API over **indirect GLX** — GL commands are
@@ -9,6 +9,14 @@ serialized to the X server, no client-side GL library needed.
 > [node-x11#117](https://github.com/sidorares/node-x11/issues/117#issuecomment-214762185)
 > and [Why setup fails](#why-setup-fails) below.
 > `app.display.GLX` is `null` when the extension is unavailable.
+
+> **There is a second backend.** [Direct rendering](context-gles.md) draws on
+> the GPU and hands the server a finished buffer: GLSL shaders, and no GL
+> traffic per frame — on a local connection to a server with DRI3, which is
+> most Linux desktops including the ones that refuse indirect GLX. This page
+> describes the backend ntk uses by default, and the only one that works over
+> a network. [`glPolicy`](context-gles.md#glpolicy) chooses between them, and
+> `getContext('opengl')` obeys it.
 
 ```js
 // a GLX drawable must use a visual the context was created for — choose it

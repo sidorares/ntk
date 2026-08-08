@@ -48,8 +48,11 @@
     "parse-color": "^1.0.0",
     "pngjs": "^7.0.0",
     "postcss": "^8.5.23",
-    "x11": "^3.8.0",
+    "x11": "^3.9.0",
     "yoga-layout": "^3.2.1"
+  },
+  "optionalDependencies": {
+    "x11-dri": "^0.2.0"
   },
   "scripts": {
     "test": "NTK_STRICT_COLORS=1 node --test",
