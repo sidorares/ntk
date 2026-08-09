@@ -1,5 +1,17 @@
 # Changelog
 
+## [7.3.0](https://github.com/sidorares/ntk/compare/v7.2.0...v7.3.0) (2026-08-09)
+
+
+### Features
+
+* **gl:** a direct rendering backend, off by default ([#237](https://github.com/sidorares/ntk/issues/237)) ([5f26475](https://github.com/sidorares/ntk/commit/5f2647556f45e78c82329b1ebc112ce65ca18d61))
+
+
+### Bug Fixes
+
+* **2d:** keep a stroke inside the path it strokes ([#234](https://github.com/sidorares/ntk/issues/234)) ([71274b7](https://github.com/sidorares/ntk/commit/71274b7c6b36b46eed079a06df167abf08fa8376)), closes [#233](https://github.com/sidorares/ntk/issues/233)
+
 ## [7.2.0](https://github.com/sidorares/ntk/compare/v7.1.0...v7.2.0) (2026-08-07)
 
 
