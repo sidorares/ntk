@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.3.1](https://github.com/sidorares/ntk/compare/v7.3.0...v7.3.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* **gl:** do not cap the optional GPU addon at one minor ([#239](https://github.com/sidorares/ntk/issues/239)) ([dec8759](https://github.com/sidorares/ntk/commit/dec87592ded70dad4b7235285dea60685f30940c))
+
 ## [7.3.0](https://github.com/sidorares/ntk/compare/v7.2.0...v7.3.0) (2026-08-09)
 
 
