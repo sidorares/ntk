@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.3.2](https://github.com/sidorares/ntk/compare/v7.3.1...v7.3.2) (2026-08-09)
+
+
+### Bug Fixes
+
+* **gl:** tell a runtime that cannot pass descriptors from a remote display ([#241](https://github.com/sidorares/ntk/issues/241)) ([2287d95](https://github.com/sidorares/ntk/commit/2287d956c6f81e44da1e1e55fcb6d64f60b5d201))
+
 ## [7.3.1](https://github.com/sidorares/ntk/compare/v7.3.0...v7.3.1) (2026-08-09)
 
 
