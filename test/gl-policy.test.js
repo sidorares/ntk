@@ -219,6 +219,25 @@ describe('glCapabilities', () => {
     assert.equal(asked, false, 'a connection that cannot pass an fd needs no round trip');
   });
 
+  test('a local socket the runtime cannot pass an fd down is a different answer', async () => {
+    // Bun is the case in the field: the display is local and perfectly
+    // usable, and x11 reaches for a Node internal Bun does not implement.
+    // Reporting "not a local socket" would send the reader off to check
+    // DISPLAY, which is fine.
+    setDriAddon(workingAddon);
+    const caps = await glCapabilities(
+      fakeApp({ local: true, fdCapable: false, options: { glPolicy: 'auto' } })
+    );
+    assert.equal(caps.reason.code, GLError.NO_FD_PASSING);
+    assert.match(caps.reason.message, /file descriptors/);
+    assert.match(caps.reason.hint, /Bun/, 'and names the runtime that does this');
+    assert.doesNotMatch(
+      caps.reason.message,
+      /not a local socket/,
+      'without blaming the display, which is local'
+    );
+  });
+
   test('a server without DRI3 says so, and says which servers have it', async () => {
     setDriAddon(workingAddon);
     const caps = await glCapabilities(fakeApp({ exts: { present: {} }, options: { glPolicy: 'auto' } }));
