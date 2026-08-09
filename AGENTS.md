@@ -13,6 +13,10 @@ client) with familiar, modern API concepts:
   composition, gradients and glyph drawing happen **server-side**
 - a webgl-ish **opengl context** over indirect GLX (OpenGL 1.4 command
   serialization, no client GL library)
+- a **direct rendering context** — OpenGL ES 2 on the GPU, frames handed to
+  the server as dma-buf descriptors over DRI3 + Present — where the optional
+  `x11-dri` addon and a local DRI3 server are both there. Off by default;
+  `glPolicy` chooses (docs/context-gles.md)
 
 ### Direction
 
@@ -53,6 +57,13 @@ lib/path.js                Path2D, SVG path-data parser, affine matrices,
 lib/renderingcontext_opengl.js  indirect GLX context (queues GL commands
                            until MakeCurrent's context tag arrives)
 lib/glx.js                 GLX visual/fbconfig discovery (app.chooseGLXConfig)
+lib/gl.js                  which GL backend, and whether it can: glPolicy,
+                           the x11-dri probe, GLError, app.glCapabilities()
+lib/renderingcontext_gles.js    direct rendering context (OpenGL ES 2 on the
+                           GPU); also wraps the 'opengl' factory so that name
+                           dispatches on glPolicy
+lib/glswapchain.js         its buffers: dma-buf -> DRI3 pixmap -> Present,
+                           recycled on IdleNotify, generations across resizes
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
 lib/glyphset.js            XRender GlyphSet wrapper
@@ -156,6 +167,18 @@ What that means in practice:
   markdown parser and syntax highlighter were subtly wrong (e.g. intra-word
   `_` emphasis) and are now thin adapters over `marked` and `highlight.js`,
   the same way math rendering uses `katex`.
+  **The one native module here is `x11-dri`, and it is an `optionalDependency`
+  that nothing imports statically** (`lib/gl.js` reaches it through
+  `nodeRequire()` inside a try/catch). It does not fail the portability bar
+  because its absence costs nothing: `npm install ntk` never needs a
+  toolchain — it ships prebuilt binaries and npm skips an optional dependency
+  that will not install — no code path touches it under the default
+  `glPolicy`, and where it is missing the direct backend reports
+  `GL_NO_ADDON` and GL runs through indirect GLX exactly as before. That is
+  the bar any future native dependency has to clear: optional, lazily
+  reached, and with a working answer for every machine that does not have it.
+  What it buys cannot be had in JS at all — only a GPU driver can produce a
+  dma-buf.
 - **ESM**, Node >= 18.19. No TypeScript for now (a possible later migration —
   keep JSDoc accurate instead). `process.getBuiltinModule` (Node >= 20.16) is
   reached through `lib/builtin.js`, which falls back to `createRequire` below
