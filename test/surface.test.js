@@ -159,6 +159,38 @@ describe('coverage surfaces', () => {
     assert.ok(r > 200, `colour survives the fold, got r=${r}`);
   });
 
+  test('a gradient fill is sampled where the coverage lands', async () => {
+    const ctx = target();
+    const g = ctx.createLinearGradient(0, 0, W, 0); // black at x=0, white at x=W
+    g.addColorStop(0, '#000000');
+    g.addColorStop(1, '#ffffff');
+    ctx.fillStyle = g;
+    ctx.drawImage(block('a8'), 24, 16);
+
+    const px = await readPixels(ctx);
+    // the gradient is surface-aligned, so at x=28 it is ~28/40 of the way to
+    // white; sampling it from the origin would read the value at x=4 instead
+    const [r, , , a] = px(28, 20);
+    assert.equal(a, 255);
+    assert.ok(Math.abs(r - 182) <= 8, `gradient value at x=28, got ${r}`);
+  });
+
+  test('globalAlpha over a gradient goes through the scratch mask', async () => {
+    const ctx = target();
+    const g = ctx.createLinearGradient(0, 0, W, 0);
+    g.addColorStop(0, '#000000');
+    g.addColorStop(1, '#ffffff');
+    ctx.fillStyle = g;
+    ctx.globalAlpha = 0.5; // no colour to fold the alpha into: scratch mask
+    ctx.drawImage(block('a8'), 24, 16);
+    ctx.globalAlpha = 1;
+
+    const px = await readPixels(ctx);
+    const [r, , , a] = px(28, 20);
+    assert.ok(Math.abs(a - 128) <= 4, `half alpha, got ${a}`);
+    assert.ok(Math.abs(r - 182) <= 8, `gradient value at x=28, got ${r}`);
+  });
+
   test('partial coverage comes through as partial alpha', async () => {
     const mask = new Surface(app, { width: 8, height: 8, format: 'a8' });
     mask.render((m) => {
@@ -224,6 +256,40 @@ describe('clipping a surface composite', () => {
     assert.ok(px(4, 4)[3] > 200, 'the middle of the circle is painted');
     // the far corner of the 8x8 block is outside a radius-4 circle centred at 4,4
     assert.equal(px(9, 9)[3], 0, 'outside the circular clip');
+  });
+
+  test('a non-rectangular clip paints coverage that is not at the origin', async () => {
+    const ctx = target();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(20, 20, 16, 0, Math.PI * 2); // wide enough to contain the block
+    ctx.clip();
+    ctx.fillStyle = '#00ff00';
+    ctx.drawImage(block('a8'), 16, 16);
+    ctx.restore();
+
+    // the scratch mask is surface-sized and surface-aligned, so the coverage
+    // in it has to be read back at (dx, dy); reading from (0, 0) samples the
+    // region just cleared to zero and paints nothing at all (#243)
+    const px = await readPixels(ctx);
+    assert.deepEqual(px(20, 20), [0, 255, 0, 255], 'the middle of the block');
+    assert.deepEqual(px(17, 23), [0, 255, 0, 255], 'and its far corner');
+    assert.deepEqual(px(30, 30), [0, 0, 0, 0], 'outside the block');
+  });
+
+  test('a non-rectangular clip still bites where it crosses that coverage', async () => {
+    const ctx = target();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(16, 16, 4, 0, Math.PI * 2); // covers one corner of the block
+    ctx.clip();
+    ctx.fillStyle = '#00ff00';
+    ctx.drawImage(block('a8'), 16, 16);
+    ctx.restore();
+
+    const px = await readPixels(ctx);
+    assert.deepEqual(px(17, 17), [0, 255, 0, 255], 'inside the circle');
+    assert.equal(px(22, 22)[3], 0, 'inside the block, outside the circle');
   });
 
   test('an empty clip draws nothing at all', () => {
