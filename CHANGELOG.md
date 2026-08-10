@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.3.3](https://github.com/sidorares/ntk/compare/v7.3.2...v7.3.3) (2026-08-10)
+
+
+### Bug Fixes
+
+* **2d:** sample the coverage scratch mask at the destination offset ([#244](https://github.com/sidorares/ntk/issues/244)) ([49d004a](https://github.com/sidorares/ntk/commit/49d004a90b72f48ffd561f3de7b9f935330ac101))
+
 ## [7.3.2](https://github.com/sidorares/ntk/compare/v7.3.1...v7.3.2) (2026-08-09)
 
 
