@@ -90,6 +90,18 @@ paced slower can never reach the rate its display offers.
   by querying the server; `config.visual`/`config.depth` feed `createWindow`
   and the whole object feeds `getContext('opengl', config)`. See
   [context-opengl.md](context-opengl.md)
+- `app.inputDevices({ refresh }) → Promise<device[]>` — every input device
+  the server knows about, from XInput 2's `XIQueryDevice`:
+  `{deviceId, use, attachment, enabled, name, classes}`, where `classes`
+  describes each device's keys, buttons, valuators and scroll axes. `[]`
+  where the server has no XI2. Cached — this is what a window with
+  [smooth scrolling](window.md#wheel-and-smooth-scrolling) consults to find
+  the axis behind a wheel delta, and it must not cost a round trip per
+  event; pass `{ refresh: true }` to re-read it
+- `app.xinput() → Promise<ext|null>` — the raw node-x11 XInput extension
+  object, or `null` where there is none. `ext.xi2` is `null` on a server
+  that speaks XI1 only. The escape hatch for the XI2 requests ntk does not
+  wrap (grabs, device properties, barriers)
 - `app.close() → Promise` — flush pending requests, then close the connection
 
 ## Resource management

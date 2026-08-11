@@ -47,6 +47,9 @@ lib/events_map.js          X event code <-> browser-ish event name tables
                            (incl. FocusIn/FocusOut as 'focus'/'blur')
 lib/keyboard.js            key event -> keysym/codepoint: XKB group from the
                            event state, CapsLock only on cased keys
+lib/xi2.js                 XI2 device events: which types can be selected,
+                           absolute scroll valuators -> wheel deltas (per
+                           device, seeded), XI2 event -> core-shaped ntk event
 lib/clipboard.js           app.clipboard: ICCCM selection/clipboard transfer
                            (CLIPBOARD/PRIMARY, required targets, INCR both
                            ways, multi-format ownership, acquire/release

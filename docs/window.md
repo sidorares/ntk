@@ -71,6 +71,10 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 - `syncRequest: true` — let the window manager pace interactive resizes to
   this window's repaint rate (see
   [Resize synchronization](#resize-synchronization--syncrequest--enablesyncrequest))
+- `xi2: true`, or a list of XI2 event type names — take this window's input
+  from XInput 2 instead of the core protocol: fractional scroll deltas
+  instead of wheel notches, per-device ids, touch (see
+  [Wheel and smooth scrolling](#wheel-and-smooth-scrolling))
 
 ## Transparent windows
 
@@ -343,6 +347,11 @@ While a frame is pending, noisy events **coalesce** instead of queueing:
   see [`resize` fires for moves](#resize-fires-for-moves).
 - `expose` — damage accumulates: `ev.x/y/width/height` is the bounding box
   of all merged rectangles and `ev.rects` lists each one.
+- `wheel` — scroll distance accumulates: `ev.deltaX`/`ev.deltaY` is the sum
+  of the frame's deltas, reported where the pointer ended up. Keeping the
+  last one instead would throw away everything but the final step of a fast
+  scroll, and a frame's worth of a touchpad's sub-notch deltas is exactly
+  what [smooth scrolling](#wheel-and-smooth-scrolling) exists to deliver.
 
 Discrete events (`mousedown`, `keydown`, …) are never coalesced and are
 delivered immediately — any buffered noisy events are flushed first so
@@ -508,6 +517,10 @@ All return `this` unless noted.
   their events normally, so a submenu keeps working
 - `grabKeyboard(options, cb)` / `ungrabKeyboard(time)` — the same for keys
 - `queryPointer(cb)`, `setMouseHintOnly(isOn)`
+- `selectXI2(types, options)` — take this window's input from XInput 2:
+  smooth scrolling, per-device ids, touch. Returns a promise for whether the
+  server has XI2, not `this` — see
+  [Wheel and smooth scrolling](#wheel-and-smooth-scrolling)
 - `queryTree(cb)` — `cb(err, { parent, root, children })`, all as `Window`s
 - `reparentTo(newParent, x, y)`, `raise()`, `lower()`
 - `setHints(hints)`, `setSizeHints(hints)`, `setWmHints(hints)`,
@@ -1107,6 +1120,8 @@ constructor arg) automatically extends the window's X event mask.
 |---|---|---|
 | `mousedown` / `mouseup` | ButtonPress/Release | `ev.x`, `ev.y`, `ev.keycode` (button) |
 | `mousemove` | MotionNotify | coalesced per frame; full trail in `ev.coalesced` |
+| `wheel` | ButtonPress 4-7, or an XI2 scroll valuator | derived: `ev.deltaX`/`ev.deltaY` in notches, positive down and right. Coalesced per frame, and a frame's deltas **add up**. See [Wheel and smooth scrolling](#wheel-and-smooth-scrolling) |
+| `touchstart` / `touchmove` / `touchend` | XI2 TouchBegin/Update/End | only with `selectXI2(['TouchBegin', …])`; `ev.touchId` identifies the finger |
 | `mouseover` / `mouseout` | Enter/LeaveNotify | |
 | `keydown` / `keyup` | KeyPress/Release | `keydown` carries `ev.codepoint` (unicode) — see [Keyboard input](#keyboard-input) |
 | `focus` / `blur` | FocusIn/FocusOut | keyboard focus arrived at or left this window — usually because the window manager moved it. `ev.detail`/`ev.mode` carry the X notify detail and mode |
@@ -1158,6 +1173,90 @@ the first event after the switch — spurious work, never missed work. The
 alternative is a `TranslateCoordinates` round trip per event, which is the
 cost these flags exist to avoid; ask for one explicitly if you need the true
 screen origin.
+
+## Wheel and smooth scrolling
+
+`wheel` reports scrolling in the units the device measures it in:
+
+```js
+wnd.on('wheel', (ev) => {
+  scrollBy(ev.deltaX * lineHeight, ev.deltaY * lineHeight);
+});
+```
+
+| | |
+|---|---|
+| `ev.deltaX` / `ev.deltaY` | distance, positive **down** and **right** (the direction the DOM calls positive) |
+| `ev.deltaMode` | `'line'` — the unit is one notch of the wheel, whatever pixels that is worth in your content |
+| `ev.smooth` | `true` when the delta came from a device that measures fractions of a notch, `false` when it is one whole notch of a wheel |
+| `ev.source` | `'valuator'` (XI2 scroll axis) or `'button'` (core button 4-7) |
+| `ev.deviceId` / `ev.sourceId` | XI2 only: the master device, and the physical one behind it |
+
+plus the pointer fields (`x`, `y`, `rootx`, `rooty`, `buttons`, `time`) of
+the event it came from.
+
+Deltas are in **notches, not pixels**: a notch is the only unit the device
+itself agrees on — X calls it the axis' `increment` — and how many pixels one
+scrolls is your content's line height, not something a toolkit can know.
+`smooth` is what tells the two granularities apart, which is what a consumer
+deciding whether to animate a scroll actually wants to know.
+
+Without XI2 that is all there is: the core protocol reports a wheel as a
+click of button 4 (up), 5 (down), 6 (left) or 7 (right), so `wheel` fires
+once per notch with `deltaY: ±1` and the matching `mousedown` fires too.
+A touchpad's two-finger scroll arrives the same way — the server counts the
+gesture into whole notches and throws the rest away.
+
+### Smooth scrolling — `selectXI2()` / `xi2: true`
+
+XI2 carries the same gesture as a *scroll valuator*, and ntk turns it into
+fractional deltas:
+
+```js
+const wnd = app.createWindow({ width: 400, height: 300, xi2: true });
+// or later, when you want to know whether the server has XI2:
+const smooth = await wnd.selectXI2();
+```
+
+`selectXI2(types = ['Motion', 'ButtonPress', 'ButtonRelease'], { deviceId })`
+resolves to `true` once XI2 events are selected, and `false` on a server
+without XI2 — where nothing changed and the window keeps its core events,
+`wheel` included, at notch granularity. `selectXI2([])` deselects. The
+selection is per device (`deviceId` defaults to every master device — the
+virtual pointer and keyboard the user is actually driving), and each call
+*replaces* this window's selection for that device rather than adding to it.
+
+Selectable types: `Motion`, `ButtonPress`, `ButtonRelease`, `KeyPress`,
+`KeyRelease`, `TouchBegin`, `TouchUpdate`, `TouchEnd` — the ones node-x11
+decodes into fields. Anything else throws, naming these.
+
+Three consequences worth knowing before opting in:
+
+- **XI2 replaces the core events of the types you select.** The server
+  delivers an event to a client once, and an XI2 selection wins, so a window
+  that selects `Motion` builds its `mousemove` from `XIMotion` from then on.
+  Handlers do not change: a translated event carries the same fields a core
+  one does (`x`, `y`, `keycode`, `buttons` with the modifier and group bits
+  in their core positions), plus `ev.xi2 === true`, `ev.deviceId`,
+  `ev.sourceId`, the raw `ev.valuators`, and `ev.preciseX`/`ev.preciseY` —
+  the sub-pixel coordinates XI2 has and core X does not (`ev.x`/`ev.y` stay
+  integers). Types you did not select stay on the core path, which is why
+  `mouseover`/`mouseout` and `focus`/`blur` keep working.
+- **The emulated wheel clicks disappear.** For a smooth scroll the server
+  sends both halves — the valuator *and* a button 4-7 click flagged
+  `PointerEmulated`, for clients that cannot read valuators — and delivering
+  both would count every notch twice. So a window that has opted in reads
+  `wheel`, not `mousedown` on button 4. A wheel with no smooth-scroll axis
+  behind it is not emulating anything, and still arrives as both.
+- **It is opt-in per window** because selecting it changes what the server
+  sends; a window that has not asked costs exactly what it did before.
+
+Scroll valuators are absolute accumulators — the delta is the change since
+the last event — so the first event from a device seeds and reports no
+distance, and `XIDeviceChanged` (the user moving from the touchpad to the
+mouse, which renumbers the master's axes) drops the accumulators and reseeds.
+Both are handled here rather than by every consumer: getting either wrong is
+a jump of hundreds of notches on the first scroll.
 
 ## Keyboard input
 
