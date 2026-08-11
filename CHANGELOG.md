@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.4.0](https://github.com/sidorares/ntk/compare/v7.3.3...v7.4.0) (2026-08-11)
+
+
+### Features
+
+* **xembed:** socket and plug halves of the embedding protocol ([#248](https://github.com/sidorares/ntk/issues/248)) ([ddc39e1](https://github.com/sidorares/ntk/commit/ddc39e1d0ff9ed609a3898ccc0ad0296b39fc045))
+
 ## [7.3.3](https://github.com/sidorares/ntk/compare/v7.3.2...v7.3.3) (2026-08-10)
 
 
