@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.5.0](https://github.com/sidorares/ntk/compare/v7.4.0...v7.5.0) (2026-08-11)
+
+
+### Features
+
+* **input:** select and route XI2 device events, so a wheel reports a real delta ([#250](https://github.com/sidorares/ntk/issues/250)) ([0eee153](https://github.com/sidorares/ntk/commit/0eee153b69cc2ef75093c656537a7be6fa5a2ade))
+
 ## [7.4.0](https://github.com/sidorares/ntk/compare/v7.3.3...v7.4.0) (2026-08-11)
 
 
