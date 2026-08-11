@@ -59,6 +59,29 @@ const settleBoth = async () => {
 
 const nextEvent = (emitter, name) => new Promise((resolve) => emitter.once(name, resolve));
 
+/**
+ * Drive both connections until `promise` settles.
+ *
+ * The stream pair these connections run on is in-memory, and an in-memory
+ * stream holds nothing open: a promise waiting on a round trip that no code
+ * is currently driving can be left pending because node has decided the
+ * event loop is finished. That surfaces as `cancelledByParent` on every
+ * remaining test rather than as a failure here, so anything that waits for
+ * the *other* connection to do something — `adopt()`, which is idle until a
+ * program puts a window inside the socket — is awaited through this.
+ */
+const settled = async (promise, ms = 5000) => {
+  let done = false;
+  // both handlers, so a rejection is handled here as well as by the caller
+  promise.then(
+    () => (done = true),
+    () => (done = true)
+  );
+  const deadline = Date.now() + ms;
+  while (!done && Date.now() < deadline) await settleBoth();
+  return promise;
+};
+
 const queryTree = (app, wid) =>
   new Promise((resolve, reject) =>
     app.X.QueryTree(wid, (err, tree) => (err ? reject(err) : resolve(tree)))
@@ -235,9 +258,7 @@ test('adopt() takes a window that put itself inside the socket', async () => {
     width: 120,
     height: 90
   });
-  await settleBoth();
-
-  const result = await waiting;
+  const result = await settled(waiting);
   assert.equal(result.id, inside.id);
   assert.equal(result.xembed, false);
   assert.equal(socket.client.id, inside.id);
@@ -258,13 +279,12 @@ test('adopt() takes a child that is already there', async () => {
   });
   await settleBoth();
 
-  const result = await socket.adopt();
-  await settleBoth();
+  const result = await settled(socket.adopt());
   assert.equal(result.id, inside.id);
 
   // and a socket with nothing in it says what to check rather than hanging
   const empty = new XEmbedSocket(parent, { width: 10, height: 10 });
-  await assert.rejects(() => empty.adopt({ timeout: 30 }), /--wid=ID/);
+  await assert.rejects(() => settled(empty.adopt({ timeout: 30 })), /--wid=ID/);
 
   await socket.destroy();
   await empty.destroy();
