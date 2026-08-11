@@ -51,6 +51,10 @@ lib/clipboard.js           app.clipboard: ICCCM selection/clipboard transfer
                            (CLIPBOARD/PRIMARY, required targets, INCR both
                            ways, multi-format ownership, acquire/release
                            and conversion timestamps)
+lib/xembed.js              XEmbed: XEmbedSocket (embedder), XEmbedPlug
+                           (client), the focus proxy and the _XEMBED_INFO
+                           encoding; plain reparenting for clients that
+                           speak no XEmbed (xterm -into, mpv --wid)
 lib/renderingcontext_2d.js canvas-like context (XRender); CanvasGradient
 lib/path.js                Path2D, SVG path-data parser, affine matrices,
                            adaptive bezier flattening
@@ -125,14 +129,18 @@ notice, it is ours.
 
 What that means in practice:
 
-- **Use node-x11's `X.SendClientMessage(destination, wid, type, format, data
-  [, eventMask][, cb])` and `x11.packEvent(ev)`** (x11 >= 3.4) instead of
-  hand-packing 32-byte buffers. `SendEvent` also takes an event object
-  directly, which is how `sendConfigureNotify` and the clipboard's
-  SelectionNotify are built. Note the event-mask default is
-  `SubstructureRedirect|SubstructureNotify`, right for root-window EWMH
-  messages — messages aimed at another client's own window (WM_PROTOCOLS,
-  XEmbed, XDND, SelectionNotify) must pass an explicit `0`.
+- **Use `wnd.sendClientMessage(type, data, { target, mask, format })`** — the
+  wrapper over node-x11's `X.SendClientMessage(destination, wid, type,
+  format, data[, eventMask][, cb])`, which takes an atom *name*, caps the
+  word list at what the 32-byte event holds and defaults the mask to `0`.
+  That default is the one messages aimed at another client's own window
+  (WM_PROTOCOLS, XEmbed, XDND, SelectionNotify) need; root-window EWMH
+  messages pass `SubstructureRedirect|SubstructureNotify` explicitly. Note
+  node-x11's own default is the opposite way round.
+  **Use `x11.packEvent(ev)`** (x11 >= 3.4) rather than hand-packing 32-byte
+  buffers for anything else. `SendEvent` also takes an event object
+  directly, which is how `sendConfigureNotify`, the clipboard's
+  SelectionNotify and the XEmbed focus proxy's key forwarding are built.
 - **A property writer must set its flag bit.** The failure mode of these
   structs is silence: `WM_NORMAL_HINTS` with `flags = 0` is a legal property
   meaning "I declared nothing", and nothing anywhere errors. Never write a

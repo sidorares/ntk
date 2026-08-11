@@ -42,7 +42,10 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   buffering opt-out above, which is an unrelated client-side concept.
 - `visual`, `depth`, `windowClass`, `borderWidth` — `CreateWindow` header
   fields rather than attributes. They default to `0`, i.e. CopyFromParent /
-  InputOutput. A window on a non-default visual (a GLX drawable, an ARGB
+  InputOutput. `windowClass: 2` is InputOnly — an invisible window that only
+  receives events (a focus proxy, a hit-testing overlay); it takes no
+  `bitGravity`, so ntk leaves that attribute off rather than earning a
+  `BadMatch`. A window on a non-default visual (a GLX drawable, an ARGB
   visual) needs all of `visual` + `depth` **and** a colormap for that visual:
   ntk creates one with `app.createColormap(visual)` and frees it in
   `destroy()` unless you pass your own `colormap`, and sets `borderPixel: 0`
@@ -528,7 +531,50 @@ All return `this` unless noted.
   `addToSaveSet()`, `sendConfigureNotify(geometry)`, `close()`,
   `grabButton(options)` — the window manager side, see
   [Being the window manager](#being-the-window-manager)
+- `sendClientMessage(type, data, options)` — see
+  [Client messages](#client-messages)
 - `destroy()` — destroy the window server-side (also `Symbol.dispose`)
+
+## Client messages
+
+### `wnd.sendClientMessage(type, data, options)` → `Promise<Window>`
+
+Almost every convention layered over the core protocol is carried by a
+ClientMessage: EWMH state changes, `WM_PROTOCOLS`, XEmbed, XDND, the system
+tray. They differ only in the atom that names the message and the five 32-bit
+words inside it.
+
+```js
+await wnd.sendClientMessage('WM_PROTOCOLS', [deleteAtom, time]);
+```
+
+- `type` — the message type as an atom name, or an id already interned with
+  `atom()`
+- `data` — up to five 32-bit words (ten at `format: 16`, twenty at
+  `format: 8`). Missing words are sent as zero; too many is a `RangeError`
+  rather than a silent truncation, because the wire event is 32 bytes and
+  no more
+- `options.target` — where the message is **delivered**, which is not always
+  the window it is **about**. `wnd.id` by default. An EWMH message is about a
+  client window and delivered to the root, where the window manager is
+  listening
+- `options.mask` — who on the target receives it. `0`, the default, delivers
+  to the client that owns the target window whatever it selected, which is
+  what a message addressed to another client needs (`WM_PROTOCOLS`, XEmbed,
+  XDND, SelectionNotify). Root-window EWMH messages instead pass
+  `SubstructureRedirect | SubstructureNotify`
+- `options.format` — 32 (the default), 16 or 8
+
+Incoming ones arrive as the [`message`](#events) event.
+
+```js
+// EWMH: about this window, delivered to the root
+const { SubstructureRedirect, SubstructureNotify } = x11.eventMask;
+await wnd.sendClientMessage('_NET_ACTIVE_WINDOW', [1, time, 0], {
+  target: app.display.screen[0].root,
+  mask: SubstructureRedirect | SubstructureNotify
+});
+```
 
 ## Window manager hints
 
