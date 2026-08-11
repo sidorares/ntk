@@ -11,9 +11,11 @@ test('every camelCase handler name maps to a snake event with a mask entry', () 
 });
 
 // names in the mask table that are not X event types. `statechange` is
-// derived from the PropertyNotify for _NET_WM_STATE and is in the table
-// because a listener for it still has to select PropertyChange.
-const DERIVED = new Set(['statechange']);
+// derived from the PropertyNotify for _NET_WM_STATE and `wheel` from a
+// ButtonPress of button 4-7 (or an XI2 scroll valuator); both are in the
+// table because a listener for one still has to select the mask it is
+// derived from.
+const DERIVED = new Set(['statechange', 'wheel']);
 
 test('every maskable event name is emitted by some X event type, or derived from one', () => {
   const emitted = new Set(eventName.filter(Boolean));
@@ -30,12 +32,13 @@ test('every maskable event name is emitted by some X event type, or derived from
 test('coalescible events are known event names with known strategies', () => {
   const emitted = new Set(eventName.filter(Boolean));
   for (const [name, strategy] of Object.entries(coalesce)) {
-    assert.ok(emitted.has(name), `${name} never emitted`);
-    assert.ok(['last', 'union'].includes(strategy), `unknown strategy ${strategy}`);
+    assert.ok(emitted.has(name) || DERIVED.has(name), `${name} never emitted`);
+    assert.ok(['last', 'union', 'accumulate'].includes(strategy), `unknown strategy ${strategy}`);
   }
   assert.equal(coalesce.mousemove, 'last');
   assert.equal(coalesce.resize, 'last');
   assert.equal(coalesce.expose, 'union');
+  assert.equal(coalesce.wheel, 'accumulate');
 });
 
 test('core event codes map to browser-like names', () => {
