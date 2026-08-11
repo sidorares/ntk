@@ -20,6 +20,9 @@ matching file here (see AGENTS.md).
 - [Clipboard](clipboard.md) — `app.clipboard.write()/read()/clear()`:
   transfer over the CLIPBOARD/PRIMARY selections (ICCCM), multi-format
   ownership, INCR both ways
+- [XEmbed](xembed.md) — `XEmbedSocket` / `XEmbedPlug`: putting another
+  client's window inside yours (and yours inside someone else's), including
+  the plain-reparenting path `xterm -into` and `mpv --wid` need
 - [2d rendering context](context-2d.md) — canvas-like drawing API over XRender
 - [Images](images.md) — PNG/JPEG loading (`loadImage`), the `Image` object,
   `drawImage`
