@@ -351,7 +351,10 @@ this is only about instantiating an axis.
   installed font covering a codepoint (fontconfig coverage data, confirmed
   against the parsed font)
 - `Font`: `familyName`, `postscriptName`, `unitsPerEm`, `hasGlyph(cp)`,
-  `metrics(size)`, `shape(text, size, opts)`, `rasterize(glyphId, size)`
+  `glyphIdFor(cp)` → `number | null` (unshaped cmap lookup, `null` where
+  the face lacks the codepoint — see [text.md](text.md#glyph-runs)),
+  `metrics(size)`, `shape(text, size, opts)`, `advanceOf(glyphId, size)`,
+  `rasterize(glyphId, size)`
 - `Font`, variable faces: `variationAxes` (`{}` when static),
   `variation(settings)` → `Font` (itself when the settings are a no-op),
   and on an instance, `variationOf` / `variationCoords`

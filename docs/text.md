@@ -182,6 +182,73 @@ app.textPolicy = {
 Partial objects are fine — unset keys keep their defaults
 (`DEFAULT_TEXT_POLICY` in `lib/text/glyphs.js`).
 
+## Glyph runs
+
+`ctx.drawGlyphs(op, src, positioned)` is the primitive `fillText` and
+`TextLayout.draw` are built on, and the run shape it accepts is **public
+API**: a renderer that computes glyph positions itself — a terminal
+emulator's monospace grid, a tabular number column, a code editor — can
+hand-build runs and get the whole wire-efficiency story above without
+shaping:
+
+```js
+positioned = [{ run, x, y, textRendering }, …]  // visual order; textRendering optional
+run        = { font, size, glyphs }             // a Font and a pixel size
+glyphs     = [{ id, ax, dx, dy }, …]            // drawing order
+```
+
+- `x`, `y` — the run's baseline origin in device pixels.
+- `id` — a font glyph id: `shape()`'s `glyphs[].id`, or
+  `font.glyphIdFor(codepoint)` for the unshaped cmap lookup. `glyphIdFor`
+  is the lookup twin of `hasGlyph(codepoint)` and returns `null` where the
+  face lacks the codepoint, so "not covered" is a branch (pick a fallback
+  face) rather than a `.notdef` box discovered on screen. It is a plain
+  cmap lookup — no ligatures, kerning or contextual forms; text that needs
+  those goes through `shape()`.
+- `ax` — the pen advance in px. `dx`/`dy` — the glyph's drawing offset
+  from the pen position, y-up (positive `dy` raises the glyph). The pen
+  starts at `x`; each glyph inks its origin at `(pen + dx, y − dy)` and
+  then advances the pen by `ax`.
+- Extra fields are ignored — `shape()`'s `codePoints`, a run's `width` —
+  so shaped runs pass through unchanged, which is exactly what `fillText`
+  passes.
+- `textRendering` (per run) overrides the bitmap/vector routing, as
+  [above](#textrendering).
+- `op` is an XRender op (`ctx.Render.PictOp.Over` for normal text); `src`
+  is the picture the glyphs paint with — a solid
+  (`ctx.createSolidPicture(r, g, b, a)`, premultiplied 0..1 floats) or a
+  gradient.
+
+One call collapses into one `CompositeGlyphs` request on the bitmap path
+(with inline glyphset switches when runs mix faces or sizes), rides the
+per-(face, size) glyph pages shared by the whole connection, honours the
+clip, and takes the server-side fast path under a rectangular clip. Glyph
+origins round to whole pixels on the bitmap path — a grid renderer
+positions on integers anyway, so nothing moves.
+
+The advance is what makes a grid cheap: the server moves its pen by each
+glyph's stored rounded advance, and position bytes are emitted only where
+the requested position deviates from that pen. A run whose `ax` is the
+integer cell width matches the stored advance of a monospace glyph
+exactly, so a row-span of *n* cells costs one 8-byte header plus *n*
+bytes — one request per row-span instead of one per character:
+
+```js
+const font = app.fonts.match('monospace');
+const size = 15;
+const cellW = 9;                       // the grid's cell width, from your metrics
+const glyphs = [];
+for (const ch of rowText) {
+  const id = font.glyphIdFor(ch.codePointAt(0));
+  // null: this face lacks the char — a real grid starts a new run on a
+  // fallback face here (a run is one font); 0 draws the .notdef box
+  glyphs.push({ id: id ?? 0, ax: cellW, dx: 0, dy: 0 });
+}
+ctx.drawGlyphs(ctx.Render.PictOp.Over, ctx.createSolidPicture(1, 1, 1, 1), [
+  { run: { font, size, glyphs }, x: originX, y: baselineY }
+]);
+```
+
 ## API
 
 ### `app.fonts` → FontManager
@@ -211,8 +278,10 @@ through a pluggable FontSource (`new FontManager({ source })`) — see
 
 `familyName`, `postscriptName`, `unitsPerEm`, `metrics(size)` →
 `{ ascent, descent, lineGap, lineHeight, capHeight, xHeight }` (px,
-descent positive-down), `hasGlyph(cp)`, `shape(text, size, opts)`,
-`rasterize(glyphId, size)`.
+descent positive-down), `hasGlyph(cp)`, `glyphIdFor(cp)` → `number | null`
+(unshaped cmap lookup — see [Glyph runs](#glyph-runs)),
+`shape(text, size, opts)`, `advanceOf(glyphId, size)` (nominal unshaped
+advance, px), `rasterize(glyphId, size)`.
 
 ### Shaping
 
@@ -400,6 +469,8 @@ Conventions:
   TextMetrics: `width`, `actualBoundingBox*`, `fontBoundingBox*`)
 - `ctx.layoutText(content, options)` → `TextLayout` with the current
   `ctx.font` as base style
+- `ctx.drawGlyphs(op, src, positioned)` — hand-built or shaped glyph runs;
+  see [Glyph runs](#glyph-runs)
 
 ### `MarkdownView`
 
