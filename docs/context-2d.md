@@ -502,6 +502,10 @@ no per-size server cache — see
 - `layoutText(content, options)` → `TextLayout` — ntk extension: wrap text
   (or styled spans) to a target width without drawing, inspect lines and
   metrics, then `layout.draw(ctx, x, y)`
+- `drawGlyphs(op, src, positioned)` — ntk extension: composite glyph runs
+  directly, shaped or hand-built. The run shape is public API, for
+  renderers that position glyphs themselves (a terminal grid, a tabular
+  column) — see [text.md](text.md#glyph-runs)
 
 Custom font files: `app.fonts.load(path)`, then use the family name in
 `ctx.font`. See [text.md](text.md) for the full text API and
