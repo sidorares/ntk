@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.6.0](https://github.com/sidorares/ntk/compare/v7.5.0...v7.6.0) (2026-08-12)
+
+
+### Features
+
+* **context2d:** fillRects batches many rectangle fills into one FillRectangles request ([#256](https://github.com/sidorares/ntk/issues/256)) ([af68a8d](https://github.com/sidorares/ntk/commit/af68a8d38082f7255808a2e4d13a1675b45a9b62))
+* **surface:** copyWithin — overlapping self-copy for offscreen surfaces ([#255](https://github.com/sidorares/ntk/issues/255)) ([a080e38](https://github.com/sidorares/ntk/commit/a080e38f17b5585bb9952a420108da4888a0e2c9))
+* **text:** public glyph-run seam — Font.glyphIdFor and a documented drawGlyphs run contract ([#258](https://github.com/sidorares/ntk/issues/258)) ([3faabd9](https://github.com/sidorares/ntk/commit/3faabd97fef85f336f5b1f465e028e07b72d2c0b))
+
 ## [7.5.0](https://github.com/sidorares/ntk/compare/v7.4.0...v7.5.0) (2026-08-11)
 
 
