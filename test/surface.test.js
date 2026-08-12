@@ -310,6 +310,120 @@ describe('clipping a surface composite', () => {
   });
 });
 
+describe('copyWithin', () => {
+  /** read pixels straight off a surface's own pixmap */
+  async function surfacePixels(surface) {
+    const ctx = surface.getContext('2d');
+    try {
+      const img = await ctx.getImageData(0, 0, surface.width, surface.height);
+      return (x, y) => [...img.data.slice((y * surface.width + x) * 4, (y * surface.width + x) * 4 + 4)];
+    } finally {
+      ctx.destroy();
+    }
+  }
+
+  test('pixels: the band lands shifted exactly, the exposed strip is untouched', async () => {
+    const surface = new Surface(app, { width: 32, height: 32 });
+    surface.render((ctx) => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 32, 32);
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(0, 8, 32, 4);
+      ctx.fillStyle = '#00ff00';
+      ctx.fillRect(0, 12, 32, 4);
+      ctx.fillStyle = '#0000ff';
+      ctx.fillRect(0, 16, 32, 4);
+    });
+
+    assert.equal(surface.copyWithin({ x: 0, y: 4, width: 32, height: 24 }, 0, -4), true);
+
+    const px = await surfacePixels(surface);
+    // the bands moved up by 4
+    assert.deepEqual(px(16, 6), [255, 0, 0, 255]);
+    assert.deepEqual(px(16, 10), [0, 255, 0, 255]);
+    assert.deepEqual(px(16, 14), [0, 0, 255, 255]);
+    // the exposed strip (bottom rows of the region) still holds its old
+    // pixels — the copy does not invent content, the caller draws it
+    assert.deepEqual(px(16, 26), [255, 255, 255, 255]);
+    // outside the region nothing moved
+    assert.deepEqual(px(16, 2), [255, 255, 255, 255]);
+  });
+
+  test('a two-axis shift copies one rectangle, shifted both ways, clamped to the surface', () => {
+    const surface = new Surface(app, { width: 32, height: 32 });
+    const copies = [];
+    const saved = app.X.CopyArea;
+    app.X.CopyArea = (src, dst, gc, sx, sy, dx, dy, width, height) => {
+      copies.push({ src, dst, sx, sy, dx, dy, width, height });
+      return saved.call(app.X, src, dst, gc, sx, sy, dx, dy, width, height);
+    };
+    try {
+      assert.equal(surface.copyWithin({ x: -10, y: -10, width: 100, height: 100 }, 6, -4), true);
+    } finally {
+      app.X.CopyArea = saved;
+    }
+    assert.deepEqual(copies, [
+      {
+        src: surface.pixmap.id,
+        dst: surface.pixmap.id,
+        sx: 0,
+        sy: 4,
+        dx: 6,
+        dy: 0,
+        width: 26,
+        height: 28
+      }
+    ]);
+  });
+
+  test('refusals: fractional, zero, nothing survives, destroyed — all request-free', () => {
+    const surface = new Surface(app, { width: 16, height: 16 });
+    const counts = countX(['CopyArea'], () => {
+      assert.equal(surface.copyWithin({ x: 0, y: 0, width: 16, height: 16 }, 0, -0.5), false);
+      assert.equal(surface.copyWithin({ x: 0, y: 0, width: 16, height: 16 }, 0, 0), false);
+      assert.equal(surface.copyWithin({ x: 0, y: 0, width: 16, height: 16 }, 0, -16), false);
+      assert.equal(surface.copyWithin({ x: 0, y: 0, width: 16, height: 16 }, 20, 0), false);
+      assert.equal(surface.copyWithin({ x: 4, y: 4, width: 0, height: 8 }, 1, 0), false);
+      surface.destroy();
+      assert.equal(surface.copyWithin({ x: 0, y: 0, width: 16, height: 16 }, 0, -1), false);
+    });
+    assert.equal(counts.CopyArea, 0, 'every refusal is request-free');
+  });
+
+  test('the copy GC is shared per app and depth, not created per surface or call', () => {
+    const one = new Surface(app, { width: 8, height: 8 });
+    const two = new Surface(app, { width: 8, height: 8 });
+    one.copyWithin({ x: 0, y: 0, width: 8, height: 8 }, 1, 0); // first use may create it
+    const counts = countX(['CreateGC'], () => {
+      one.copyWithin({ x: 0, y: 0, width: 8, height: 8 }, 0, 1);
+      two.copyWithin({ x: 0, y: 0, width: 8, height: 8 }, 0, 1);
+    });
+    assert.equal(counts.CreateGC, 0, 'the depth-32 GC already exists');
+    const a8 = new Surface(app, { width: 8, height: 8, format: 'a8' });
+    const fresh = countX(['CreateGC'], () => {
+      a8.copyWithin({ x: 0, y: 0, width: 8, height: 8 }, 0, 1);
+      a8.copyWithin({ x: 0, y: 0, width: 8, height: 8 }, 0, 1);
+    });
+    assert.equal(fresh.CreateGC, 1, 'a depth not seen before costs one GC, once');
+  });
+
+  test('coverage surfaces scroll too, and keep acting as masks', async () => {
+    const mask = new Surface(app, { width: 8, height: 8, format: 'a8' });
+    mask.render((m) => {
+      m.fillStyle = '#ffffff';
+      m.fillRect(0, 0, 8, 4); // top half covered, bottom half clear
+    });
+    assert.equal(mask.copyWithin({ x: 0, y: 0, width: 8, height: 8 }, 0, 4), true);
+
+    const ctx = target();
+    ctx.fillStyle = '#ff0000';
+    ctx.drawImage(mask, 0, 0);
+    const px = await readPixels(ctx);
+    assert.deepEqual(px(4, 2), [255, 0, 0, 255], 'the top half is untouched');
+    assert.deepEqual(px(4, 6), [255, 0, 0, 255], 'the copied band covers the bottom half');
+  });
+});
+
 describe('context teardown', () => {
   test('destroy() releases and is idempotent', () => {
     const pixmap = app.createPixmap({ width: 8, height: 8, depth: 32 });
@@ -342,27 +456,27 @@ describe('context teardown', () => {
   });
 });
 
-describe('server resources are not leaked', () => {
-  /** count the requests a body issues, by name */
-  function countX(names, body) {
-    const X = app.X;
-    const counts = Object.fromEntries(names.map((n) => [n, 0]));
-    const saved = {};
-    for (const name of names) {
-      saved[name] = X[name];
-      X[name] = (...a) => {
-        counts[name]++;
-        return saved[name].apply(X, a);
-      };
-    }
-    try {
-      body();
-    } finally {
-      for (const name of names) X[name] = saved[name];
-    }
-    return counts;
+/** count the requests a body issues, by name */
+function countX(names, body) {
+  const X = app.X;
+  const counts = Object.fromEntries(names.map((n) => [n, 0]));
+  const saved = {};
+  for (const name of names) {
+    saved[name] = X[name];
+    X[name] = (...a) => {
+      counts[name]++;
+      return saved[name].apply(X, a);
+    };
   }
+  try {
+    body();
+  } finally {
+    for (const name of names) X[name] = saved[name];
+  }
+  return counts;
+}
 
+describe('server resources are not leaked', () => {
   test('drawing a node-canvas source repeatedly allocates once, not per call', () => {
     // this used to create a GC, a pixmap and a picture per call and free
     // none of them, so an animation loop leaked three resources a frame

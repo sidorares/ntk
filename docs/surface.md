@@ -49,6 +49,42 @@ answers that question for SVG documents.
 `globalAlpha` still applies — it folds into the source colour rather than the
 mask, since the mask slot is taken.
 
+## Scrolling and panning: `copyWithin`
+
+A widget that keeps its content in a retained surface — a terminal grid, a
+log view, a minimap, a panning chart — scrolls the way terminals always
+have: copy the band that survives the shift, then repaint only the sliver
+the shift exposed.
+
+```js
+// scroll the whole grid up one 18px row
+if (grid.copyWithin({ x: 0, y: 0, width: grid.width, height: grid.height }, 0, -18)) {
+  drawRow(lastRow); // only the newly exposed row
+} else {
+  drawAllRows();    // nothing survived the shift
+}
+ctx.drawImage(grid, 0, 0);
+```
+
+`surface.copyWithin(src, dx, dy)` shifts the pixels of `src`
+(`{x, y, width, height}`, surface coordinates) by `(dx, dy)` **in place**,
+server-side — one `CopyArea` of the surviving band. The overlap is safe:
+pixmap contents cannot be occluded, and the server fetches the source region
+before storing. The copy is issued in-order with whatever the caller draws
+next on the same connection, and goes out with a shared
+`graphicsExposures: 0` GC — one per app and depth, created on first use —
+so it never emits exposure events.
+
+Returns `false` — having done nothing, so the caller just repaints `src` as
+it would have anyway — when `dx`/`dy` are fractional (a sub-pixel shift
+changes every pixel) or both zero, when nothing of `src` survives the shift
+after clamping to the surface, or on a destroyed surface.
+
+This is [`wnd.scrollRegion`](window.md#wndscrollregionrect-dx-dy--boolean)
+for an offscreen surface, minus the damage bookkeeping — a pixmap has no
+backing store or present path, so compositing the surface afterwards is the
+caller's normal job.
+
 ## API
 
 - `new Surface(app, { width, height, format })` — `format` is `'argb32'`
@@ -63,6 +99,9 @@ mask, since the mask slot is taken.
 - `surface.getContext('2d')` — a context the caller owns, and owes a
   `destroy()`. Use this instead of `render()` for many draws into one surface
 - `surface.clear()` — reset every pixel to transparent
+- `surface.copyWithin(src, dx, dy)` → boolean — shift the pixels of `src`
+  in place by an integer `(dx, dy)`, server-side; see
+  [Scrolling and panning](#scrolling-and-panning-copywithin)
 - `surface.picture(app)` — the server-side Picture, mirroring
   `Image.picture(app)`. Throws for a different connection
 - `surface.destroy()` / `Symbol.dispose` — free the pixmap and the picture.

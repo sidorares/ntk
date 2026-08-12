@@ -221,6 +221,9 @@ the reason this operates on the backing store, not the window), and the
 copy is issued in-order with whatever the caller draws next on the same
 connection.
 
+The same operation for a retained offscreen surface is
+[`surface.copyWithin`](surface.md#scrolling-and-panning-copywithin).
+
 ## Frames, coalescing and slow connections
 
 Some X events are noisy by nature: an interactive resize is a stream of
