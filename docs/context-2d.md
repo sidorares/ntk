@@ -118,6 +118,16 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
 
 - `fillRect(x, y, w, h)` — respects clip, transform, `globalAlpha` and the
   composite op
+- `fillRects(rects)` — batched `fillRect`: `rects` is an array of
+  `[x, y, w, h]` quadruples or one flat `[x0, y0, w0, h0, x1, ...]` array;
+  rectangles with non-positive width or height are skipped. Semantically it
+  is `fillRect` once per rectangle — same style, alpha, composite op, clip
+  and damage reporting — but a solid-colour `fillStyle` under an identity
+  transform and a rectangular (or absent) clip sends the whole list as a
+  **single `Render.FillRectangles` request**, which is what makes
+  many-small-rectangles frames (terminal cell backgrounds, sparkline bars,
+  heat maps, row striping) cheap. Gradient/`Picture` styles, transforms and
+  non-rectangular clips fall back to the per-rectangle loop
 - `strokeRect(x, y, w, h)` — outlines a rect without touching the current path
 - `clearRect(x, y, w, h)` — resets to nothing (honors clip + transform).
   What "nothing" is depends on the target: **transparent black** on a
