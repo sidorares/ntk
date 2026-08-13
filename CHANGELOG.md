@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.6.1](https://github.com/sidorares/ntk/compare/v7.6.0...v7.6.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* **context2d:** stroke same-x hairpin bursts without NaN join geometry ([#260](https://github.com/sidorares/ntk/issues/260)) ([45ce1c0](https://github.com/sidorares/ntk/commit/45ce1c0607f842881866116ae01232185ea0b682))
+
 ## [7.6.0](https://github.com/sidorares/ntk/compare/v7.5.0...v7.6.0) (2026-08-12)
 
 
