@@ -78,6 +78,10 @@ lib/rasterize.js           pure-JS coverage rasterizer (signed-area
                            accumulation): glyph outlines and path/stroke
                            geometry -> a8; the pluggable Rasterizer seam and
                            the local/server routing policy
+lib/maskcluster.js         one drawing's pieces -> the few mask boxes their
+                           ink is really in: the gap partition that keeps a
+                           path of N scattered subpaths off one union-sized
+                           mask (maskPolicy)
 lib/trapezoid.js           polygon -> XRender trapezoids (non-zero/even-odd;
                            vector text and all 2d path fills)
 lib/fontconfig.js          font matching + fallback chain via fc-match CLI

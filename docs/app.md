@@ -62,6 +62,9 @@ const app2 = await createClient({ display: ':1' });
   ([context-2d.md](context-2d.md#swapping-the-rasterizer))
 - `app.rasterPolicy` — the thresholds for that choice, merged over
   `DEFAULT_RASTER_POLICY`
+- `app.maskPolicy` — when a drawing whose subpaths are scattered is worth
+  more than one mask, merged over `DEFAULT_MASK_POLICY`
+  ([context-2d.md](context-2d.md#many-pieces-in-one-path-what-the-mask-costs))
 - `app.refreshRate` — the fastest refresh rate any active output is running
   at, in Hz; `null` until the display has been asked, and on a server with no
   RandR or no mode worth pacing to

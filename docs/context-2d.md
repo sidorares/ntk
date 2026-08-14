@@ -128,7 +128,10 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   **single `Render.FillRectangles` request**, which is what makes
   many-small-rectangles frames (terminal cell backgrounds, sparkline bars,
   heat maps, row striping) cheap. Gradient/pattern/`Picture` styles,
-  transforms and non-rectangular clips fall back to the per-rectangle loop
+  transforms and non-rectangular clips fall back to the per-rectangle loop.
+  Batching *paths* the same way — many subpaths in one `fill()`/`stroke()` —
+  is a different trade, because a path pays for one mask over all of them;
+  see [Many pieces in one path](#many-pieces-in-one-path-what-the-mask-costs)
 - `strokeRect(x, y, w, h)` — outlines a rect without touching the current path
 - `clearRect(x, y, w, h)` — resets to nothing (honors clip + transform).
   What "nothing" is depends on the target: **transparent black** on a
@@ -270,9 +273,11 @@ r=20) and never larger. Pass a smaller `tol` where that matters.
 
 ## Where drawings are rasterized
 
-Every fill and stroke ends the same way: coverage lands in a scratch a8 mask,
-the mask is intersected with the clip and `globalAlpha`, and the fill style is
-composited through it. Only the first step has a choice of where it happens.
+Every fill and stroke ends the same way: coverage lands in a scratch a8 mask
+bounded to the drawing's ink (one mask per cluster of its pieces — see
+[below](#many-pieces-in-one-path-what-the-mask-costs)), the mask is
+intersected with the clip and `globalAlpha`, and the fill style is composited
+through it. Only the first step has a choice of where it happens.
 
 - **Server-side** — the geometry is trapezoidated here
   (`lib/trapezoid.js`) and sent as `AddTraps`/`Triangles`. Cost grows with
@@ -311,6 +316,69 @@ invisible to everything else: gradients, solid fills, `globalAlpha`, clip and
 composite ops all work identically either way, and a widget that draws through
 `fill()`/`stroke()` — `SvgView`, `HtmlView`, anything of your own — is routed
 without knowing this exists.
+
+### Many pieces in one path: what the mask costs
+
+The mask is sized to the drawing's **ink bounding box**, and it costs width ×
+height whatever the coverage inside it is. For one shape that bound is right.
+For a path holding N *disjoint* subpaths — a graph's edges, a scatter of
+handles, a wall of icons — the bound is their **union**, so batching N draws
+into one path trades N small masks for one big one. Whether that wins depends
+entirely on whether the pieces span the box anyway, and the two answers are
+far apart (measured at 1100×700 against XQuartz, per frame):
+
+| scene, batched into one path per pen | one mask | clustered | drawn singly |
+| --- | --- | --- | --- |
+| 735 long edges | 1 mask, 0.73 MB, 27 ms | *unchanged* | 735 masks, 64 MB, 326 ms |
+| 19 edges + 40 handle discs | 2 masks, 1.42 MB, 5.1 ms | 25 masks, 0.74 MB, 3.9 ms | 59 masks, 1.58 MB, 7.0 ms |
+
+Long edges win from batching because each already spans a big box — the union
+adds nothing. Scattered dots lose: their coverage is ~1% of the union box,
+and the mask pays for all of it.
+
+![the same scene twice, with its mask boxes drawn in red: one box per drawing on the left, the clusters on the right](img/mask-clusters.png)
+
+The boxes above are the masks themselves (`scripts/bench-mask-clusters.mjs
+--png`): on the left the two a8 masks a batched frame used to cost, on the
+right the same drawing's clusters. The stroked edges keep one box — they span
+it — while the handles each get their own.
+
+So the choice is made per drawing rather than left to the caller. The pieces'
+boxes go through a greedy gap partition (`lib/maskcluster.js`) and the mask is
+emitted once per cluster:
+
+- a cut is only made **where nothing straddles it**, which is what keeps every
+  cluster box disjoint from every other. Disjoint boxes are why the split is
+  invisible: no pixel is composited twice (a translucent colour would blend
+  twice at any overlap), and the winding number a fill rule asks for does not
+  change, because a closed subpath contributes nothing to the winding of a
+  point outside its own box;
+- and only **where it saves more mask area than the extra mask pass costs**.
+  Every cut therefore removes at least `minSaving` pixels of mask, which also
+  bounds how many clusters a drawing can take.
+
+The upshot for a caller is that "fewer, bigger draws" stays the right instinct:
+where the pieces span the box, nothing is split; where they are scattered, the
+box around all of them is never paid for.
+
+```js
+app.maskPolicy = { minSaving: 64 * 64, // mask pixels a cut must save to pay for its pass
+                   maxMasks: 32 };     // most clusters one drawing may take
+app.maskPolicy = { maxMasks: 1 };      // one mask per drawing, whatever it holds
+```
+
+Two things it deliberately leaves alone. Composite ops that write **outside**
+their coverage — `copy`, `source-in`, `destination-in`, `source-out`,
+`destination-atop` — keep one box, because for those the gaps between boxes
+are pixels a single mask would have written too. And a `source-over` stroke
+with no clip, no round caps or joins and `globalAlpha` 1 never builds a mask
+at all: its triangles composite straight onto the destination.
+
+`ctx.maskStats` is `{ masks, pixels, split }` — mask passes, their total area,
+and how many drawings took more than one. Mask area is the cost with no other
+symptom, so it is counted rather than inferred;
+`scripts/bench-mask-clusters.mjs` prints the table above with the split on,
+forced off, and against drawing the pieces singly.
 
 ### Rounded rectangles: corner glyphs
 
