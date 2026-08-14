@@ -42,6 +42,11 @@ wnd.map();
   server-side picture for that app's display (uploaded on first call).
   `ctx.drawImage` uses this internally; it is public for manual Render
   compositing
+- `image.pixmap(app)` → [`Pixmap`](pixmap.md) — the drawable those pixels
+  were uploaded to (uploading on first call, like `picture`). It is what
+  building a *second* picture over the same upload needs:
+  [`ctx.createPattern`](context-2d.md#patterns) makes a repeating one there
+  rather than changing how `picture(app)` samples everywhere else
 - `image.destroy()` / `Symbol.dispose` — free the server-side copies
   (safe: the image re-uploads if drawn again). Client-side pixel data stays
   usable; the server resources are also reclaimed by GC as a fallback (see
