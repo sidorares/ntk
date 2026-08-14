@@ -267,6 +267,31 @@ test('a rectangular clip keeps its pixels, and skips the masks outside it', asyn
   );
 });
 
+test('a non-rectangular clip applies to every cluster', async () => {
+  app.rasterizer = null;
+  // a circle clip cannot be applied server-side, so it materializes the clip
+  // mask — on demand, from inside the cluster loop. Every cluster after the
+  // first sees it already built, and the first one must not slip through.
+  const { oneImg, oneStats, splitImg, splitStats } = await both((ctx) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(W / 2, H / 2, 170, 0, Math.PI * 2);
+    ctx.clip();
+    discs(ctx);
+    ctx.restore();
+  });
+  assert.equal(splitStats.split, 1);
+  assertSamePixels(oneImg, splitImg, 'circle-clipped discs', 12);
+  assert.ok(
+    splitStats.pixels < oneStats.pixels / 5,
+    `mask area ${splitStats.pixels} against ${oneStats.pixels}`
+  );
+  const outside = POINTS.find(
+    ([x, y]) => Math.hypot(x - W / 2, y - H / 2) > 220
+  ).map(Math.round);
+  assert.deepEqual(at(splitImg, ...outside), [255, 255, 255], 'clipped away');
+});
+
 test('an op that writes outside its coverage keeps one mask', async () => {
   app.rasterizer = null;
   // `copy` replaces the destination across the whole mask box, gaps
