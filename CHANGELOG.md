@@ -1,5 +1,17 @@
 # Changelog
 
+## [7.7.0](https://github.com/sidorares/ntk/compare/v7.6.1...v7.7.0) (2026-08-14)
+
+
+### Features
+
+* **context2d:** createPattern tiles a surface as one repeating fill ([#265](https://github.com/sidorares/ntk/issues/265)) ([fd61e55](https://github.com/sidorares/ntk/commit/fd61e557787d2cfb9e179be0c1c2b51294d1510f))
+
+
+### Performance Improvements
+
+* **context2d:** a path of scattered subpaths pays for its pieces, not the box around them ([#267](https://github.com/sidorares/ntk/issues/267)) ([ce3e46b](https://github.com/sidorares/ntk/commit/ce3e46b63851f2037f3de9c2dda2ab0f2c76dee8))
+
 ## [7.6.1](https://github.com/sidorares/ntk/compare/v7.6.0...v7.6.1) (2026-08-13)
 
 
