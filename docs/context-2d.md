@@ -23,7 +23,8 @@ ctx.fillRect(0, 0, 100, 100);
 - `ctx.canvas` — the owning drawable (window or pixmap), like in the browser
 - `ctx.width`, `ctx.height` — drawable size
 - `ctx.fillStyle`, `ctx.strokeStyle` — a CSS color string, a premultiplied
-  `[r, g, b, a]` array (0..1 floats), a `CanvasGradient`, or a `Picture`.
+  `[r, g, b, a]` array (0..1 floats), a `CanvasGradient`, a `CanvasPattern`,
+  or a `Picture`.
   Named colors, `rgb[a]()`, `hsl[a]()` and hex in all four lengths
   (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) are accepted; anything
   unparseable throws rather than drawing something arbitrary. See
@@ -126,8 +127,8 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   transform and a rectangular (or absent) clip sends the whole list as a
   **single `Render.FillRectangles` request**, which is what makes
   many-small-rectangles frames (terminal cell backgrounds, sparkline bars,
-  heat maps, row striping) cheap. Gradient/`Picture` styles, transforms and
-  non-rectangular clips fall back to the per-rectangle loop
+  heat maps, row striping) cheap. Gradient/pattern/`Picture` styles,
+  transforms and non-rectangular clips fall back to the per-rectangle loop
 - `strokeRect(x, y, w, h)` — outlines a rect without touching the current path
 - `clearRect(x, y, w, h)` — resets to nothing (honors clip + transform).
   What "nothing" is depends on the target: **transparent black** on a
@@ -485,6 +486,70 @@ ctx.fillStyle = g;
 
 Gradients are uploaded lazily on first use and freed with the context's
 pictures on GC.
+
+## Patterns
+
+`createPattern(source, repetition)` returns a `CanvasPattern`: a tile the
+server repeats across whatever the pattern fills, in the one composite the
+fill already costs.
+
+```js
+const tile = new Surface(app, { width: 24, height: 24 });
+tile.render((c) => {
+  c.fillStyle = '#d0d4dc';
+  c.fillRect(0, 0, 1, 1); // one dot per 24x24 cell
+});
+
+ctx.fillStyle = ctx.createPattern(tile, 'repeat');
+ctx.fillRect(0, 0, ctx.width, ctx.height); // one request, no mask
+```
+
+That is the difference a background grid notices. Drawn as paths — one
+subpath per dot, batched or not — the grid rasterizes into an a8 coverage
+mask the size of its own bounding box, which for a background *is* the pane,
+then uploads and composites it, every frame. Measured at 1100x700 that grid
+cost ~700 KB and ~25 ms of a ~100 ms frame (issue #263); as a pattern it is
+a tile-sized picture and one `Composite`, and the cost stops scaling with
+the pane. The same applies to checkerboards under transparency, hatched
+chart fills and any texture-shaped background.
+
+- **`source`** is a [`Surface`](surface.md) (pixels the server drew), an
+  [`Image`](images.md) (pixels uploaded from the client), a `Pixmap` or a
+  `Window`. A repeating Picture is created *over* those pixels, so tiling a
+  surface does not change how `drawImage` samples that same surface. A
+  coverage (`a8`) surface is refused: it has no colour to paint with —
+  `drawImage` is what paints coverage in the current `fillStyle`
+- **`repetition`** is `'repeat'` (the default, and what `null` means),
+  `'no-repeat'`, or the two XRender modes the canvas spec has no name for:
+  `'pad'` (clamp to the edge pixels) and `'reflect'` (mirror every other
+  tile). The spec's `'repeat-x'`/`'repeat-y'` are **not** supported —
+  XRender repeats a source picture on both axes or on neither — and throw
+  with the equivalent: tile with `'repeat'` and bound the fill to the one
+  row or column of tiles, `ctx.fillRect(x, y, w, tile.height)`
+- **`pattern.setTransform(matrix)`** positions the tile: `[a, b, c, d, e, f]`
+  or a DOMMatrix-shaped `{a, b, c, d, e, f}` mapping pattern space to user
+  space. Translating by the scroll offset is what keeps a grid glued to the
+  content under it; a zoom step re-renders the tile and keeps the composite
+- The pattern is painted in **user space**: the transform in force at fill
+  time applies to the tile as well as to the shape, so a scaled context
+  scales its grid (this is where patterns differ from the gradients above,
+  whose coordinates are device-space). A transform that collapses (a zero
+  scale) paints nothing, as the canvas spec says
+- Whole-pixel tiling samples with the `nearest` filter — the tile's own
+  pixels, exactly — and anything else (a fractional offset, a scale, a
+  rotation) resamples bilinearly
+- The repeating picture is created on first use. `pattern.destroy()` (or
+  `Symbol.dispose`, or the GC) frees it; the tile it reads is the caller's,
+  and destroying that `Surface`/`Image` while the pattern lives is safe — X
+  keeps pixmap storage alive as long as a picture references it, though the
+  pixels then stop tracking anything drawn afterwards
+- A pattern belongs to the connection, not to the context that created it:
+  one grid tile serves every window on the app, and it outlives
+  `ctx.destroy()`
+
+Patterns work anywhere a colour does — `fillRect`, path fills, strokes,
+`fillText` — and go through the clip, `globalAlpha` and the composite op
+like any other style.
 
 ## Text
 

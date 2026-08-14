@@ -104,6 +104,10 @@ caller's normal job.
   [Scrolling and panning](#scrolling-and-panning-copywithin)
 - `surface.picture(app)` — the server-side Picture, mirroring
   `Image.picture(app)`. Throws for a different connection
+- a surface is also what [`ctx.createPattern`](context-2d.md#patterns) tiles:
+  drawn once, then repeated across a fill by the server. A background grid,
+  a checkerboard or a hatch is a tile-sized surface and one composite,
+  instead of a pane-sized coverage mask per frame
 - `surface.destroy()` / `Symbol.dispose` — free the pixmap and the picture.
   Both carry finalizers, so a dropped surface still releases
 

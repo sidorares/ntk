@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
-import { createClient, HtmlView, MarkdownView, Path2D, SvgView } from '../lib/index.js';
+import { createClient, HtmlView, MarkdownView, Path2D, Surface, SvgView } from '../lib/index.js';
 import { invalidation, withTimeout } from './helpers/async.js';
 
 let app = null;
@@ -293,5 +293,47 @@ test('SvgView draws a document into any 2d context', async (t) => {
   assert.deepEqual(px(image, 64, 32, 32), [255, 0, 0], 'scaled circle center is red');
   assert.deepEqual(px(image, 64, 4, 4), [0, 0, 255], 'background rect is blue');
   assert.deepEqual(px(image, 64, 32, 6), [0, 0, 255], 'above circle is blue');
+  pixmap.destroy();
+});
+
+test('createPattern: a tile repeats across a fill, on a real server', async (t) => {
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx } = freshCtx();
+
+  // 4x4 tile: red top-left quadrant, blue bottom-right, the rest transparent
+  const tile = new Surface(app, { width: 4, height: 4 });
+  tile.render((c) => {
+    c.fillStyle = 'red';
+    c.fillRect(0, 0, 2, 2);
+    c.fillStyle = 'blue';
+    c.fillRect(2, 2, 2, 2);
+  });
+  ctx.fillStyle = ctx.createPattern(tile, 'repeat');
+  ctx.fillRect(0, 0, 32, 32);
+
+  // a stroke samples the same paint in canvas space (RENDER aligns the
+  // source of a Triangles request with its first vertex, not the surface)
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = ctx.fillStyle;
+  ctx.beginPath();
+  ctx.moveTo(0, 50);
+  ctx.lineTo(64, 50);
+  ctx.stroke();
+
+  const image = await readPixels(ctx, 64, 64);
+  for (const [x, y] of [
+    [0, 0],
+    [16, 8],
+    [28, 28],
+  ]) {
+    assert.deepEqual(px(image, 64, x, y), [255, 0, 0], `tile red quadrant at ${x},${y}`);
+    assert.deepEqual(px(image, 64, x + 2, y + 2), [0, 0, 255], `blue quadrant at ${x},${y}`);
+    assert.deepEqual(px(image, 64, x + 2, y), [255, 255, 255], `transparent quadrant at ${x},${y}`);
+  }
+  assert.deepEqual(px(image, 64, 40, 40), [255, 255, 255], 'nothing outside the filled rect');
+  assert.deepEqual(px(image, 64, 48, 48), [255, 0, 0], 'the stroke tiles in canvas space');
+  assert.deepEqual(px(image, 64, 50, 50), [0, 0, 255], 'and shows the next quadrant along');
+
+  tile.destroy();
   pixmap.destroy();
 });
