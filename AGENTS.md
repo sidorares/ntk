@@ -96,13 +96,7 @@ lib/text/layout.js         TextLayout: UAX#14 wrapping, alignment, spans
 lib/text/glyphs.js         glyph pages (compact ids) + CompositeGlyphs encoder,
                            bitmap/vector routing policy, glyph-page LRU
 lib/image.js               Image: PNG/JPEG decode (pngjs/jpeg-js), server upload cache
-lib/widgets/css.js         CSS for HtmlView: parse (postcss), cascade, computed styles
-lib/widgets/htmlview.js    HtmlView widget: htmlparser2 DOM + yoga-layout boxes
-lib/widgets/markdown.js    markdown parsing (adapter over marked)
-lib/widgets/markdownview.js  MarkdownView widget (highlighted + math fences)
-lib/widgets/highlight.js   fence syntax highlighting (adapter over highlight.js)
 lib/widgets/svgview.js     SvgView widget: static SVG via Path2D + 2d context
-lib/widgets/tex.js         KaTeX-based TexView widget / layoutTex
 test/                      node:test suite (see below)
 docs/                      public API documentation
 examples/                  runnable examples (own package.json, ESM)
@@ -178,10 +172,10 @@ What that means in practice:
   weak-napi (→ `FinalizationRegistry`), freetype2 (→ fontkit + own
   rasterizer), harfbuzz (→ fontkit shaping), fribidi (→ bidi-js) and
   font-scanner (→ fc-match) were removed/avoided. The flip side: don't
-  hand-roll what a maintained library does better — the original in-repo
-  markdown parser and syntax highlighter were subtly wrong (e.g. intra-word
-  `_` emphasis) and are now thin adapters over `marked` and `highlight.js`,
-  the same way math rendering uses `katex`.
+  hand-roll what a maintained library does better — the in-repo markdown
+  parser and syntax highlighter were subtly wrong (e.g. intra-word `_`
+  emphasis) and became thin adapters over `marked` and `highlight.js` before
+  leaving ntk altogether.
   **The one native module here is `x11-dri`, and it is an `optionalDependency`
   that nothing imports statically** (`lib/gl.js` reaches it through
   `nodeRequire()` inside a try/catch). It does not fail the portability bar
@@ -203,8 +197,7 @@ What that means in practice:
   `lib/` — fetch them lazily via `builtin('node:...')` (which wraps
   `process.getBuiltinModule` behind a capability check) and route
   environment-dependent behavior through the pluggable hooks (FontSource for
-  font lookup, `configureTex` for KaTeX assets, HtmlView's `loadResource`,
-  `createClient({ glxVisual })`) so browser playgrounds can substitute
+  font lookup, `createClient({ glxVisual })`) so browser playgrounds can substitute
   implementations. The only sanctioned static node imports are `node:events`
   in `drawable.js` and `node:module` in `builtin.js` (enforced by
   test/packaging.test.js).
@@ -330,13 +323,13 @@ release and publishes to npm via OIDC trusted publishing (no token secrets).
   than its container* and force-breaks it, so a `value` header renders as
   `valu` over `e` — on some fonts and not others, depending on nothing but
   whether the width survives the round trip. Carry the content width alongside
-  the outer width instead. `MarkdownView._layoutTable` does, with the invariant
-  under test in `test/text.test.js`.
+  the outer width instead. This bit ntk's own table layout, and is the kind of
+  thing any consumer laying out columns on `TextLayout` will hit.
 - **`TextLayout`'s width is not monotonic in `maxWidth`,** so laying a cell out
   at a tiny `maxWidth` is *not* a min-content probe. `_forceBreak`
   (`lib/text/layout.js:131`) splits a token wider than the container whenever a
-  single cluster fits and lets it overflow whole when none does, so KaTeX Main
-  at 16px measuring `value` reports 42.1 at `maxWidth` 1–8 and 13.4 at 16 — a
+  single cluster fits and lets it overflow whole when none does, so the test
+  face at 16px measuring `value` reports 42.1 at `maxWidth` 1–8 and 13.4 at 16 — a
   fragment. For min-content, measure each whitespace-delimited token
   unconstrained; an unconstrained token cannot be broken. Pinned by a test, so
   the probe does not come back as an obvious simplification.

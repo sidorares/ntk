@@ -166,8 +166,6 @@ const ORDER = [
   'images.md',
   'fonts.md',
   'text.md',
-  'tex.md',
-  'html.md',
   'svg.md',
   'context-opengl.md',
   'context-x11.md',

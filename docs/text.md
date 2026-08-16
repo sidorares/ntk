@@ -1,4 +1,4 @@
-# Text: shaping, layout and the markdown widget
+# Text: shaping and layout
 
 The text stack is pure JavaScript end to end and is designed around one
 goal: **correct, fully shaped text with the least possible traffic to the
@@ -12,8 +12,6 @@ lib/text/fontmanager.js  FontManager (`app.fonts`): matching, custom fonts,
 lib/text/shape.js        bidi (UAX#9) → font itemization → OpenType shaping
 lib/text/layout.js       TextLayout: UAX#14 line breaking, wrapping, alignment
 lib/text/glyphs.js       server glyph cache + CompositeGlyphs encoder
-lib/widgets/markdown.js  markdown parsing (adapter over `marked`)
-lib/widgets/markdownview.js  MarkdownView widget
 ```
 
 ## Quick start
@@ -471,60 +469,6 @@ Conventions:
   `ctx.font` as base style
 - `ctx.drawGlyphs(op, src, positioned)` — hand-built or shaped glyph runs;
   see [Glyph runs](#glyph-runs)
-
-### `MarkdownView`
-
-```js
-import { createClient, MarkdownView } from 'ntk';
-const view = new MarkdownView(wnd, { theme: { size: 15, linkColor: '#0b61c9' } });
-view.setMarkdown('# Hello\n\nSome *markdown*.');
-wnd.map(); // renders on expose, re-wraps on resize
-```
-
-Parsing is CommonMark + GFM via [marked](https://marked.js.org). Rendered
-blocks: headings, paragraphs, fenced code, blockquotes, nested
-ordered/unordered lists, `---` rules, and GFM tables (natural column
-widths, per-column `:--`/`:-:`/`--:` alignment, shrink-and-wrap when the
-table is wider than the window). Inlines: `**strong**`, `*em*`, `` `code` `` (with
-background), `[links](url)` (colored + underlined); images render as links
-to their source.
-All layout — wrapping, font selection per style, spacing — runs through
-`TextLayout`; drawing batches glyphs per color.
-
-Fenced code blocks are **syntax highlighted** through
-[highlight.js](https://highlightjs.org) (the `common` build: ~36 languages
-plus their aliases — `js`/`ts`, `json`, `python`, `shell`, `c`/`cpp`,
-`java`, `go`, `rust`, `css`, `sql`, `html`/`xml`, …), adapted to flat
-tokens by `lib/widgets/highlight.js` (exported as `highlightCode`).
-Unknown tags render plain. Colors come from `theme.codeTheme`, a map from
-token kind (`keyword`, `literal`, `string`, `number`, `comment`, `tag`,
-`attr`, `function`) to color — partial overrides merge with the defaults.
-
-Fences tagged `math`, `tex`, `latex` or `katex` render as **display-mode
-formulas** via KaTeX (centered, at 1.21× the base size like katex.css);
-a formula that fails to parse falls back to a plain code block. See
-[tex.md](tex.md).
-
-Links are clickable. Every `draw()` records the device-space rectangles of
-rendered links; `view.linkAt(x, y)` returns the href under a point (or
-null). In window mode a left-button `mousedown` is resolved automatically
-and forwarded to `view.onLink(href, event)` — set it via the `onLink`
-constructor option or assign the property; standalone embedders call
-`linkAt` from their own event handlers. Navigation semantics (opening
-files, browsers, history) are the embedder's job —
-[examples/markdown.js](../examples/markdown.js) is a small documentation
-browser built this way.
-
-Headless/embedded use: `new MarkdownView(null, { fonts })`, then
-`view.layout(width)` → content height, `view.draw(ctx, x, y)`. Layout is
-synchronous throughout, so one pass is enough — nothing arrives later.
-
-`TextLayout` note for widget authors: spans keep unknown fields through
-layout normalization, and line runs expose their span (`run.span`), so
-markers attached to spans (like MarkdownView's `_href`) can be read back
-per positioned run after layout.
-
-![the markdown widget rendering examples/markdown.js](img/markdown-widget.png)
 
 ## Design notes: revisiting the old issues (2015–2018)
 

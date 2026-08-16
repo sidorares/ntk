@@ -11,8 +11,6 @@ import { StaticFontSource } from '../lib/text/fontsource.js';
 import { encodeGlyphItems } from '../lib/text/glyphs.js';
 import { TextLayout } from '../lib/text/layout.js';
 import { reorderRuns, shapeText } from '../lib/text/shape.js';
-import { parseInline, parseMarkdown } from '../lib/widgets/markdown.js';
-import MarkdownView from '../lib/widgets/markdownview.js';
 
 let hasFontconfig = true;
 try {
@@ -183,10 +181,10 @@ test('TextLayout honors explicit newlines', needsFonts, () => {
 
 test('TextLayout copes with an empty span list', needsFonts, () => {
   const fonts = new FontManager();
-  // MarkdownView hands over an empty span list for a blank block, which
-  // happens while a document is being typed — every line still needs a
-  // style to take its metrics from, and this used to throw on the first
-  // one ("undefined is not an object (evaluating 'baseSpan.font')")
+  // A document view hands over an empty span list for a blank block, which
+  // happens while one is being typed — every line still needs a style to
+  // take its metrics from, and this used to throw on the first one
+  // ("undefined is not an object (evaluating 'baseSpan.font')")
   const layout = new TextLayout(fonts, [], { family: 'sans-serif', size: 16 }, {});
   assert.equal(layout.lines.length, 1);
   assert.equal(layout.lines[0].runs.length, 0);
@@ -584,94 +582,6 @@ test('fillText-path shaping reuses the memo and keeps the paragraph level', () =
 
 // ---------- markdown parser ----------
 
-test('parseMarkdown: blocks', () => {
-  const ast = parseMarkdown('# H1\n\ntext\n\n```js\ncode();\n```\n\n> quote\n\n---\n\n1. one\n2. two');
-  assert.deepEqual(
-    ast.map((b) => b.type),
-    ['heading', 'paragraph', 'code', 'blockquote', 'hr', 'list']
-  );
-  assert.equal(ast[0].level, 1);
-  assert.equal(ast[2].text, 'code();');
-  assert.equal(ast[2].lang, 'js');
-  assert.equal(ast[5].ordered, true);
-  assert.equal(ast[5].items.length, 2);
-});
-
-test('parseMarkdown: nested lists', () => {
-  const ast = parseMarkdown('- a\n- b\n  - b1\n  - b2\n- c');
-  assert.equal(ast.length, 1);
-  assert.equal(ast[0].items.length, 3);
-  const nested = ast[0].items[1].find((b) => b.type === 'list');
-  assert.ok(nested, 'nested list parsed');
-  assert.equal(nested.items.length, 2);
-});
-
-test('parseMarkdown: tables', () => {
-  const ast = parseMarkdown('| Name | Score |\n|:-----|------:|\n| **a** | 1 |\n| b | 2 |');
-  assert.equal(ast.length, 1);
-  const table = ast[0];
-  assert.equal(table.type, 'table');
-  assert.deepEqual(table.align, ['left', 'right']);
-  assert.equal(table.header.length, 2);
-  assert.equal(table.header[0][0].text, 'Name');
-  assert.equal(table.rows.length, 2);
-  assert.equal(table.rows[0][0][0].type, 'strong');
-  assert.equal(table.rows[1][1][0].text, '2');
-});
-
-test('parseInline: emphasis, code, links, escapes', () => {
-  const nodes = parseInline('a **b** *c* `d` [e](f) \\*g\\*');
-  const types = nodes.map((n) => n.type);
-  assert.deepEqual(types, ['text', 'strong', 'text', 'em', 'text', 'code', 'text', 'link', 'text']);
-  assert.equal(nodes[1].children[0].text, 'b');
-  assert.equal(nodes[5].text, 'd');
-  assert.equal(nodes[7].href, 'f');
-  assert.ok(nodes[8].text.includes('*g*'));
-});
-
-test('parseMarkdown: soft-wrapped paragraph lines join', () => {
-  const ast = parseMarkdown('line one\nline two');
-  assert.equal(ast.length, 1);
-  assert.equal(ast[0].children[0].text, 'line one line two');
-});
-
-test('parseInline: no intra-word underscore emphasis (WM_DELETE_WINDOW)', () => {
-  const nodes = parseInline('set WM_DELETE_WINDOW and _real emphasis_');
-  assert.deepEqual(
-    nodes.map((n) => n.type),
-    ['text', 'em']
-  );
-  assert.equal(nodes[0].text, 'set WM_DELETE_WINDOW and ');
-  assert.equal(nodes[1].children[0].text, 'real emphasis');
-});
-
-test('parseMarkdown: snake_case survives inside styled and plain contexts', () => {
-  const ast = parseMarkdown('`code_name` plus **bold_name_here** plus plain_name_x');
-  const para = ast[0];
-  const flat = JSON.stringify(para);
-  assert.ok(!flat.includes('"em"'), `no emphasis nodes expected: ${flat}`);
-});
-
-test('MarkdownView: table layout places cells and grid', needsFonts, () => {
-  const fonts = new FontManager();
-  const view = new MarkdownView(null, { fonts });
-  view.setMarkdown('| Name | Score |\n|:-----|------:|\n| alpha | 1 |\n| beta | 22 |');
-  const height = view.layout(400);
-  assert.ok(height > 0);
-  const items = view._items;
-  const texts = items.filter((i) => i.kind === 'text');
-  const rects = items.filter((i) => i.kind === 'rect');
-  assert.equal(texts.length, 6, '2 cols x 3 rows of cell text');
-  // header background + 4 horizontal + 3 vertical grid lines
-  assert.equal(rects.length, 8);
-  // header cells are bold
-  const header = texts[0];
-  assert.equal(header.layout.lines[0].runs[0].span.weight, 700);
-  // right-aligned numeric column: the two body cells share a right edge
-  const right = (i) => i.x + i.layout.lines[0].x + i.layout.lines[0].width;
-  assert.ok(Math.abs(right(texts[3]) - right(texts[5])) < 0.5, 'right-aligned column');
-});
-
 test('TextLayout: a narrow maxWidth is not a min-content probe', needsFonts, () => {
   const fonts = new FontManager();
   const style = { family: 'sans-serif', size: 16 };
@@ -696,92 +606,8 @@ test('TextLayout: a narrow maxWidth is not a min-content probe', needsFonts, () 
     `at maxWidth 16 the token force-breaks and reports a fragment, got ${widths[1]} of ${whole}`
   );
 
-  // Measuring one token unconstrained is the reliable answer, and is what
-  // MarkdownView's table layout uses.
+  // Measuring one token unconstrained is the reliable answer, and is what a
+  // table column floor has to be built on.
   assert.equal(new TextLayout(fonts, [span], style, {}).width, whole);
 });
 
-test('MarkdownView: a squeezed column never narrows past its longest word', needsFonts, () => {
-  const fonts = new FontManager();
-  // Every cell is a single unbreakable word, so no column can give up width by
-  // wrapping. The floor used to be a flat 2.5em guess unrelated to the content,
-  // which handed TextLayout a maxWidth narrower than the word itself — and
-  // TextLayout force-breaks a token wider than its container, so a `value`
-  // header rendered as `valu` over `e`. Overflowing is the right answer here,
-  // and it is what a browser does with the same table.
-  //
-  // The assertion is on the *text*, not the line count: a cell can land on a
-  // second line that holds nothing, which is not a broken word. Whatever fails
-  // here has to say what it actually saw, because the only way it fails is a
-  // font whose metrics differ from the one you ran it with.
-  const md = '| column | value |\n| ------ | ----: |\n| alpha | 12 |\n| beta | 345 |';
-  for (const width of [400, 200, 120, 90, 60, 30]) {
-    const view = new MarkdownView(null, { fonts });
-    view.setMarkdown(md);
-    view.layout(width);
-    for (const item of view._items.filter((i) => i.kind === 'text')) {
-      // _text is the layout's full string; line.start/end index into it
-      const full = item.layout._text;
-      const pieces = item.layout.lines
-        .map((l) => full.slice(l.start, l.end).trim())
-        .filter((t) => t !== '');
-      assert.deepEqual(
-        pieces,
-        pieces.length ? [full.trim()] : [],
-        `at width ${width} a cell was split into ${JSON.stringify(pieces)}; ` +
-          `it holds ${JSON.stringify(full)} and was laid out at ` +
-          `maxWidth ${item.layout.options?.maxWidth}`
-      );
-    }
-  }
-});
-
-test('MarkdownView: no table cell is laid out below its widest token', needsFonts, () => {
-  const fonts = new FontManager();
-  // The invariant behind the test above, checked directly instead of through a
-  // symptom that only appears on an unlucky font. A cell handed a maxWidth
-  // below the measured width of a word it holds is a word wider than its
-  // container, and TextLayout force-breaks those.
-  //
-  // It used to be violated by arithmetic alone: the content width was derived
-  // as `cols[c] - hpad * 2` from a `cols[c]` that had just had `hpad * 2`
-  // added, and that round trip is not the identity in floating point. At size
-  // 16, a natural width of 48.953125 comes back as 48.95312499999999 — seven
-  // ULPs low, and enough.
-  const md = '| column | value |\n| ------ | ----: |\n| alpha | 12 |\n| beta | 345 |';
-  for (const size of [12, 13, 16, 19]) {
-    for (const width of [400, 220, 140, 80, 40]) {
-      const view = new MarkdownView(null, { fonts, theme: { size } });
-      view.setMarkdown(md);
-      view.layout(width);
-      for (const item of view._items.filter((i) => i.kind === 'text')) {
-        const maxWidth = item.layout.options?.maxWidth;
-        if (maxWidth === undefined) continue;
-        const text = item.layout._text;
-        for (const token of text.split(/\s+/)) {
-          if (!token) continue;
-          const style = { family: 'sans-serif', size, weight: item.layout.lines[0]?.runs[0]?.span.weight };
-          const tokenWidth = new TextLayout(fonts, [{ ...style, text: token }], style, {}).width;
-          assert.ok(
-            maxWidth >= tokenWidth,
-            `size ${size} width ${width}: "${token}" measures ${tokenWidth} but its ` +
-              `cell was laid out at maxWidth ${maxWidth}`
-          );
-        }
-      }
-    }
-  }
-});
-
-test('MarkdownView: wide table shrinks columns to the container', needsFonts, () => {
-  const fonts = new FontManager();
-  const view = new MarkdownView(null, { fonts });
-  const long = 'a very long cell that will definitely not fit unwrapped in a narrow container';
-  view.setMarkdown(`| One | Two |\n|-----|-----|\n| ${long} | ${long} |`);
-  view.layout(300);
-  const gridTop = view._items.filter((i) => i.kind === 'rect' && i.height === 1)[0];
-  assert.ok(gridTop.width <= 300 - 16 * 2 + 1, `table width ${gridTop.width} fits container`);
-  // cells wrapped onto multiple lines
-  const body = view._items.filter((i) => i.kind === 'text');
-  assert.ok(body.some((i) => i.layout.lines.length > 1), 'long cells wrap');
-});

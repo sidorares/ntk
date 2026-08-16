@@ -49,14 +49,14 @@ beside the binary. `fs` itself is unrestricted; it is the module loader that
 is sandboxed. This is why fonts reach a SEA as **assets** (below) rather than
 as a package ntk could resolve for you.
 
-ntk itself is built for this: nothing in `lib/` uses top-level await, and
-`test/packaging.test.js` keeps it that way. The one thing that would take it
-away is importing `yoga-layout`'s default entry — it is
-`const Yoga = wrapAssembly(await loadYoga())` — which is why ntk loads the
-layout engine through `yoga-layout/load` and exposes it as
-[`Yoga`/`loadLayout()`](html.md). Verified end to end: a bundle with ntk,
-node-x11's client *and* its pure-JS X server runs as one file, drawing
-through XRender and laying out an `HtmlView`.
+ntk itself is built for this: nothing in `lib/` uses top-level await.
+The one thing that used to take it away was `yoga-layout`'s default entry —
+`const Yoga = wrapAssembly(await loadYoga())` — which ntk imported to lay
+`HtmlView` out; the layout engine left with the document widgets, and the
+lint that kept the bad entry out of the graph went with it (it lives in
+react-x11 now, whose packaging story is the same). Verified end to end: a
+bundle with ntk, node-x11's client *and* its pure-JS X server runs as one
+file, drawing through XRender.
 
 The binary is large (~140 MB): most of it is node itself.
 

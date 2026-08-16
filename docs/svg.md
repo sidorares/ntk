@@ -15,7 +15,7 @@ view.setSvg(await readFile('drawing.svg', 'utf8'));
 wnd.map();
 ```
 
-Standalone (windowless) use mirrors `HtmlView`/`MarkdownView` — draw into
+Standalone (windowless) use draws into
 any 2d context (a window, a [pixmap](pixmap.md)):
 
 ```js
@@ -27,10 +27,9 @@ view.draw(ctx, x, y, width, height);
 See `examples/svg-viewer.js` for a small viewer
 (`node svg-viewer.js file.svg`).
 
-[HtmlView](html.md) uses this widget for SVG inside HTML documents: inline
-`<svg>` elements and `<img>` sources that sniff as SVG (files, buffers,
-`data:image/svg+xml` URIs) are laid out like images and drawn through
-`SvgView`.
+A document renderer built on ntk uses this widget for the SVG inside its
+documents — react-x11's `<svg>` element is the worked example, feeding it
+either a parsed DOM or a markup string.
 
 ## API
 
@@ -44,7 +43,7 @@ See `examples/svg-viewer.js` for a small viewer
 - `view.setSvg(svgText)` — parse and adopt a document (a string containing
   an `<svg>` element). Re-renders in window mode
 - `view.setSvgDom(element)` — adopt an already-parsed htmlparser2 `<svg>`
-  element. Used by [HtmlView](html.md) for inline SVG; tolerates HTML-mode
+  element. For inline SVG inside a host document; tolerates HTML-mode
   parses (lowercased tag/attribute names like `viewbox`, `lineargradient`)
 - `view.draw(ctx, x, y[, w, h][, opts])` — draw into any 2d context; `w`/`h`
   default to the natural size. The `viewBox` (when present) is scaled to the
@@ -58,7 +57,7 @@ See `examples/svg-viewer.js` for a small viewer
   attributes, falling back to the `viewBox` size
 - `view.viewBox` — `[minX, minY, width, height]` or `null`
 
-Like `HtmlView`, the widget is static and safe by construction: no
+The widget is static and safe by construction: no
 scripting, no network or filesystem access — documents are strings and
 nothing external is ever fetched.
 

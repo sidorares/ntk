@@ -10,9 +10,8 @@
 //   - setupFonts(): a StaticFontSource preloaded with embedded DejaVu TTFs
 //
 // Heavy optional ntk dependencies that no playground demo needs are aliased
-// to inert stubs (scripts/stubs/*) so the bundle stays reasonable:
-// yoga-layout (HtmlView), pngjs (browserify polyfill forest). katex is
-// already lazy-loaded by ntk and never bundled.
+// to inert stubs (scripts/stubs/*) so the bundle stays reasonable: pngjs
+// drags in a browserify polyfill forest for one decoder.
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -96,9 +95,6 @@ await esbuild.build({
     module: path.join(shimsDir, 'module.js'),
     'node:module': path.join(shimsDir, 'module.js'),
     // heavy optional deps no playground demo needs
-    // both entries: ntk imports the WASM-free 'yoga-layout/load'
-    'yoga-layout': path.join(stubsDir, 'yoga-layout.js'),
-    'yoga-layout/load': path.join(stubsDir, 'yoga-layout.js'),
     pngjs: path.join(stubsDir, 'pngjs.js'),
   },
 });

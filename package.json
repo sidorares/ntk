@@ -36,21 +36,15 @@
   "dependencies": {
     "bidi-js": "^1.0.3",
     "canvas-fontstyle": "^1.0.1",
-    "css-select": "^7.0.0",
     "domutils": "^4.0.2",
     "extrude-polyline": "^1.0.6",
     "fontkit": "^2.0.4",
-    "highlight.js": "^11.11.1",
     "htmlparser2": "^12.0.0",
     "jpeg-js": "^0.4.4",
-    "katex": "^0.18.1",
     "linebreak": "^1.1.0",
-    "marked": "^18.0.7",
     "parse-color": "^1.0.0",
     "pngjs": "^7.0.0",
-    "postcss": "^8.5.23",
-    "x11": "^3.9.0",
-    "yoga-layout": "^3.2.1"
+    "x11": "^3.9.0"
   },
   "optionalDependencies": {
     "x11-dri": ">=0.2.0 <1"
@@ -60,6 +54,7 @@
     "check-release-message": "node scripts/check-release-message.mjs"
   },
   "devDependencies": {
-    "@conventional-commits/parser": "^0.4.1"
+    "@conventional-commits/parser": "^0.4.1",
+    "katex": "^0.18.1"
   }
 }

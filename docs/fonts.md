@@ -110,9 +110,8 @@ A source is any object with:
   with `hasGlyph()`.
 
 Related environment hooks: `app.fonts.load()` accepts font bytes as well as
-a path, `loadImage()` accepts encoded bytes, `HtmlView` takes a
-`loadResource` callback, and TeX rendering accepts injected KaTeX assets
-via `configureTex({ katex, fonts })` ([tex.md](tex.md)).
+a path, and `loadImage()` accepts encoded bytes — so an app that ships its
+own assets never has to reach the filesystem through ntk.
 
 ## Environments without fontconfig
 
