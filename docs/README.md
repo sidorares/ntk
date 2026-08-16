@@ -30,12 +30,8 @@ matching file here (see AGENTS.md).
 - [Surface](surface.md) — draw once, composite many times; a8 coverage
   surfaces for drawings that take their colour from the caller
 - [Fonts](fonts.md) — font lookup, loading, rasterization pipeline
-- [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout, MarkdownView,
+- [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout,
   wire-efficiency design, the vector (trapezoid) path for large/animated sizes
-- [TeX / math](tex.md) — KaTeX-based formula rendering: `layoutTex`, `TexView`,
-  markdown math fences
-- [HTML widget](html.md) — `HtmlView`: static HTML + CSS subset, yoga-layout
-  flexbox/block layout, links, images, the resource-loading safety model
 - [SVG widget](svg.md) — `SvgView`: static SVG rendering through the 2d
   context (shapes, gradients, transforms, `use`), plus `Path2D`/SVG path data
 - [OpenGL rendering context](context-opengl.md) — indirect GLX / OpenGL 1.4 API

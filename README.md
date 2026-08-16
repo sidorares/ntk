@@ -53,18 +53,17 @@ rasterizer and cached server-side as XRender glyphs, so drawing a line of
 text costs about a byte per glyph on the wire. Font names resolve through
 fontconfig (`fc-match`). Very large and continuously animated sizes render
 as server-side trapezoids instead of cached bitmaps. A `TextLayout` engine
-wraps styled text to a target width, a `MarkdownView` widget renders
-markdown (with syntax-highlighted code fences and KaTeX math via
-`TexView`) on top of it — see [docs/text.md](docs/text.md) and
-[docs/tex.md](docs/tex.md).
+wraps styled text to a target width — see [docs/text.md](docs/text.md).
 
 PNG/JPEG images decode client-side (`loadImage`) and composite server-side
-via `ctx.drawImage` ([docs/images.md](docs/images.md)). An `HtmlView`
-widget renders a static HTML + CSS subset — block flow and flexbox laid
-out by yoga-layout, no scripts, no network — with app-controlled link
-navigation ([docs/html.md](docs/html.md)). An `SvgView` widget renders
-static SVG (shapes, gradients, transforms, `use`) through the same 2d
-pipeline ([docs/svg.md](docs/svg.md)).
+via `ctx.drawImage` ([docs/images.md](docs/images.md)). An `SvgView` widget
+renders static SVG (shapes, gradients, transforms, `use`) through the same
+2d pipeline ([docs/svg.md](docs/svg.md)).
+
+Rendering documents — markdown, formulas, rich text — is not ntk's job:
+it draws, and a document is a tree of layout decisions on top of that.
+[`@react-x11/components`](https://github.com/sidorares/react-x11-components)
+is where those live, over the react-x11 renderer.
 
 ```js
 import { createClient } from 'ntk';

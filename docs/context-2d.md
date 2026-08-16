@@ -54,8 +54,8 @@ ctx.fillRect(0, 0, 100, 100);
   resolved through fontconfig; see [fonts.md](fonts.md)
 
 Everything that puts ink on the surface goes through the clip: fills,
-strokes, images, text (`fillText`, `TextLayout.draw`) and the KaTeX boxes
-of [`layoutTex`](tex.md). Rectangular clips take a server-side fast path
+strokes, images, text (`fillText`, `TextLayout.draw`) and the vector shapes
+`SvgView` draws. Rectangular clips take a server-side fast path
 (`SetPictureClipRectangles`); non-rectangular ones build an a8 mask.
 
 ## Color
@@ -314,7 +314,7 @@ the one drawing no policy could move.
 Because what crosses the wire is **coverage, not colour**, the route is
 invisible to everything else: gradients, solid fills, `globalAlpha`, clip and
 composite ops all work identically either way, and a widget that draws through
-`fill()`/`stroke()` — `SvgView`, `HtmlView`, anything of your own — is routed
+`fill()`/`stroke()` — `SvgView`, anything of your own — is routed
 without knowing this exists.
 
 ### Many pieces in one path: what the mask costs

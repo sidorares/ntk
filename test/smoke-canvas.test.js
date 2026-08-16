@@ -4,8 +4,8 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
-import { createClient, HtmlView, MarkdownView, Path2D, Surface, SvgView } from '../lib/index.js';
-import { invalidation, withTimeout } from './helpers/async.js';
+import { createClient, Path2D, Surface, SvgView } from '../lib/index.js';
+import { withTimeout } from './helpers/async.js';
 
 let app = null;
 let skip = false;
@@ -223,58 +223,6 @@ test('strokeRect and quadraticCurveTo render', async (t) => {
   const image = await readPixels(ctx, 64, 64);
   assert.deepEqual(px(image, 64, 32, 8), [0, 0, 255], 'strokeRect top edge');
   assert.deepEqual(px(image, 64, 32, 30), [0, 0, 0], 'quad curve interior');
-  pixmap.destroy();
-});
-
-test('HtmlView: inline <svg> and svg <img> render as vectors', async (t) => {
-  if (skip) return t.skip(skip);
-  const { pixmap, ctx } = freshCtx();
-
-  const uri =
-    'data:image/svg+xml,' +
-    encodeURIComponent('<svg viewBox="0 0 4 4"><rect width="4" height="4" fill="#0000ff"/></svg>');
-  const load = invalidation();
-  const view = new HtmlView(null, load.opts);
-  view.setHtml(
-    `<div style="margin:0;padding:0">
-       <svg width="32" height="32" viewBox="0 0 4 4"><rect width="4" height="4" fill="#ff0000"/></svg>
-       <img width="16" height="16" src="${uri}">
-     </div>`
-  );
-  // the inline <svg> is adopted synchronously; only the <img> data: URI is
-  // async, so one invalidation is the whole wait
-  await load.settled(1, 'data: URI svg');
-  view.layout(64);
-  view.draw(ctx, 0, 0);
-
-  const image = await readPixels(ctx, 64, 64);
-  assert.deepEqual(px(image, 64, 10, 10), [255, 0, 0], 'inline svg rect');
-  assert.deepEqual(px(image, 64, 8, 36), [0, 0, 255], 'svg img below it');
-  assert.deepEqual(px(image, 64, 50, 50), [255, 255, 255], 'background untouched');
-  pixmap.destroy();
-});
-
-test('MarkdownView: block decoration reaches an arbitrary 2d context', async (t) => {
-  if (skip) return t.skip(skip);
-  const pixmap = app.createPixmap({ width: 300, height: 200, depth: 24 });
-  const ctx = pixmap.getContext('2d');
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, 300, 200);
-
-  // a vivid fence background, so the readback tells drawn pixels from the
-  // cleared surface without depending on what the default theme happens to be
-  const view = new MarkdownView(null, { fonts: app.fonts, theme: { codeBg: '#00ff00' } });
-  view.setMarkdown('# Title\n\n```js\nconst a = 1;\n```');
-  view.layout(280);
-  view.draw(ctx, 10, 10);
-
-  const image = await readPixels(ctx, 300, 200);
-  // scan for the fence background #00ff00
-  let filled = 0;
-  for (let i = 0; i < image.data.length; i += 4) {
-    if (image.data[i] === 0x00 && image.data[i + 1] === 0xff && image.data[i + 2] === 0x00) filled++;
-  }
-  assert.ok(filled > 200, `fence background pixels present (${filled})`);
   pixmap.destroy();
 });
 
