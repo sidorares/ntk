@@ -1,5 +1,16 @@
 # Changelog
 
+## [8.0.0](https://github.com/sidorares/ntk/compare/v7.7.0...v8.0.0) (2026-08-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* the document widgets leave, and the layout engine with them ([#269](https://github.com/sidorares/ntk/issues/269))
+
+### Features
+
+* the document widgets leave, and the layout engine with them ([#269](https://github.com/sidorares/ntk/issues/269)) ([4fcdc20](https://github.com/sidorares/ntk/commit/4fcdc203fc509e957beef81dffd91b385996618a))
+
 ## [7.7.0](https://github.com/sidorares/ntk/compare/v7.6.1...v7.7.0) (2026-08-14)
 
 
