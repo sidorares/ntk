@@ -506,3 +506,64 @@ describe('shadows on laid-out text', () => {
     ctx.destroy();
   });
 });
+
+// ------------------------------------------------------------------
+// how strong a blurred shadow gets (issue #287)
+
+describe('how strong a blurred shadow gets', () => {
+  // Issue #287 read a shadow as missing on this very server because nothing
+  // on the canvas came within a tolerance of `shadowColor` itself. Nothing
+  // was missing: a blurred shadow only *reaches* its colour where the shape
+  // casting it is wide compared with the blur, and a glyph stem never is.
+  // The numbers below are the ones that decided it, and they are the same on
+  // Xorg (test/smoke-canvas.test.js pins the rect case there too).
+
+  /** the shadow's own alpha, straight from getImageData, over the surface */
+  const shadowAlpha = async (ctx, w, h) => {
+    const img = await ctx.getImageData(0, 0, w, h);
+    let peak = 0;
+    let painted = 0;
+    for (let i = 3; i < img.data.length; i += 4) {
+      if (img.data[i] > 0) painted++;
+      if (img.data[i] > peak) peak = img.data[i];
+    }
+    return { peak, painted };
+  };
+
+  test('a shape much wider than the blur reaches the shadow colour', async () => {
+    const w = 180;
+    const h = 140;
+    const ctx = target(w, h);
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 30; // sigma 15, so a 60x40 rect is 4 sigma by 2.7
+    ctx.fillStyle = 'rgba(0, 0, 0, 0)'; // only the shadow paints
+    ctx.fillRect(60, 50, 60, 40);
+    const { peak } = await shadowAlpha(ctx, w, h);
+    // convolving that rect with the same kernel gives 0.784 of full alpha —
+    // the interior is not opaque either, because 60x40 is not wide enough
+    // for one, and the gaussian says exactly how much it keeps
+    assert.ok(Math.abs(peak - 200) <= 4, `the middle of the shadow is ${peak}, expected ~200`);
+    ctx.destroy();
+  });
+
+  test('the shadow of 48px glyphs peaks at about a third of it', async () => {
+    const w = 200;
+    const h = 120;
+    const ctx = target(w, h);
+    ctx.font = '48px sans-serif';
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetX = 5;
+    ctx.shadowOffsetY = 5;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+    ctx.fillText('AAA', 10, 70);
+    const { peak, painted } = await shadowAlpha(ctx, w, h);
+    assert.ok(painted > 2000, `the shadow is there (${painted} painted pixels)`);
+    // a 48px stem is about 5px wide against sigma 7: erf(5 / (2*sqrt(2)*7))
+    // is 0.28, and two neighbouring stems add to a little over a third
+    assert.ok(peak > 60 && peak < 140, `peak alpha ${peak}, expected ~94`);
+    // which is why a test that looks for `shadowColor` itself finds nothing
+    assert.ok(peak < 165, 'nothing on the canvas is within 90 of the colour');
+    ctx.destroy();
+  });
+});
