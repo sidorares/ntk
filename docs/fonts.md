@@ -102,12 +102,38 @@ A source is any object with:
 
 - `matchSorted({ family, weight, style })` → non-empty array of candidates,
   best first — the fallback chain. `family` may be a comma-separated list.
-  A candidate is `{ key?, path?, data?, font?, postscriptName? }` — one of
-  `path` (font file, node only), `data` (font file bytes) or `font` (an
-  open `Font`).
+  A candidate is
+  `{ key?, path?, data?, font?, postscriptName?, family?, families? }` — one
+  of `path` (font file, node only), `data` (font file bytes) or `font` (an
+  open `Font`) says how to open it; `family`/`families` say what to call it
+  (see [Naming a match](#naming-a-match)).
 - `covers(candidate, codepoint)` → boolean *(optional)* — cheap coverage
   pre-filter for fallback; when absent, candidates are opened and checked
   with `hasGlyph()`.
+
+### Naming a match
+
+Every candidate carries the family name its source already knew, so a match
+list can be *shown* — a font picker, a specimen, or a diagnostic answering
+"which face did `sans-serif` actually resolve to" — without opening the
+files:
+
+```js
+const ranked = app.fonts.source.matchSorted({ family: 'sans-serif' });
+for (const c of ranked.slice(0, 5)) console.log(c.family, '—', c.path);
+```
+
+- `family` — the name to display. From fontconfig this is the first name in
+  its family list, which is the one it leads with for the current locale.
+- `families` — every name the face answers to, in fontconfig's order.
+  Families are a list there: `Hiragino Sans`, `ヒラギノ角ゴシック` and the
+  style-suffixed forms of both are one face. A `StaticFontSource` candidate
+  has a one-element list.
+
+Neither field is needed to *choose* a font — the machinery matches on paths
+and coverage — which is why the cost matters: naming the list by opening it
+is ~1.2ms per file, and `sans-serif` matches 139 faces on a stock macOS box.
+fontconfig hands both names over in the same call as the rest of the match.
 
 Related environment hooks: `app.fonts.load()` accepts font bytes as well as
 a path, and `loadImage()` accepts encoded bytes — so an app that ships its

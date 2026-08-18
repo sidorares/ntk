@@ -162,6 +162,18 @@ test('directory order is sorted, not readdir order', () => {
   assert.equal(order()[0], 'KaTeX_AMS-Regular'); // alphabetical, not copy order
 });
 
+// Issue #273: a match list is shown, not just opened — so a candidate names
+// its face whichever source produced it, and a StaticFontSource answers with
+// the font's own family name rather than the (lowercased, aliased) key it is
+// matched by.
+test('candidates carry a family name for showing a match list', () => {
+  const source = new StaticFontSource();
+  source.add(bytes('KaTeX_SansSerif-Regular.ttf'), { family: 'ui-sans' });
+  const [best] = source.matchSorted({ family: 'ui-sans' });
+  assert.equal(best.family, 'KaTeX_SansSerif');
+  assert.deepEqual(best.families, ['KaTeX_SansSerif']);
+});
+
 test('subdirectories need recursive: true', () => {
   const dir = fontsDir();
   mkdirSync(join(dir, 'extra'));

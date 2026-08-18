@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-import { listFontsSync } from '../lib/fontconfig.js';
+import { listFontsSync, matchSortedSync } from '../lib/fontconfig.js';
 
 let hasFontconfig = true;
 try {
@@ -53,6 +53,25 @@ test('resolves sans-serif to a parseable font file', { skip: !hasFontconfig && '
   assert.match(match.path, /\.(ttf|otf|woff|woff2|ttc|dfont)$/i);
 });
 
+// Issue #273: a ranked match list is the natural thing to *show*, and naming
+// it by opening every file costs ~1.2ms a face over 139 of them. fontconfig
+// knows the names already, so the format string asks for them.
+
+test('a match is named, not just located', { skip: !hasFontconfig && 'fc-match not installed' }, () => {
+  const match = listFontsSync({ family: 'sans-serif', style: 'normal', weight: 'normal' });
+  assert.ok(match.family, 'the best match carries a family name');
+  assert.equal(match.family, match.families[0], 'family is the first of the aliases');
+});
+
+test('every candidate in the chain is named', { skip: !hasFontconfig && 'fc-match not installed' }, () => {
+  const ranked = matchSortedSync({ family: 'sans-serif', style: 'normal', weight: 'normal' });
+  assert.ok(ranked.length > 0);
+  for (const c of ranked) {
+    assert.equal(typeof c.family, 'string', `${c.path} has a family`);
+    assert.ok(c.family.length > 0, `${c.path} has a non-empty family`);
+  }
+});
+
 test('resolves bold and italic patterns', { skip: !hasFontconfig && 'fc-match not installed' }, () => {
   const bold = listFontsSync({ family: 'sans-serif', style: 'normal', weight: 'bold' });
   const italic = listFontsSync({ family: 'sans-serif', style: 'italic', weight: 400 });
@@ -85,7 +104,7 @@ test('fontconfig installed with no font packages is its own message', () => {
 
 test('fonts fc-match found but fontkit cannot parse are named as such', () => {
   // a bitmap-only image: fc-match exits 0 and lists .pcf files
-  const err = matchWithout('#!/bin/sh\nprintf "/usr/share/fonts/misc/fixed.pcf\\tFixed\\t20-7e\\n"\n');
+  const err = matchWithout('#!/bin/sh\nprintf "/usr/share/fonts/misc/fixed.pcf\\tFixed\\tFixed\\t20-7e\\n"\n');
   assert.equal(err.code, 'ERR_NTK_NO_FONTS');
   assert.match(err.message, /matched no font ntk can parse/);
   assert.match(err.message, /bitmap \.pcf\/\.bdf fonts are not usable/);
@@ -137,7 +156,7 @@ function prewarmProbe(body, stubs = {}) {
 // assert a spawn did not happen rather than merely not crash. $0 stands in
 // for dirname: the probe's PATH holds only stub directories, no coreutils.
 const counting = (path) =>
-  '#!/bin/sh\n' + 'echo x >> "$0.spawns"\n' + `printf "${path}\\tStub\\t20-7e\\n"\n`;
+  '#!/bin/sh\n' + 'echo x >> "$0.spawns"\n' + `printf "${path}\\tStub\\tStub Family\\t20-7e\\n"\n`;
 
 test('prewarm seeds the cache the sync path reads', () => {
   const out = prewarmProbe(
@@ -167,8 +186,8 @@ test('a sync call racing the prewarm wins; the late async result is discarded', 
       slow:
         '#!/bin/sh\n' +
         '{ /bin/sleep 0.3 || /usr/bin/sleep 0.3; } 2>/dev/null\n' +
-        'printf "/async/LATE.ttf\\tLate\\t20-7e\\n"\n',
-      fast: '#!/bin/sh\nprintf "/sync/WINNER.ttf\\tWinner\\t20-7e\\n"\n'
+        'printf "/async/LATE.ttf\\tLate\\tLate Family\\t20-7e\\n"\n',
+      fast: '#!/bin/sh\nprintf "/sync/WINNER.ttf\\tWinner\\tWinner Family\\t20-7e\\n"\n'
     }
   );
   assert.equal(out.duringRace, '/sync/WINNER.ttf');
@@ -223,6 +242,37 @@ test('constructing FontconfigFontSource starts the prewarm', () => {
     { warm: counting('/constructed/A.ttf') }
   );
   assert.equal(out.path, '/constructed/A.ttf');
+});
+
+// Families are a list in fontconfig — localized aliases and style-suffixed
+// forms of one face — and `--format` joins them with commas. Runs everywhere:
+// the stub is the fc-match on the child's PATH.
+test('a family list keeps its order, and the field after it still parses', () => {
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.hiragino;\n' +
+      'const [best] = matchSortedSync(PATTERN);\n' +
+      'console.log(JSON.stringify({ family: best.family, families: best.families, charset: best.charset }));\n',
+    {
+      hiragino:
+        '#!/bin/sh\n' +
+        'printf "/f/Hiragino.ttc\\tHiraginoSans-W4\\tHiragino Sans,\u30d2\u30e9\u30ae\u30ce\u89d2\u30b4\u30b7\u30c3\u30af,Hiragino Sans W4\\t20-7e a0-ff\\n"\n'
+    }
+  );
+  assert.equal(out.family, 'Hiragino Sans');
+  assert.deepEqual(out.families, ['Hiragino Sans', '\u30d2\u30e9\u30ae\u30ce\u89d2\u30b4\u30b7\u30c3\u30af', 'Hiragino Sans W4']);
+  assert.equal(out.charset, '20-7e a0-ff', 'charset is still the last field');
+});
+
+test('a face fontconfig cannot name is not a parse failure', () => {
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.nameless;\n' +
+      'const [best] = matchSortedSync(PATTERN);\n' +
+      'console.log(JSON.stringify({ path: best.path, family: best.family, families: best.families }));\n',
+    { nameless: '#!/bin/sh\nprintf "/f/A.ttf\\tA\\t\\t20-7e\\n"\n' }
+  );
+  assert.equal(out.path, '/f/A.ttf', 'the match is still usable');
+  assert.equal(out.family, '');
+  assert.deepEqual(out.families, []);
 });
 
 test('the docs anchor the error points at exists', () => {

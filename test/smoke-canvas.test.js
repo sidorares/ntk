@@ -286,6 +286,41 @@ test('createPattern: a tile repeats across a fill, on a real server', async (t) 
   pixmap.destroy();
 });
 
+test('gradients: user-space coordinates and pad past the outermost stops', async (t) => {
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx } = freshCtx();
+  const near = (actual, expected, tol, what) =>
+    assert.ok(Math.abs(actual - expected) <= tol, `${what}: got ${actual}, want ~${expected}`);
+
+  // a gradient in a translated context paints where the fill is, not where
+  // the window origin is (issue #271)
+  ctx.save();
+  ctx.translate(32, 0);
+  const g = ctx.createLinearGradient(0, 0, 32, 0);
+  g.addColorStop(0, 'black');
+  g.addColorStop(1, 'white');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 32, 32);
+  ctx.restore();
+
+  // and past its last stop it clamps to that stop's colour, rather than
+  // going transparent: RepeatPad, not the RepeatNone a gradient starts with
+  const wide = ctx.createLinearGradient(24, 40, 40, 40);
+  wide.addColorStop(0, 'black');
+  wide.addColorStop(1, 'white');
+  ctx.fillStyle = wide;
+  ctx.fillRect(0, 40, 64, 24);
+
+  const image = await readPixels(ctx, 64, 64);
+  assert.deepEqual(px(image, 64, 16, 16), [255, 255, 255], 'left of the fill is untouched');
+  near(px(image, 64, 33, 16)[0], 0, 16, 'the ramp starts at the translated origin');
+  near(px(image, 64, 48, 16)[0], 128, 16, 'halfway across at the middle');
+  near(px(image, 64, 62, 16)[0], 255, 16, 'and white at the far end');
+  near(px(image, 64, 4, 50)[0], 0, 6, 'before the first stop clamps to black');
+  near(px(image, 64, 60, 50)[0], 255, 6, 'after the last stop clamps to white');
+  pixmap.destroy();
+});
+
 test('shadows: offset, blurred and coloured, on a real server', async (t) => {
   if (skip) return t.skip(skip);
   // The hermetic run (test/shadow.test.js) proves the blur against node-x11's
