@@ -35,3 +35,10 @@ Rasterization is antialiased but intentionally not pixel-exact with Xorg —
 assert on regions/tolerances, not exact edge pixels (see
 `test/xserver.test.js` for the patterns; that suite runs ntk end-to-end
 against this server with no `$DISPLAY` and no fontconfig).
+
+Server-side *filtering* is exact, though, and shadows are the case worth
+naming: the `convolution` filter behind `shadowBlur` produces the same
+pixels here as on Xorg, so a shadow that seems to vanish under a headless
+harness is an assertion problem rather than a missing request (issue #287).
+[context-2d.md](context-2d.md#how-strong-a-shadow-gets-and-how-to-test-one)
+has the numbers and what to assert.

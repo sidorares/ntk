@@ -725,6 +725,45 @@ whose shadow can land on the target at all (its own bounds, moved back by
 the offset and grown by the blur's reach), so a shape mostly off-screen does
 not allocate a surface the size of its bounding box.
 
+### How strong a shadow gets, and how to test one
+
+A blurred shadow reaches `shadowColor` only where the shape casting it is
+wide compared with the blur. That follows from what a blur *is* — coverage
+convolved with a gaussian — but it surprises people looking at pixels, so
+here it is in numbers, with σ = `shadowBlur / 2`:
+
+| what casts it | `shadowBlur` | peak alpha |
+| --- | --- | --- |
+| a 60×40 rect | 30 (σ 15) | 0.78 |
+| a 60×40 rect | 8 (σ 4) | 1.00 |
+| 48px glyph stems | 14 (σ 7) | 0.37 |
+
+A glyph stem five pixels wide against σ 7 keeps about `erf(5 / (2√2 · 7))`
+of its coverage — under a third — and that is what a browser draws too. So
+**an exact-colour pixel assertion is the wrong test for a shadow**: a
+"count the pixels within 90 of `#ff0000`" check finds nothing on a canvas
+whose red glyph shadow is plainly visible, because no pixel on it is ever
+that red (issue #287).
+
+What to assert instead:
+
+- **the shadow's own alpha**, on a transparent target. Draw with
+  `fillStyle = 'rgba(0, 0, 0, 0)'` so only the shadow paints, and read the
+  alpha channel out of `getImageData` — it is the coverage, with no
+  background mixed into it
+- **a difference between two places**, rather than a colour: darker (or
+  more tinted) where the shadow is than where it is not, at an offset the
+  drawing itself does not reach
+- **the profile**, when the blur itself is what is under test: a blurred
+  straight edge follows the gaussian's CDF, so coverage at ±σ is
+  0.841 / 0.159 (this is what `test/shadow.test.js` and
+  `test/smoke-canvas.test.js` check)
+
+None of this changes with the server. Shadows render identically on
+node-x11's in-process JS X server and on Xorg — same requests, same
+pixels — and both suites pin the same numbers; see
+[xserver.md](xserver.md).
+
 ## Text
 
 Text is fully shaped: OpenType kerning and ligatures, contextual forms for

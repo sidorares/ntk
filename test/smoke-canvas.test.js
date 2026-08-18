@@ -370,3 +370,29 @@ test('shadows: offset, blurred and coloured, on a real server', async (t) => {
   blurred.pixmap.destroy();
   pixmap.destroy();
 });
+
+test('shadows: a wide blur keeps the same fraction of its colour here (#287)', async (t) => {
+  if (skip) return t.skip(skip);
+  // The one number issue #287 turned on: how *strong* a blurred shadow gets.
+  // A shadow only reaches `shadowColor` where the shape casting it is wide
+  // compared with the blur, so the interior of a 60x40 rect at sigma 15 is
+  // 0.784 of full alpha and not 1 — and reading that as "the shadow is
+  // missing" is what the issue did. The hermetic run asserts the same 0.784
+  // against node-x11's JS server (test/shadow.test.js); this asserts Xorg
+  // agrees, which is the claim the issue needed and nothing was checking.
+  const { pixmap, ctx } = freshCtx(180);
+
+  ctx.shadowColor = 'black';
+  ctx.shadowBlur = 30;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0)'; // only the shadow paints
+  ctx.fillRect(60, 50, 60, 40);
+
+  const image = await readPixels(ctx, 180, 180);
+  // black shadow on white: alpha is 1 - grey
+  const alpha = 1 - px(image, 180, 90, 70)[0] / 255;
+  assert.ok(
+    Math.abs(alpha - 0.784) < 0.03,
+    `the middle of the shadow is ${alpha.toFixed(3)} of the colour, expected ~0.784`
+  );
+  pixmap.destroy();
+});
