@@ -486,8 +486,9 @@ resolved in 2026:
   No native dependency needed.
 - **#11 char coverage / #18 substituteFont** — both asked for
   `font-manager` (a native module). Solved instead with fontconfig's CLI:
-  `fc-match -s --format '%{file}\t%{postscriptname}\t%{charset}\n'` returns
-  the whole fallback chain *with coverage data* in one ~50ms call (cached).
+  `fc-match -s --format '%{file}\t%{postscriptname}\t%{family}\t%{charset}\n'`
+  returns the whole fallback chain *with coverage data and names* in one
+  ~50ms call (cached).
   `fontkit.hasGlyphForCodePoint` confirms before use.
 - **#16 custom fonts api** — `app.fonts.load(path)`, mirroring
   node-canvas's `registerFont`.
