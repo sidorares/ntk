@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.1.1](https://github.com/sidorares/ntk/compare/v8.1.0...v8.1.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* **text:** draw glyph runs through the transform, not past it ([#282](https://github.com/sidorares/ntk/issues/282)) ([cdc9f75](https://github.com/sidorares/ntk/commit/cdc9f7586839442015d41c2e96c56e89fceac4a9)), closes [#280](https://github.com/sidorares/ntk/issues/280)
+
 ## [8.1.0](https://github.com/sidorares/ntk/compare/v8.0.0...v8.1.0) (2026-08-18)
 
 
