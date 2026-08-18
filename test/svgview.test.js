@@ -156,7 +156,7 @@ test('fill-rule=evenodd is forwarded', () => {
   assert.equal(of(ctx.calls, 'fill')[0][2], 'evenodd');
 });
 
-test('linearGradient paint resolves via url(#id) with device coordinates', () => {
+test('linearGradient paint resolves via url(#id) in user coordinates', () => {
   const view = new SvgView(null);
   view.setSvg(`<svg viewBox="0 0 10 10">
     <defs>
@@ -172,8 +172,9 @@ test('linearGradient paint resolves via url(#id) with device coordinates', () =>
   const fill = of(ctx.calls, 'fill')[0];
   const gradient = fill[3];
   assert.equal(gradient.type, 'linear');
-  // objectBoundingBox 0..1 over a 10x10 shape, scaled 10x to device
-  assert.deepEqual([gradient.x1, gradient.y1, gradient.x2, gradient.y2], [0, 0, 100, 0]);
+  // objectBoundingBox 0..1 over a 10x10 shape, in the shape's own units:
+  // the 10x viewBox scale is the context's transform to apply, not ours
+  assert.deepEqual([gradient.x1, gradient.y1, gradient.x2, gradient.y2], [0, 0, 10, 0]);
   assert.equal(gradient.stops.length, 2);
   assert.equal(gradient.stops[1][1], 'rgba(0, 0, 255, 0.5)');
 });
