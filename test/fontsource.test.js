@@ -254,6 +254,23 @@ test('a spec mistake is reported as a spec mistake', () => {
   assert.throws(() => createFontSource(42), (err) => err.code !== 'ERR_NTK_NO_FONTS');
 });
 
+// A caller that can await (a font picker matching as the user types) asks
+// the source instead of blocking. It must not have to know which source it
+// is holding, so the one with nothing to await implements it too — and its
+// failures arrive as rejections, not synchronous throws.
+test('StaticFontSource.matchSortedAsync mirrors the sync match', async () => {
+  const source = staticSource();
+  const sync = source.matchSorted({ family: 'Test AMS' });
+  const async_ = await source.matchSortedAsync({ family: 'Test AMS' });
+  assert.deepEqual(async_, sync);
+  assert.equal(async_[0].font.postscriptName, 'KaTeX_AMS-Regular');
+
+  await assert.rejects(
+    new StaticFontSource().matchSortedAsync({}),
+    (err) => err.code === 'ERR_NTK_NO_FONTS'
+  );
+});
+
 test('an empty source reports having no fonts, with the shared code', () => {
   assert.throws(
     () => new StaticFontSource().matchSorted({}),
