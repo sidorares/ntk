@@ -551,9 +551,22 @@ ctx.fillStyle = g;
 - `createRadialGradient(x0, y0, r0, x1, y1, r1)`
 - `createConicalGradient(x0, y0, angle)` — ntk extension (XRender conical
   gradient)
+- The gradient's coordinates are **user space**, resolved against the
+  transform in force when it is *painted* — not the one that happened to be
+  current when it was created. A gradient written in a node's own
+  coordinates keeps painting in them after the context is translated to that
+  node's origin, and a scaled context scales the ramp with the shape. A
+  transform that collapses (a zero scale) paints nothing, as the canvas spec
+  says
+- Past the outermost stops the gradient **clamps** to their colours, so a
+  fill wider than the ramp keeps its end colours instead of fading to
+  transparent
+- Gradients are uploaded lazily on first use and freed with the context's
+  pictures on GC
 
-Gradients are uploaded lazily on first use and freed with the context's
-pictures on GC.
+Gradients work anywhere a colour does — `fillRect`, path fills, strokes,
+`fillText` — and go through the clip, `globalAlpha` and the composite op
+like any other style.
 
 ## Patterns
 
@@ -598,11 +611,10 @@ chart fills and any texture-shaped background.
   or a DOMMatrix-shaped `{a, b, c, d, e, f}` mapping pattern space to user
   space. Translating by the scroll offset is what keeps a grid glued to the
   content under it; a zoom step re-renders the tile and keeps the composite
-- The pattern is painted in **user space**: the transform in force at fill
-  time applies to the tile as well as to the shape, so a scaled context
-  scales its grid (this is where patterns differ from the gradients above,
-  whose coordinates are device-space). A transform that collapses (a zero
-  scale) paints nothing, as the canvas spec says
+- The pattern is painted in **user space**, like the gradients above: the
+  transform in force at fill time applies to the tile as well as to the
+  shape, so a scaled context scales its grid. A transform that collapses (a
+  zero scale) paints nothing, as the canvas spec says
 - Whole-pixel tiling samples with the `nearest` filter — the tile's own
   pixels, exactly — and anything else (a fractional offset, a scale, a
   rotation) resamples bilinearly
