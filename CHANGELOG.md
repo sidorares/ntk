@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.2.0](https://github.com/sidorares/ntk/compare/v8.1.1...v8.2.0) (2026-08-18)
+
+
+### Features
+
+* **text:** shadows for laid-out text, one coverage surface per paragraph ([#285](https://github.com/sidorares/ntk/issues/285)) ([3c33112](https://github.com/sidorares/ntk/commit/3c33112f52a7cdb74a022fa2263b1bd187fe7a93)), closes [#283](https://github.com/sidorares/ntk/issues/283)
+
 ## [8.1.1](https://github.com/sidorares/ntk/compare/v8.1.0...v8.1.1) (2026-08-18)
 
 
