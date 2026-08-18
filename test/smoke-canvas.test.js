@@ -285,3 +285,53 @@ test('createPattern: a tile repeats across a fill, on a real server', async (t) 
   tile.destroy();
   pixmap.destroy();
 });
+
+test('shadows: offset, blurred and coloured, on a real server', async (t) => {
+  if (skip) return t.skip(skip);
+  // The hermetic run (test/shadow.test.js) proves the blur against node-x11's
+  // JS server. This one proves the same shadow survives the round trip to
+  // Xorg's RENDER: the convolution filter is what carries it, and a server
+  // that silently ignored the filter would still return a shadow — just an
+  // unblurred one, which the profile below would catch.
+  const { pixmap, ctx } = freshCtx();
+
+  ctx.shadowColor = 'black';
+  ctx.shadowOffsetX = 8;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = 'red';
+  ctx.fillRect(8, 8, 24, 24);
+
+  let image = await readPixels(ctx, 64, 64);
+  assert.deepEqual(px(image, 64, 20, 20), [255, 0, 0], 'the rect');
+  assert.deepEqual(px(image, 64, 36, 36), [0, 0, 0], 'its shadow, offset by (8, 8)');
+  assert.deepEqual(px(image, 64, 41, 41), [255, 255, 255], 'and nothing past it');
+
+  const blurred = freshCtx();
+  const bctx = blurred.ctx;
+  const blur = 8;
+  bctx.shadowColor = 'black';
+  bctx.shadowBlur = blur;
+  bctx.fillStyle = 'rgba(0, 0, 0, 0)'; // only the shadow paints
+  bctx.fillRect(-16, 0, 48, 64); // one edge in view, at x = 32
+
+  image = await readPixels(bctx, 64, 64);
+  // white background, black shadow: the grey level is 1 - coverage, and a
+  // blurred edge follows the gaussian's CDF (sigma = blur / 2)
+  const coverage = (x) => 1 - px(image, 64, x, 32)[0] / 255;
+  for (const [x, want] of [
+    [32 - blur / 2, 0.841],
+    [32, 0.5],
+    [32 + blur / 2, 0.159],
+  ]) {
+    const got = coverage(x);
+    assert.ok(
+      Math.abs(got - want) < 0.08,
+      `coverage at x=${x} is ${got.toFixed(3)}, expected ~${want}`
+    );
+  }
+  assert.ok(coverage(8) > 0.98, 'the interior is fully covered');
+  assert.ok(coverage(50) < 0.02, 'and the blur ends');
+
+  blurred.pixmap.destroy();
+  pixmap.destroy();
+});

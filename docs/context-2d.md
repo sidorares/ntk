@@ -45,6 +45,9 @@ ctx.fillRect(0, 0, 100, 100);
   unless a gap lands there)
 - `ctx.globalAlpha` — multiplies fills, strokes, `fillRect` and `drawImage`
   (not text)
+- `ctx.shadowColor`, `ctx.shadowBlur`, `ctx.shadowOffsetX`,
+  `ctx.shadowOffsetY` — drop shadows, off by default (a transparent
+  `shadowColor`). See **Shadows** below
 - `ctx.globalCompositeOperation` — Porter-Duff subset mapped to XRender ops:
   `source-over` (default), `copy`, `destination-over`, `source-in`,
   `destination-in`, `source-out`, `destination-out`, `source-atop`,
@@ -104,7 +107,7 @@ is inside 0..1 on every component, so only rendering catches it.
 ## State and transforms
 
 - `save()` / `restore()` — full state stack: styles, line settings, font,
-  text alignment, `globalAlpha`, composite op, transform and clip
+  text alignment, shadow, `globalAlpha`, composite op, transform and clip
 - `translate(x, y)`, `rotate(angle)`, `scale(x[, y])`,
   `transform(a, b, c, d, e, f)`, `setTransform(...)`, `resetTransform()`,
   `getTransform()` → `{a, b, c, d, e, f}`
@@ -618,6 +621,83 @@ chart fills and any texture-shaped background.
 Patterns work anywhere a colour does — `fillRect`, path fills, strokes,
 `fillText` — and go through the clip, `globalAlpha` and the composite op
 like any other style.
+
+## Shadows
+
+The four canvas shadow properties, applied to every drawing operation —
+`fill`, `stroke`, `fillText`, `fillRect`, `strokeRect`, `fillRects` and
+`drawImage`:
+
+```js
+ctx.shadowColor = '#05070a';
+ctx.shadowBlur = 7;
+ctx.shadowOffsetX = ctx.shadowOffsetY = 3;
+ctx.fillText('Specimen', x, baseline);
+```
+
+- `shadowColor` — any colour string or premultiplied array. The default,
+  `'rgba(0, 0, 0, 0)'`, is what turns the whole thing off: a transparent
+  shadow colour skips the path entirely, so an app that never sets it pays
+  one array read per drawing operation and nothing else
+- `shadowBlur` — the canvas spec's **diameter**, not a radius: the gaussian
+  it names has σ = `shadowBlur / 2`, so a value here looks like the same
+  value in a browser. `0` (the default) is a hard-edged copy of the shape
+- `shadowOffsetX` / `shadowOffsetY` — in **device** pixels, and deliberately
+  outside the current transform, exactly as the spec has it: a rotated
+  drawing casts an upright shadow, the way a rotated element's `box-shadow`
+  is upright in CSS. Offsets are rounded to whole pixels when the shadow is
+  composited (the drawing's own sub-pixel position is untouched)
+
+A shadow goes through everything the drawing itself does: the clip,
+`globalAlpha` and the composite operation all apply to it, and it is painted
+first so the drawing lands on top. With no offset and no blur it sits exactly
+under the shape, where it shows through anything translucent — that is the
+spec's behaviour, not an oversight.
+
+### How it is drawn, and what it costs
+
+A shadow is the drawing's *coverage*, blurred, offset and painted in one
+colour. All three steps are server-side:
+
+1. the shape is drawn into a padded `a8` [`Surface`](surface.md) — white on
+   transparent, so every pixel is its own alpha
+2. two `convolution` filter passes blur it, horizontal then vertical
+3. the result composites as a mask with `shadowColor` as the source
+
+The padding in (1) is why an app should not assemble this by hand: a
+convolution samples outside the picture, where RepeatNone reads transparent,
+so a shape drawn flush to the surface edge ends in a straight line where the
+kernel ran out of pixels. Everything here pads by the blur's full reach.
+
+Step (2) is two 1d passes rather than one 2d kernel because a gaussian is
+separable, and that is the difference between a shadow you can animate and
+one you cannot: a k-wide 2d kernel costs k² multiplies per pixel where two
+passes cost 2k. At `shadowBlur: 30` that is 8281 against 182.
+
+**Text shadows are cached** — keyed by (text, font, blur) on the connection —
+because text is the one drawing with a short, stable name. A label redrawn
+every frame, or a specimen redrawn on every slider tick, builds its coverage
+once and composites it afterwards. Paths, rectangles and images have no such
+key and rebuild their coverage per draw, so a large blurred path shadow in a
+render loop is the shape to watch for; draw it into a `Surface` yourself and
+`drawImage` that instead.
+
+`app.shadowPolicy` tunes the ceilings (partial objects merge over the
+defaults):
+
+- `cacheBytes` (4 MB) — LRU budget for retained shadow coverage;
+  least-recently-drawn surfaces are freed server-side past it
+- `maxSigma` (32) — the widest gaussian actually run. The kernel is 6σ+1
+  taps, every tap rides the request, and the server multiplies each of them
+  per pixel per pass, so an unbounded `shadowBlur` would be an unbounded
+  stall. This is the one place a shadow stops matching a browser
+- `maxPixels` (8 M) — the largest coverage surface built for one shadow;
+  past it the shadow is dropped and the drawing is unaffected
+
+Only what could be seen is rendered: a shape's ink is clipped to the part
+whose shadow can land on the target at all (its own bounds, moved back by
+the offset and grown by the blur's reach), so a shape mostly off-screen does
+not allocate a surface the size of its bounding box.
 
 ## Text
 
