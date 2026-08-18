@@ -195,7 +195,11 @@ run        = { font, size, glyphs }             // a Font and a pixel size
 glyphs     = [{ id, ax, dx, dy }, …]            // drawing order
 ```
 
-- `x`, `y` — the run's baseline origin in device pixels.
+- `x`, `y` — the run's baseline origin, in the context's **user space**:
+  the current transform moves it, the same way it moves `fillText`'s
+  anchor and `fillRect`'s corner. The glyphs themselves are not rotated
+  or scaled by the transform — set `run.size` (or `ctx.font`) instead —
+  so the advances and offsets below stay device pixels.
 - `id` — a font glyph id: `shape()`'s `glyphs[].id`, or
   `font.glyphIdFor(codepoint)` for the unshaped cmap lookup. `glyphIdFor`
   is the lookup twin of `hasGlyph(codepoint)` and returns `null` where the
@@ -319,8 +323,11 @@ Results are inspectable before drawing: `layout.width`, `layout.height`,
 `layout.truncated`, `layout.lines[] = { x, y, height, baseline, width,
 ascent, descent, runs, start, end }` where `runs[] = { x, width, run, span,
 start, end }` in visual order (`start`/`end` are the logical UTF-16 ranges
-the line/run covers). `layout.draw(ctx, x, y)` draws, batching consecutive
-same-color runs into single requests.
+the line/run covers). `layout.draw(ctx, x, y)` draws at (x, y) in the
+context's user space — the transform applies to the origin, so a paragraph
+in a translated context lands with the rest of the drawing — batching
+consecutive same-color runs into single requests. Geometry and hit testing
+(`caretPosition`, `indexAt`, `lines[]`) are relative to that same origin.
 
 Line breaking is UAX#14 (`linebreak` package); `\n` forces breaks; a word
 wider than `maxWidth` force-breaks at the widest grapheme prefix that fits;
