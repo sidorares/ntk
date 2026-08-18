@@ -228,6 +228,12 @@ clip, and takes the server-side fast path under a rectangular clip. Glyph
 origins round to whole pixels on the bitmap path — a grid renderer
 positions on integers anyway, so nothing moves.
 
+It also honours the [shadow](context-2d.md#shadows) state: the runs of one
+call become one blurred coverage surface, painted under the glyphs. That is
+what gives a `TextLayout` a shadow, and it is cached on the identity of the
+runs rather than on a string — so a paragraph redrawn from the same layout
+is a cache hit, while runs rebuilt every frame are not.
+
 The advance is what makes a grid cheap: the server moves its pen by each
 glyph's stored rounded advance, and position bytes are emitted only where
 the requested position deviates from that pen. A run whose `ax` is the
@@ -326,7 +332,9 @@ start, end }` in visual order (`start`/`end` are the logical UTF-16 ranges
 the line/run covers). `layout.draw(ctx, x, y)` draws at (x, y) in the
 context's user space — the transform applies to the origin, so a paragraph
 in a translated context lands with the rest of the drawing — batching
-consecutive same-color runs into single requests. Geometry and hit testing
+consecutive same-color runs into single requests. The context's shadow
+properties apply, one coverage surface per batch, so text that wraps casts a
+shadow the same way `fillText` does. Geometry and hit testing
 (`caretPosition`, `indexAt`, `lines[]`) are relative to that same origin.
 
 Line breaking is UAX#14 (`linebreak` package); `\n` forces breaks; a word
