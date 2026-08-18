@@ -44,6 +44,20 @@ regular weight) is prewarmed with a non-blocking `fc-match` while
 spawn. Other patterns still pay one synchronous `fc-match` (~50ms) the
 first time they are used.
 
+Text layout is synchronous, so it always pays that cost inline. Code that
+can await — a font picker matching as the user types, a preferences page —
+should ask the source instead, and not block the event loop at all:
+
+```js
+const source = app.fonts.source;                       // or defaultFontSource()
+const candidates = await source.matchSortedAsync({ family: 'Iosevka' });
+```
+
+The spawn runs off the event loop and seeds the same cache, so a later
+layout for that pattern is a cache hit. Every source implements it, including
+`StaticFontSource` (which resolves immediately), so the calling code does not
+have to know which one it is holding.
+
 ## Loading a font file directly
 
 ```js
@@ -107,6 +121,10 @@ A source is any object with:
   of `path` (font file, node only), `data` (font file bytes) or `font` (an
   open `Font`) says how to open it; `family`/`families` say what to call it
   (see [Naming a match](#naming-a-match)).
+- `matchSortedAsync({ family, weight, style })` → a promise for the same
+  list. Layout always uses the synchronous one; this is the entry point for
+  an app that can await, and it rejects with the same `ERR_NTK_NO_FONTS`
+  rather than deferring the failure to a blocking call.
 - `covers(candidate, codepoint)` → boolean *(optional)* — cheap coverage
   pre-filter for fallback; when absent, candidates are opened and checked
   with `hasGlyph()`.
@@ -134,6 +152,10 @@ Neither field is needed to *choose* a font — the machinery matches on paths
 and coverage — which is why the cost matters: naming the list by opening it
 is ~1.2ms per file, and `sans-serif` matches 139 faces on a stock macOS box.
 fontconfig hands both names over in the same call as the rest of the match.
+
+A picker showing that list is also the caller that should not be blocking on
+it: `matchSortedAsync` returns the same named candidates without the
+synchronous spawn.
 
 Related environment hooks: `app.fonts.load()` accepts font bytes as well as
 a path, and `loadImage()` accepts encoded bytes — so an app that ships its
