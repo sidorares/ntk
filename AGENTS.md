@@ -305,13 +305,21 @@ release and publishes to npm via OIDC trusted publishing (no token secrets).
   release PR appears (this happened to #85 → the empty re-record commit
   e523667, and again to #103 → 9fdbe38). Squash-merge puts the PR
   description in the body, so this applies to PR descriptions too.
+- **Keep a parenthetical short enough to survive the wrap.** The same grammar
+  rejects a `(` still open at the end of a line, and squash-merge wraps the
+  body at 72 columns — so an aside that is whole in the PR description can
+  arrive at release-please split across two lines. That is what skipped #278,
+  over a one-line `*(rendered by this branch: ...)*` caption 106 characters
+  long — restored, as #85 and #103 were, by an empty commit.
 - **CI checks this for you** — the `release-message` job runs
   `npm run check-release-message` over the title and body the squash would
   produce, using release-please's own parser, and names the line and column
-  it chokes on. Whether a given nested call trips the grammar depends on its
-  surroundings, so do not try to predict it from the rule above: the same
-  construct that broke #103 parses fine inside a fenced block. Run the
-  script locally against a file if you want to check before pushing.
+  it chokes on. It checks the message twice, as written and wrapped, because
+  the wrap is invisible until the merge. Whether a given nested call trips
+  the grammar depends on its surroundings, so do not try to predict it from
+  the rules above: the same construct that broke #103 parses fine inside a
+  fenced block. Run the script locally against a file if you want to check
+  before pushing.
 
 ## Gotchas
 
