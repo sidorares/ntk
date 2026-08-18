@@ -22,8 +22,8 @@ client) with familiar, modern API concepts:
 
 1. Keep growing toward "write simple X11 UIs with the APIs you know from the
    web" — canvas 2d parity first (paths/Path2D, transforms, save/restore,
-   clip, `globalAlpha` and Porter-Duff `globalCompositeOperation` are done;
-   still missing: line dashes, round caps/joins, shadows, text under
+   clip, `globalAlpha`, Porter-Duff `globalCompositeOperation` and shadows
+   are done; still missing: line dashes, round caps/joins, text under
    rotation/scale, blend-mode composite ops), webgl-like ideas where they
    fit.
 2. This library is intended to become the host for a **separate react
@@ -73,6 +73,9 @@ lib/glswapchain.js         its buffers: dma-buf -> DRI3 pixmap -> Present,
                            recycled on IdleNotify, generations across resizes
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
+lib/shadow.js              canvas shadows: the blur (sigma = shadowBlur/2,
+                           run as two separable passes), the coverage
+                           surfaces it needs and their per-connection cache
 lib/glyphset.js            XRender GlyphSet wrapper
 lib/rasterize.js           pure-JS coverage rasterizer (signed-area
                            accumulation): glyph outlines and path/stroke

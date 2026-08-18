@@ -49,6 +49,17 @@ answers that question for SVG documents.
 `globalAlpha` still applies — it folds into the source colour rather than the
 mask, since the mask slot is taken.
 
+Coverage is also what a *filter* wants, and blur is the filter worth knowing
+about: `surface.picture().setFilter('convolution', [w, h, ...kernel])` is
+applied by the server every time the picture is sampled, so an a8 surface
+blurred this way composites as a soft version of whatever was drawn into it.
+That is exactly how [shadows](context-2d.md#shadows) are built — reach for
+those first — and if you build your own, note the two things that are easy
+to get wrong: the surface needs **padding of the kernel's half-width on every
+side**, or the blur ends in a straight line where it ran out of pixels
+(outside a picture, RepeatNone reads transparent), and a 2d kernel costs k²
+multiplies per pixel where two 1d passes cost 2k.
+
 ## Scrolling and panning: `copyWithin`
 
 A widget that keeps its content in a retained surface — a terminal grid, a
