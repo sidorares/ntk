@@ -637,8 +637,9 @@ like any other style.
 ## Shadows
 
 The four canvas shadow properties, applied to every drawing operation —
-`fill`, `stroke`, `fillText`, `fillRect`, `strokeRect`, `fillRects` and
-`drawImage`:
+`fill`, `stroke`, `fillText`, `fillRect`, `strokeRect`, `fillRects`,
+`drawImage` and `drawGlyphs` (so a `TextLayout` shadows exactly as a
+`fillText` does):
 
 ```js
 ctx.shadowColor = '#05070a';
@@ -693,6 +694,19 @@ once and composites it afterwards. Paths, rectangles and images have no such
 key and rebuild their coverage per draw, so a large blurred path shadow in a
 render loop is the shape to watch for; draw it into a `Surface` yourself and
 `drawImage` that instead.
+
+**Laid-out text is cached too**, on the identity of the runs it is made of
+rather than on a string: a whole paragraph is one coverage surface, whatever
+its line count, keyed by those runs and their positions relative to each
+other. So the same words wrapped to two different widths are two shadows —
+they are two drawings — while re-drawing one `TextLayout`, anywhere on the
+target, is a lookup and a composite. A caller that hand-builds fresh runs
+every frame (a terminal grid, say) has nothing stable to key on and pays for
+its coverage each time.
+
+A shadow belongs to a drawing *call*, here as in a browser: a paragraph
+whose spans change colour is drawn as several glyph composites, and each
+casts its own shadow, exactly as consecutive `fillText`s would.
 
 `app.shadowPolicy` tunes the ceilings (partial objects merge over the
 defaults):

@@ -370,3 +370,139 @@ describe('text shadows', () => {
     ctx.destroy();
   });
 });
+
+// ------------------------------------------------------------------
+// text that went through a layout, which is a different drawing path
+// (issue #283): TextLayout.draw composites through drawGlyphs, which used
+// to be the one text call that ignored the shadow state
+
+describe('shadows on laid-out text', () => {
+  /** how many pixels are mostly-blue (the shadow) / mostly-red (the text) */
+  const tally = (img) => {
+    let red = 0;
+    let blue = 0;
+    for (let i = 0; i < img.data.length; i += 4) {
+      if (img.data[i] > 128 && img.data[i + 2] < 128) red++;
+      if (img.data[i + 2] > 128 && img.data[i] < 128) blue++;
+    }
+    return { red, blue };
+  };
+
+  const shadowedText = (ctx) => {
+    ctx.font = '20px sans-serif';
+    ctx.shadowColor = '#0000ff';
+    ctx.shadowOffsetX = 4;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = '#ff0000';
+  };
+
+  test('the same string shadows the same drawn either way', async () => {
+    const direct = target();
+    shadowedText(direct);
+    direct.fillText('Hi there', 10, 40);
+    const one = tally(await direct.getImageData(0, 0, W, H));
+
+    const laid = target();
+    shadowedText(laid);
+    const layout = laid.layoutText('Hi there');
+    // layout.draw takes the box's top-left; fillText takes the baseline
+    layout.draw(laid, 10, 40 - layout.lines[0].baseline);
+    const two = tally(await laid.getImageData(0, 0, W, H));
+
+    assert.ok(one.blue > 20, `fillText is shadowed (${one.blue} blue pixels)`);
+    assert.ok(two.blue > 20, `and so is the layout (${two.blue} blue pixels)`);
+    assert.ok(two.red > 20, 'the glyphs themselves are still drawn');
+    assert.ok(
+      Math.abs(one.blue - two.blue) <= one.blue * 0.15,
+      `the two shadows are the same size (${one.blue} vs ${two.blue})`
+    );
+    direct.destroy();
+    laid.destroy();
+  });
+
+  test('every line of a wrapped paragraph casts one', async () => {
+    const ctx = target();
+    shadowedText(ctx);
+    ctx.font = '16px sans-serif';
+    const layout = ctx.layoutText('one two three four', { maxWidth: 60 });
+    assert.ok(layout.lines.length > 1, `the text wrapped (${layout.lines.length} lines)`);
+    layout.draw(ctx, 8, 8);
+    const img = await ctx.getImageData(0, 0, W, H);
+    const blueIn = (y0, y1) => {
+      let n = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (img.data[i + 2] > 128 && img.data[i] < 128) n++;
+        }
+      }
+      return n;
+    };
+    const mid = Math.round(8 + layout.height / 2);
+    assert.ok(blueIn(0, mid) > 10, 'the first line is shadowed');
+    assert.ok(blueIn(mid, H) > 10, 'and so is the last');
+    ctx.destroy();
+  });
+
+  test('the transform carries the shadow with the text', async () => {
+    const ctx = target();
+    shadowedText(ctx);
+    ctx.font = '16px sans-serif';
+    ctx.translate(40, 30);
+    ctx.layoutText('Hi').draw(ctx, 0, 0);
+    const img = await ctx.getImageData(0, 0, W, H);
+    let blue = 0;
+    let minX = W;
+    let minY = H;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (img.data[i + 2] > 128 && img.data[i] < 128) {
+          blue++;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+        }
+      }
+    }
+    assert.ok(blue > 10, `the layout is shadowed (${blue} blue pixels)`);
+    // the shadow of a translated drawing is translated too, not left at the
+    // untransformed origin (the bug #280 fixed for the glyphs themselves)
+    assert.ok(minX >= 38, `shadow starts at x=${minX}, past the translation`);
+    assert.ok(minY >= 28, `shadow starts at y=${minY}, past the translation`);
+    ctx.destroy();
+  });
+
+  test('one coverage surface for the whole paragraph, kept across draws', async () => {
+    app._shadowSurfaces?.clear();
+    const ctx = target();
+    ctx.font = '16px sans-serif';
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 4;
+    const text = 'one two three four';
+    const layout = ctx.layoutText(text, { maxWidth: 60 });
+    assert.ok(layout.lines.length > 1);
+    layout.draw(ctx, 8, 8);
+    assert.equal(app._shadowSurfaces.size, 1, 'one surface, not one per line');
+    const [surface] = [...app._shadowSurfaces.values()];
+
+    layout.draw(ctx, 30, 20); // the same paragraph elsewhere
+    assert.equal(app._shadowSurfaces.size, 1, 'the second draw reuses it');
+    assert.equal([...app._shadowSurfaces.values()][0], surface, 'the same one');
+
+    // the same text at another width is another shadow: same runs, but the
+    // lines they sit on are not the same lines
+    ctx.layoutText(text, { maxWidth: 110 }).draw(ctx, 8, 8);
+    assert.equal(app._shadowSurfaces.size, 2);
+    app._shadowSurfaces.clear();
+    ctx.destroy();
+  });
+
+  test('no shadow colour, no shadow work', async () => {
+    app._shadowSurfaces?.clear();
+    const ctx = target();
+    ctx.font = '16px sans-serif';
+    ctx.layoutText('one two three', {}).draw(ctx, 8, 20);
+    assert.equal(app._shadowSurfaces?.size ?? 0, 0);
+    ctx.destroy();
+  });
+});
