@@ -1,5 +1,19 @@
 # Changelog
 
+## [8.1.0](https://github.com/sidorares/ntk/compare/v8.0.0...v8.1.0) (2026-08-18)
+
+
+### Features
+
+* **context2d:** shadows, with the blur run as two passes and text coverage cached ([#278](https://github.com/sidorares/ntk/issues/278)) ([3e88dfc](https://github.com/sidorares/ntk/commit/3e88dfcee2bf589bb365c30bc0bb3ccaa03b8182))
+* **fonts:** an async matchSorted, so a font picker stops blocking on fc-match ([#275](https://github.com/sidorares/ntk/issues/275)) ([d5d2625](https://github.com/sidorares/ntk/commit/d5d2625bc6d278b1339acc3b0f19e9b9e0094364))
+* **fonts:** fc-match answers with the family name too ([#276](https://github.com/sidorares/ntk/issues/276)) ([44c7163](https://github.com/sidorares/ntk/commit/44c716373d68383ea44bcf7171b72e2f422ac27f))
+
+
+### Bug Fixes
+
+* **context2d:** a gradient paints where the fill is, not where the window starts ([#277](https://github.com/sidorares/ntk/issues/277)) ([b55c245](https://github.com/sidorares/ntk/commit/b55c2459e8aaa76ab254c5253e6b17da93935bce))
+
 ## [8.0.0](https://github.com/sidorares/ntk/compare/v7.7.0...v8.0.0) (2026-08-16)
 
 
