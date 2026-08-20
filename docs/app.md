@@ -105,6 +105,17 @@ paced slower can never reach the rate its display offers.
   object, or `null` where there is none. `ext.xi2` is `null` on a server
   that speaks XI1 only. The escape hatch for the XI2 requests ntk does not
   wrap (grabs, device properties, barriers)
+- `app.createRegion(rects) → Promise<Region>` — a server-side XFIXES region
+  of the given rectangles (`{x, y, width, height}` or ntk's own
+  `{x, y, w, h}`), empty by default. Regions are how X describes a
+  non-rectangular area — expose damage, a window's SHAPE, what a compositor
+  has left to paint — and `ctx.clipRegion(region)` clips a 2d context to
+  one. See [Region clips](context-2d.md#region-clips)
+- `app.fixes() → Promise<ext>` — the raw node-x11 XFIXES extension object,
+  loaded once and shared. `createRegion` awaits this for you; call it
+  directly when you build regions through node-x11 yourself, or need the
+  XFIXES requests ntk does not wrap. Rejects with `code`
+  `'ERR_NTK_NO_XFIXES'` on a server that has no XFIXES at all
 - `app.close() → Promise` — flush pending requests, then close the connection
 
 ## Resource management
