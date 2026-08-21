@@ -203,6 +203,9 @@ function makeMockApp() {
     GetGeometry(id, cb) {
       calls.getGeometry = cb;
     },
+    GetWindowAttributes(id, cb) {
+      calls.getAttributes = cb;
+    },
     GetInputFocus() {}
   };
   const display = {
@@ -241,6 +244,7 @@ test('a context on an adopted window rebinds when the depth turns out to be 32',
   assert.equal(ctx._hasAlpha, false);
 
   calls.getGeometry(null, geometryReply(32));
+  calls.getAttributes(null, { visual: 34 });
   await wnd.ready;
   await tick();
 
@@ -269,6 +273,7 @@ test('a depth the reply does not change costs no second picture', async () => {
   assert.equal(calls.pictures.length, 1);
 
   calls.getGeometry(null, geometryReply(24));
+  calls.getAttributes(null, { visual: 34 });
   await wnd.ready;
   await tick();
 

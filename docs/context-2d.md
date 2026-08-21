@@ -699,10 +699,11 @@ chart fills and any texture-shaped background.
   surface does not change how `drawImage` samples that same surface. A
   coverage (`a8`) surface is refused: it has no colour to paint with —
   `drawImage` is what paints coverage in the current `fillStyle`. A `Window`
-  has to know its depth first, because that is where the tile's picture
-  format comes from: `await wnd.getGeometry()` establishes it on any window,
-  and `await wnd.ready` is the cheaper wait on one adopted by id, which ntk
-  has already asked about — see
+  has to know its depth and its visual first, because that is where the
+  tile's picture format comes from (see
+  [Picture formats](app.md#picture-formats)): `await wnd.getGeometry()`
+  establishes the depth on any window, and `await wnd.ready` is the wait for
+  both on one adopted by id, which ntk has already asked about — see
   [Adopted windows](window.md#adopted-windows)
 - **`repetition`** is `'repeat'` (the default, and what `null` means),
   `'no-repeat'`, or the two XRender modes the canvas spec has no name for:

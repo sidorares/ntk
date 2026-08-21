@@ -73,6 +73,10 @@ lib/glswapchain.js         its buffers: dma-buf -> DRI3 pixmap -> Present,
                            recycled on IdleNotify, generations across resizes
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
+lib/pictformat.js          which RENDER picture format describes a drawable:
+                           visual -> format, matched on the channel masks
+                           the handshake and QueryPictFormats agree on, with
+                           the depth-based standard formats as the fallback
 lib/region.js              XFIXES Region wrapper: the server-side rectangle
                            sets X uses for damage/shapes, and the clip
                            ctx.clipRegion() installs on a picture
