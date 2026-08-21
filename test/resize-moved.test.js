@@ -40,6 +40,9 @@ function makeMockApp() {
     GetGeometry(id, cb) {
       calls.getGeometry = cb;
     },
+    GetWindowAttributes(id, cb) {
+      calls.getAttributes = cb;
+    },
     GetInputFocus(cb) {
       fences.push(cb);
     }

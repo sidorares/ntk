@@ -85,21 +85,25 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 `ev.window` carries on a window manager's substructure events, what a
 compositor gets for the Composite overlay window and for every client on the
 screen. Nothing about such a window is known locally, so ntk asks: the
-constructor sends a `GetGeometry`, and until the reply lands `width`,
-`height`, `x` and `y` read `undefined` and `depth` reads `0`.
+constructor sends a `GetGeometry` and a `GetWindowAttributes` — the second
+for the **visual**, which is what names the picture format its pixels can be
+read through. Until the replies land, `width`, `height`, `x` and `y` read
+`undefined`, `depth` reads `0` and `visualId` reads `0`. Both requests go out
+in the same batch, so the pair costs one round trip.
 
 ```js
 const wnd = app.createWindow({ id: ev.wid });
-await wnd.ready;                    // the reply the constructor is waiting for
+await wnd.ready;                    // the replies the constructor is waiting for
 const ctx = wnd.getContext('2d');   // now binds the right picture format
 ```
 
-- `wnd.ready` — a promise resolving **with the window** once its geometry is
-  known. A window ntk created resolves immediately, having asked for its own
-  geometry, so awaiting unconditionally is safe: code handed a window need
-  not know where it came from. It never rejects — a window destroyed before
-  the reply arrives resolves all the same, with `width` still `undefined`,
-  and the next request sent to it is what reports that it is gone.
+- `wnd.ready` — a promise resolving **with the window** once the constructor's
+  questions have been answered. A window ntk created resolves immediately,
+  having asked none, so awaiting unconditionally is safe: code handed a
+  window need not know where it came from. It never rejects — a window
+  destroyed before the replies arrive resolves all the same, with `width`
+  still `undefined`, and the next request sent to it is what reports that it
+  is gone.
 - `wnd.getGeometry()` → `Promise<{ x, y, width, height, depth, borderWidth,
   root }>` — ask the server where the window is *now*, rather than take what
   the event stream last said. `x`/`y` are relative to the parent, as X
@@ -108,18 +112,30 @@ const ctx = wnd.getContext('2d');   // now binds the right picture format
   settles `ready` if it was still pending.
 
 Size and position also arrive on their own, as `resize`
-([ConfigureNotify](#resize-fires-for-moves)) — the **depth** does not, and it
-is the one nothing recovers from. `getContext('2d')` picks its picture format
-from the depth when the context is created, so a context taken on a depth-32
-window before the reply lands would bind `rgb24` and quietly drop the alpha
-channel. ntk re-binds the picture if the reply turns out to change the
+([ConfigureNotify](#resize-fires-for-moves)) — the **depth and the visual** do
+not, and they are the ones nothing recovers from. `getContext('2d')` picks its
+picture format when the context is created, so a context taken on a depth-32
+window before the replies land would bind `rgb24` and quietly drop the alpha
+channel — and one on a 5:6:5 or BGR window would read every channel from the
+wrong bits. ntk re-binds the picture if the replies turn out to change the
 format, but a context that has already drawn has already drawn into the wrong
 one; `createPattern(wnd)` has nothing to re-bind and refuses outright.
 
 A window ntk created has no reply pending, and still does not know its depth:
 `depth: 0` is CopyFromParent, which only the server ever resolves. That is
 what `getGeometry()` is for on this side — until something asks, `wnd.depth`
-reads `0`.
+reads `0`. Its visual is not in doubt, though: CopyFromParent is the parent's
+visual, so `wnd.visualId` is right from the start.
+
+- `wnd.visualId` — the id of the visual this window's pixels are in, which
+  is what the picture format comes from (see
+  [Picture formats](app.md#picture-formats)). Not the same as the `visual`
+  constructor argument, which is a `CreateWindow` field where `0` means
+  CopyFromParent: `visualId` is always a real visual, resolved from the
+  parent (or the root) for a window ntk created and read from the server for
+  an adopted one. `0` only while an adopted window has yet to answer.
+- `wnd.getAttributes()` also writes the visual back to `visualId`, so a
+  window manager that asks for `mapState` has paid for it already.
 
 ## Transparent windows
 

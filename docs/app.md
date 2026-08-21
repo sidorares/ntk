@@ -116,7 +116,41 @@ paced slower can never reach the rate its display offers.
   directly when you build regions through node-x11 yourself, or need the
   XFIXES requests ntk does not wrap. Rejects with `code`
   `'ERR_NTK_NO_XFIXES'` on a server that has no XFIXES at all
+- `app.pictFormatFor(visual, { depth }) → Promise<formatId>` — the RENDER
+  picture format a drawable on that visual is read and written through. See
+  [Picture formats](#picture-formats)
+- `app.pictFormats() → Promise<{formats, byVisual}>` — the whole table: the
+  server's formats list as objects, and a `Map` from visual id to format id
 - `app.close() → Promise` — flush pending requests, then close the connection
+
+## Picture formats
+
+A RENDER picture format tells the server how to read a drawable's pixels:
+where the red, green, blue and alpha bits are, and how many of each. **The
+drawable's visual is what names one — its depth is not enough.** A depth-16
+visual may be 5:6:5 or 5:5:5, depth 24 may be RGB or BGR, and 10:10:10:2 is
+32 bits wide just like 8:8:8:8. Compositing through a format that does not
+describe the pixels is not an error RENDER reports; it simply reads the
+channels wrong.
+
+ntk does this for you on anything it draws on: a window knows its visual
+(`wnd.visualId`), a backing pixmap is given the window's, and a 2d context
+binds its picture from that. The table is fetched once per connection,
+during the handshake, so nothing waits for it.
+
+Ask directly when you hold a drawable ntk did not create — a compositor's
+`NameWindowPixmap` result, a foreign pixmap handed over by another client:
+
+```js
+const attrs = await wnd.getAttributes();
+const format = await app.pictFormatFor(attrs.visual);
+Render.CreatePicture(pictureId, pixmapId, format, {});
+```
+
+`depth` is the fallback, used where the server names no format for the
+visual (an indexed visual, or one this connection was never told about): the
+standard format for that depth, which is what ntk assumed everywhere before
+[#295](https://github.com/sidorares/ntk/issues/295).
 
 ## Resource management
 
