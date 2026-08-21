@@ -73,6 +73,9 @@ lib/glswapchain.js         its buffers: dma-buf -> DRI3 pixmap -> Present,
                            recycled on IdleNotify, generations across resizes
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
+lib/region.js              XFIXES Region wrapper: the server-side rectangle
+                           sets X uses for damage/shapes, and the clip
+                           ctx.clipRegion() installs on a picture
 lib/shadow.js              canvas shadows: the blur (sigma = shadowBlur/2,
                            run as two separable passes), the coverage
                            surfaces it needs and their per-connection cache

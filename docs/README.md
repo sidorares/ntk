@@ -24,7 +24,9 @@ matching file here (see AGENTS.md).
 - [XEmbed](xembed.md) — `XEmbedSocket` / `XEmbedPlug`: putting another
   client's window inside yours (and yours inside someone else's), including
   the plain-reparenting path `xterm -into` and `mpv --wid` need
-- [2d rendering context](context-2d.md) — canvas-like drawing API over XRender
+- [2d rendering context](context-2d.md) — canvas-like drawing API over XRender,
+  including region clips (`ctx.clipRegion`) and the XFIXES `Region` objects
+  `app.createRegion()` hands back
 - [Images](images.md) — PNG/JPEG loading (`loadImage`), the `Image` object,
   `drawImage`
 - [Surface](surface.md) — draw once, composite many times; a8 coverage
