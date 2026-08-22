@@ -59,7 +59,9 @@ ctx.fillRect(0, 0, 100, 100);
 Everything that puts ink on the surface goes through the clip: fills,
 strokes, images, text (`fillText`, `TextLayout.draw`) and the vector shapes
 `SvgView` draws. Rectangular clips take a server-side fast path
-(`SetPictureClipRectangles`); non-rectangular ones build an a8 mask.
+(`SetPictureClipRectangles`); non-rectangular ones build an a8 mask; and an
+XFIXES region is a third kind the server applies itself — see
+[Region clips](#region-clips).
 
 ## Color
 
@@ -232,8 +234,102 @@ Full canvas path surface:
   ends of open subpaths)
 - `clip([path][, fillRule])` — intersects the clip region; restored by
   `restore()`
+- `clipRegion(region)` — intersects the clip with a server-side XFIXES
+  region. Also restored by `restore()`; see
+  [Region clips](#region-clips)
 - `isPointInPath([path, ]x, y[, fillRule])` — hit test in canvas (device)
   coordinates
+
+## Region clips
+
+A **region** is a set of rectangles the X server owns. It is how X describes
+a non-rectangular area: the damage an expose reports, a window's SHAPE, or
+what a compositor has left to paint after subtracting the windows in front.
+`ctx.clipRegion(region)` makes one a clip:
+
+```js
+const region = await app.createRegion([
+  { x: 0, y: 0, width: 100, height: 100 },
+  { x: 140, y: 140, width: 60, height: 60 }
+]);
+
+ctx.save();
+ctx.clipRegion(region);
+ctx.fillStyle = 'red';
+ctx.fillRect(0, 0, 200, 200); // only the two rectangles are painted
+ctx.restore(); // the clip is lifted, as after clip()
+region.destroy();
+```
+
+`app.createRegion(rects)` is a promise because XFIXES is loaded on first use,
+not because a region costs a round trip — it does not, and neither does any
+operation on one except `fetch()`.
+
+What it is:
+
+- **Scoped like `clip()`.** `restore()` takes it off and nothing else does.
+  Region, rectangle and path clips intersect in any combination and any
+  order.
+- **In device pixels**, ignoring the current transform — unlike `clip()`,
+  whose path goes through it. A region is a set of integer rectangles, so
+  there is no honest way to rotate or scale one; `region.translate(dx, dy)`
+  moves one server-side if that is what you want.
+- **Applied by the server**, never rasterized into a mask here. Region ∩
+  rectangle is one `IntersectRegion`; a region alongside a path clip costs
+  nothing beyond the mask that path was going to build anyway.
+
+### `Region`
+
+`app.createRegion(rects)` hands back a `Region`. Rectangles may be written
+`{x, y, width, height}` (the protocol's spelling) or `{x, y, w, h}` (ntk's,
+which is what `getImageData` boxes and damage rectangles look like).
+
+- `region.id` — the XFIXES region id, for requests ntk does not wrap
+- `region.set(rects)` — replace the contents
+- `region.copyFrom(other)` — replace the contents with another region's
+- `region.translate(dx, dy)` — move it
+- `region.intersect(other)`, `region.union(other)`, `region.subtract(other)`
+  — in place, chainable, one request each
+- `region.fetch() → Promise<{extents, rectangles}>` — read it back. The one
+  round trip in the class: for inspecting and testing, not for a paint loop
+- `region.destroy()`, `Symbol.dispose`, and a GC fallback — see
+  [resource-management.md](resource-management.md)
+
+`subtract` is the compositor loop: paint front to back, taking each window's
+shape out of what is left for the ones behind it.
+
+```js
+const remaining = await app.createRegion([{ x: 0, y: 0, w: width, h: height }]);
+const shape = await app.createRegion([]);
+for (const win of frontToBack) {
+  shape.set([win.bounds]);
+  ctx.save();
+  ctx.clipRegion(remaining);
+  win.paint(ctx);
+  ctx.restore();
+  remaining.subtract(shape);
+}
+```
+
+### Why not install it on the picture yourself
+
+`ctx.picture` is a real RENDER Picture and a region can be hung on it with
+`fixes.SetPictureClipRegion(ctx.picture.id, region, 0, 0)` — which works,
+right up until ntk next draws under a rectangular clip.
+
+A Picture holds exactly one client clip, and ntk's own fast paths use it:
+text glyph runs, batched `fillRects`, rounded boxes and `drawImage` all narrow
+the picture to a rectangle around the drawing and put it back afterwards. Any
+region in that slot is overwritten, silently, and which drawings do it depends
+on which internal route they take (issue
+[#292](https://github.com/sidorares/ntk/issues/292)).
+
+`clipRegion()` is the same region as a clip ntk knows about: it is part of the
+`save()`/`restore()` state, the fast paths intersect *with* it and restore *to*
+it, and "no clip" is a state the context tracks rather than a full-plane
+rectangle it stamps over whatever was there.
+
+![the same region clip and the same drawing twice: installed on the picture directly it is gone by the time the fill runs, and the fill floods the box the region excluded; installed with ctx.clipRegion the box stays empty](img/region-clip.png)
 
 ## How curves are flattened
 
@@ -602,7 +698,13 @@ chart fills and any texture-shaped background.
   `Window`. A repeating Picture is created *over* those pixels, so tiling a
   surface does not change how `drawImage` samples that same surface. A
   coverage (`a8`) surface is refused: it has no colour to paint with —
-  `drawImage` is what paints coverage in the current `fillStyle`
+  `drawImage` is what paints coverage in the current `fillStyle`. A `Window`
+  has to know its depth and its visual first, because that is where the
+  tile's picture format comes from (see
+  [Picture formats](app.md#picture-formats)): `await wnd.getGeometry()`
+  establishes the depth on any window, and `await wnd.ready` is the wait for
+  both on one adopted by id, which ntk has already asked about — see
+  [Adopted windows](window.md#adopted-windows)
 - **`repetition`** is `'repeat'` (the default, and what `null` means),
   `'no-repeat'`, or the two XRender modes the canvas spec has no name for:
   `'pad'` (clamp to the edge pixels) and `'reflect'` (mirror every other

@@ -12,6 +12,7 @@ Node 20+ when called directly):
 | `Pixmap` | `pixmap.destroy()` | `Symbol.dispose` |
 | `Picture` | `picture.destroy()` | `Symbol.dispose` |
 | `GlyphSet` | `glyphset.destroy()` | `Symbol.dispose` |
+| `Region` | `region.destroy()` | `Symbol.dispose` |
 
 ```js
 import { createClient } from 'ntk';

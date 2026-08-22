@@ -402,6 +402,32 @@ test('a source that is not a drawable names what would have worked', () => {
   }
 });
 
+test('a window whose depth is unknown names a wait that exists (issue #293)', async () => {
+  const ctx = freshCtx();
+  // a window this connection did not make a wrapper for: what a compositor
+  // or a window manager is handed, and what `new Window(app, { id })` adopts
+  const id = app.X.AllocID();
+  app.X.CreateWindow(id, app.display.screen[0].root, 0, 0, 8, 8, 0, 0, 1, 0, {});
+  const wnd = app.createWindow({ id });
+
+  assert.throws(
+    () => ctx.createPattern(wnd, 'repeat'),
+    (err) => {
+      assert.match(err.message, /await wnd\.getGeometry\(\)/, 'the remedy that works on any window');
+      assert.match(err.message, /await wnd\.ready/, 'and the cheaper one for an adopted window');
+      // both are real API, which is the whole point of the issue
+      assert.equal(typeof wnd.getGeometry, 'function');
+      assert.equal(typeof wnd.ready?.then, 'function');
+      return true;
+    }
+  );
+
+  await wnd.ready;
+  assert.equal(wnd.depth, 24, 'the wait is what makes the depth known');
+  assert.ok(ctx.createPattern(wnd, 'repeat') instanceof CanvasPattern);
+  wnd.destroy();
+});
+
 test('setTransform rejects a matrix it cannot use', () => {
   const ctx = freshCtx();
   const tile = checkerTile();

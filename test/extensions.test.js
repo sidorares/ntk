@@ -98,6 +98,21 @@ test('concurrent callers share the query in flight', async () => {
   assert.deepEqual(asked, ['damage'], 'the second caller waited on the first');
 });
 
+test('app.fixes() is the throwing spelling of xfixes(), on the same cache', async () => {
+  // Two public names, one question: regions go through `fixes()`, which
+  // rejects where XFIXES is absent, while `xfixes()` answers `null`. They
+  // must ride one QueryExtension, not one each.
+  const withIt = makeApp(['fixes']);
+  const [viaFixes, viaXfixes] = await Promise.all([withIt.app.fixes(), withIt.app.xfixes()]);
+  assert.equal(viaFixes, viaXfixes, 'the same extension object comes back');
+  assert.deepEqual(withIt.asked, ['fixes'], 'one query serves both names');
+
+  const without = makeApp([]);
+  await assert.rejects(without.app.fixes(), { code: 'ERR_NTK_NO_XFIXES' });
+  assert.equal(await without.app.xfixes(), null);
+  assert.deepEqual(without.asked, ['fixes'], 'the absent answer is shared too');
+});
+
 test('the cache belongs to the connection, not the process', async () => {
   const one = makeApp(['composite']);
   const two = makeApp([]);

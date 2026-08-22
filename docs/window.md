@@ -18,7 +18,7 @@ wnd.map();
 
 Constructing a window with an existing X window id (`{ id }`) returns a
 (cached) wrapper around that foreign window; its geometry is populated
-asynchronously.
+asynchronously — see [Adopted windows](#adopted-windows).
 
 Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
 
@@ -78,6 +78,64 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   from XInput 2 instead of the core protocol: fractional scroll deltas
   instead of wheel notches, per-device ids, touch (see
   [Wheel and smooth scrolling](#wheel-and-smooth-scrolling))
+
+## Adopted windows
+
+`app.createWindow({ id })` wraps a window this client did not create — what
+`ev.window` carries on a window manager's substructure events, what a
+compositor gets for the Composite overlay window and for every client on the
+screen. Nothing about such a window is known locally, so ntk asks: the
+constructor sends a `GetGeometry` and a `GetWindowAttributes` — the second
+for the **visual**, which is what names the picture format its pixels can be
+read through. Until the replies land, `width`, `height`, `x` and `y` read
+`undefined`, `depth` reads `0` and `visualId` reads `0`. Both requests go out
+in the same batch, so the pair costs one round trip.
+
+```js
+const wnd = app.createWindow({ id: ev.wid });
+await wnd.ready;                    // the replies the constructor is waiting for
+const ctx = wnd.getContext('2d');   // now binds the right picture format
+```
+
+- `wnd.ready` — a promise resolving **with the window** once the constructor's
+  questions have been answered. A window ntk created resolves immediately,
+  having asked none, so awaiting unconditionally is safe: code handed a
+  window need not know where it came from. It never rejects — a window
+  destroyed before the replies arrive resolves all the same, with `width`
+  still `undefined`, and the next request sent to it is what reports that it
+  is gone.
+- `wnd.getGeometry()` → `Promise<{ x, y, width, height, depth, borderWidth,
+  root }>` — ask the server where the window is *now*, rather than take what
+  the event stream last said. `x`/`y` are relative to the parent, as X
+  reports them, and `root` is the root window of the screen it is on. The
+  answer is written back to `wnd.x`/`y`/`width`/`height`/`depth`, and
+  settles `ready` if it was still pending.
+
+Size and position also arrive on their own, as `resize`
+([ConfigureNotify](#resize-fires-for-moves)) — the **depth and the visual** do
+not, and they are the ones nothing recovers from. `getContext('2d')` picks its
+picture format when the context is created, so a context taken on a depth-32
+window before the replies land would bind `rgb24` and quietly drop the alpha
+channel — and one on a 5:6:5 or BGR window would read every channel from the
+wrong bits. ntk re-binds the picture if the replies turn out to change the
+format, but a context that has already drawn has already drawn into the wrong
+one; `createPattern(wnd)` has nothing to re-bind and refuses outright.
+
+A window ntk created has no reply pending, and still does not know its depth:
+`depth: 0` is CopyFromParent, which only the server ever resolves. That is
+what `getGeometry()` is for on this side — until something asks, `wnd.depth`
+reads `0`. Its visual is not in doubt, though: CopyFromParent is the parent's
+visual, so `wnd.visualId` is right from the start.
+
+- `wnd.visualId` — the id of the visual this window's pixels are in, which
+  is what the picture format comes from (see
+  [Picture formats](app.md#picture-formats)). Not the same as the `visual`
+  constructor argument, which is a `CreateWindow` field where `0` means
+  CopyFromParent: `visualId` is always a real visual, resolved from the
+  parent (or the root) for a window ntk created and read from the server for
+  an adopted one. `0` only while an adopted window has yet to answer.
+- `wnd.getAttributes()` also writes the visual back to `visualId`, so a
+  window manager that asks for `mapState` has paid for it already.
 
 ## Transparent windows
 
@@ -468,6 +526,12 @@ wnd.requestAnimationFrame(step); // now runs at the display's rate
 
 - `wnd.id` — X window id
 - `wnd.width`, `wnd.height`, `wnd.x`, `wnd.y` — geometry, kept in sync on `resize`
+- `wnd.depth` — bits per pixel, and so which picture format a 2d context
+  binds. `0` means "not resolved" rather than a real depth — see
+  [Adopted windows](#adopted-windows)
+- `wnd.ready` — a promise resolving with the window once its geometry is
+  known; immediate for a window ntk created (see
+  [Adopted windows](#adopted-windows))
 - `wnd.frameLatency` — how long the last frame took to be answered, ms
   (`null` before the first frame; see above for what it measures on each clock)
 - `wnd.frameInterval` — minimum ms between paced frames, and between blits;
@@ -527,6 +591,9 @@ All return `this` unless noted.
   smooth scrolling, per-device ids, touch. Returns a promise for whether the
   server has XI2, not `this` — see
   [Wheel and smooth scrolling](#wheel-and-smooth-scrolling)
+- `getGeometry()` — a promise, not `this`: `{ x, y, width, height, depth,
+  borderWidth, root }` asked of the server and written back to the window
+  (see [Adopted windows](#adopted-windows))
 - `queryTree(cb)` — `cb(err, { parent, root, children })`, all as `Window`s
 - `reparentTo(newParent, x, y)`, `raise()`, `lower()`
 - `setHints(hints)`, `setSizeHints(hints)`, `setWmHints(hints)`,
@@ -1059,6 +1126,10 @@ The counterparts of the hint setters, for reading other clients' windows:
 - `getAttributes()` — `{ mapState, overrideRedirect, ... }`. Both matter
   when adopting the windows that already existed at startup: skip
   override-redirect ones, frame only the mapped ones
+- `getGeometry()` — `{ x, y, width, height, depth, borderWidth, root }`,
+  where the window is now. `await client.ready` is the cheaper answer for a
+  window just adopted, since ntk has already asked; see
+  [Adopted windows](#adopted-windows)
 - `getProperty(name, { as })` — any property. `as` is `'buffer'` (default,
   `{ type, data }`), `'string'`, or `'numbers'` for 32-bit lists. Resolves
   to `null` when the property is not set

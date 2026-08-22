@@ -104,6 +104,22 @@ paced slower can never reach the rate its display offers.
 - `app.composite()` / `app.damage()` / `app.xfixes()` / `app.shape()` /
   `app.xinput() → Promise<ext|null>` — the raw node-x11 extension objects,
   each `null` where the server has none. See [Extensions](#extensions)
+- `app.createRegion(rects) → Promise<Region>` — a server-side XFIXES region
+  of the given rectangles (`{x, y, width, height}` or ntk's own
+  `{x, y, w, h}`), empty by default. Regions are how X describes a
+  non-rectangular area — expose damage, a window's SHAPE, what a compositor
+  has left to paint — and `ctx.clipRegion(region)` clips a 2d context to
+  one. See [Region clips](context-2d.md#region-clips)
+- `app.fixes() → Promise<ext>` — the throwing spelling of `app.xfixes()`:
+  same query, same cache, but rejects with `code` `'ERR_NTK_NO_XFIXES'` on a
+  server that has no XFIXES at all. `createRegion` awaits this for you; call
+  it directly when you build regions through node-x11 yourself, or need the
+  XFIXES requests ntk does not wrap
+- `app.pictFormatFor(visual, { depth }) → Promise<formatId>` — the RENDER
+  picture format a drawable on that visual is read and written through. See
+  [Picture formats](#picture-formats)
+- `app.pictFormats() → Promise<{formats, byVisual}>` — the whole table: the
+  server's formats list as objects, and a `Map` from visual id to format id
 - `app.close() → Promise` — flush pending requests, then close the connection
 
 ## Extensions
@@ -133,9 +149,11 @@ const shape = await app.shape();
 - `app.xfixes() → Promise<ext|null>` — **XFIXES**: server-side regions and
   the algebra over them (`CreateRegion`, `CreateRegionFromWindow`,
   `UnionRegion`, `SubtractRegion`, `FetchRegion`), which is how a damaged
-  area becomes a clip: `SetPictureClipRegion(ctx.picture.id, 0, 0, region)`
-  narrows a 2d context to it, entirely server-side. node-x11 calls the module
-  `fixes`; the accessor is named after the extension
+  area becomes a clip — `app.createRegion(rects)` builds one wrapped, and
+  `ctx.clipRegion(region)` narrows a 2d context to it, entirely server-side
+  ([Region clips](context-2d.md#region-clips)). node-x11 calls the module
+  `fixes`; the accessor is named after the extension. `app.fixes()` is the
+  same query through the same cache, rejecting instead of resolving `null`
 - `app.shape() → Promise<ext|null>` — **SHAPE**: non-rectangular bounding,
   clip and input shapes (`Rectangles`, `Mask`, `Combine`, `GetRectangles`),
   which is what has to be read back to paint a shaped client without
@@ -180,6 +198,35 @@ app.X.on('event', (ev) => {
 Selecting for them still goes through the extension (`damage.Create(...)`,
 `shape.SelectInput(...)`), and there is no `wnd.on('damage')` — so a repaint
 driven this way sits outside ntk's own event and frame machinery.
+
+## Picture formats
+
+A RENDER picture format tells the server how to read a drawable's pixels:
+where the red, green, blue and alpha bits are, and how many of each. **The
+drawable's visual is what names one — its depth is not enough.** A depth-16
+visual may be 5:6:5 or 5:5:5, depth 24 may be RGB or BGR, and 10:10:10:2 is
+32 bits wide just like 8:8:8:8. Compositing through a format that does not
+describe the pixels is not an error RENDER reports; it simply reads the
+channels wrong.
+
+ntk does this for you on anything it draws on: a window knows its visual
+(`wnd.visualId`), a backing pixmap is given the window's, and a 2d context
+binds its picture from that. The table is fetched once per connection,
+during the handshake, so nothing waits for it.
+
+Ask directly when you hold a drawable ntk did not create — a compositor's
+`NameWindowPixmap` result, a foreign pixmap handed over by another client:
+
+```js
+const attrs = await wnd.getAttributes();
+const format = await app.pictFormatFor(attrs.visual);
+Render.CreatePicture(pictureId, pixmapId, format, {});
+```
+
+`depth` is the fallback, used where the server names no format for the
+visual (an indexed visual, or one this connection was never told about): the
+standard format for that depth, which is what ntk assumed everywhere before
+[#295](https://github.com/sidorares/ntk/issues/295).
 
 ## Resource management
 
