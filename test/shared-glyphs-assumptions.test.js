@@ -47,7 +47,14 @@ function connect(opts) {
   });
 }
 
-const sync = (c) => new Promise((r) => c.X.InternAtom(false, 'NTK_TEST_SYNC', () => r()));
+// One real round trip, always. An InternAtom barrier looks equivalent but is
+// not: node-x11 caches atom replies in a table shared across every
+// connection of the process, so a name any earlier connection interned
+// resolves without touching the wire — and a no-op "sync" lets this test's
+// cross-socket scenarios race (B compositing before A's upload landed, A's
+// death overtaking B's reference). CI caught exactly that. X.sync() rides
+// GetInputFocus, which nothing caches.
+const sync = (c) => c.X.sync();
 
 // 8x8 a8 glyphs (rows already 4-byte aligned), ntk's GLYPHINFO convention:
 // baseline 8px below the bitmap top, advance 8px. Fresh objects per call —
