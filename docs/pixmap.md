@@ -35,6 +35,24 @@ given the window's visual already.
 - `pixmap.visualId` — the visual its pixels are in, or `0` for "go by the
   depth"
 
+## Events
+
+A pixmap is an `EventEmitter` for one reason: extension events name a
+*drawable*, and a DAMAGE object can watch a pixmap as readily as a window.
+Create one on the pixmap's id and its `damage` events are delivered here —
+see [Extension events](app.md#extension-events):
+
+```js
+const damage = await app.damage();
+damage.Create(app.X.AllocID(), pixmap.id, damage.ReportLevel.NonEmpty);
+pixmap.on('damage', (ev) => { /* ev.x/y/width/height changed */ });
+```
+
+Unlike a window, a pixmap has no frame clock, so nothing is coalesced: every
+event is delivered as it arrives. Note that a pixmap with such a listener is
+referenced by the connection and stays alive until `destroy()` — the GC
+fallback below cannot collect it.
+
 ## Lifecycle
 
 - `pixmap.destroy()` — free the server-side pixmap and release the id
