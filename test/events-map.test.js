@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { coalesce, eventName, mask, maskCamelCase, toSnake } from '../lib/events_map.js';
+import {
+  coalesce,
+  eventName,
+  extensionEventNames,
+  mask,
+  maskCamelCase,
+  toSnake
+} from '../lib/events_map.js';
 
 test('every camelCase handler name maps to a snake event with a mask entry', () => {
   for (const [camel, snake] of Object.entries(toSnake)) {
@@ -32,12 +39,16 @@ test('every maskable event name is emitted by some X event type, or derived from
 test('coalescible events are known event names with known strategies', () => {
   const emitted = new Set(eventName.filter(Boolean));
   for (const [name, strategy] of Object.entries(coalesce)) {
-    assert.ok(emitted.has(name) || DERIVED.has(name), `${name} never emitted`);
+    assert.ok(
+      emitted.has(name) || DERIVED.has(name) || extensionEventNames.has(name),
+      `${name} never emitted`
+    );
     assert.ok(['last', 'union', 'accumulate'].includes(strategy), `unknown strategy ${strategy}`);
   }
   assert.equal(coalesce.mousemove, 'last');
   assert.equal(coalesce.resize, 'last');
   assert.equal(coalesce.expose, 'union');
+  assert.equal(coalesce.damage, 'union');
   assert.equal(coalesce.wheel, 'accumulate');
 });
 

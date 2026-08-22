@@ -1254,6 +1254,8 @@ constructor arg) automatically extends the window's X event mask.
 | `statechange` | PropertyNotify | derived, not an X event: the window manager changed `_NET_WM_STATE`. The handler gets the state names, not an event object — see [Window states](#window-states--setwmstatenames-action) |
 | `close` | ClientMessage | the window manager asking this window to close. `ev.preventDefault()` declines; see [Closing](#closing--onclose-ev--evpreventdefault) |
 | `property`, `reparent`, `message`, `selection*` | | |
+| `damage` | DAMAGE DamageNotify | coalesced per frame like `expose` (bounding box in `ev.x/y/width/height`, rect list in `ev.rects`); needs a DAMAGE object created on the window first — see [Extension events](app.md#extension-events) |
+| `shape`, `selection_owner`, `cursor` | SHAPE / XFIXES notifies | selected through the extension, delivered here — see [Extension events](app.md#extension-events) |
 
 Every event object gets `ev.window` and `ev.target` set to the `Window`.
 

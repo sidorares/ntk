@@ -191,20 +191,46 @@ app that only wanted a region or a shape degrades to doing without.
 
 ### Extension events
 
-Extension events do not currently reach the `Window` or `Pixmap` they name.
-They arrive parsed on the node-x11 client, where a compositor's repaint
-trigger reads them:
+The events these extensions add are not core events and not generic events
+either: their type codes are assigned by the server at QueryExtension time,
+and each one names its target under the field its own protocol calls it —
+`DamageNotify` a `drawable`, the others a `window` — so the core dispatch
+tables cannot see them. Requiring an extension through the accessors above
+is what teaches the connection its events; from then on each one is
+delivered to the `Window` — or `Pixmap`, since a DAMAGE object can watch
+one — that it names, under an ntk name, through the same delivery path as
+core events:
+
+| event | X event | payload |
+|---|---|---|
+| `damage` | DAMAGE DamageNotify | the drawable's content changed. Coalesced per paced frame exactly like `expose`: bounding box in `ev.x/y/width/height`, every reported rectangle in `ev.rects`; plus `ev.damage` (the DAMAGE object id, what `Subtract` takes), `ev.geometry`, `ev.level`, `ev.more` (the wire's "more follow" flag — coalescing already batches, so it is informational), `ev.time` |
+| `shape` | SHAPE ShapeNotify | the window's shape changed: `ev.kind` (`'bounding'`, `'clip'` or `'input'`), the new extents in `ev.x/y/width/height`, `ev.shaped` (false when the shape was removed), `ev.time` |
+| `selection_owner` | XFIXES SelectionNotify | a selection's ownership changed (`selection` here means what it does in [clipboard](clipboard.md), not the core conversion event `'selection'` reports): `ev.selection` (atom), `ev.owner` (window id, 0 when nobody), `ev.reason` (`'new-owner'`, `'destroyed'` or `'closed'`), `ev.timestamp`, `ev.selectionTimestamp`. [`app.clipboard.watch()`](clipboard.md) is the wrapped spelling |
+| `cursor` | XFIXES CursorNotify | the displayed cursor image changed — what a compositor redraws its cursor from: `ev.cursorSerial`, `ev.cursorName` (atom, 0 when unnamed), `ev.time` |
+
+Selecting for them still goes through the extension — `damage.Create(...)`,
+`shape.SelectInput(...)`, `fixes.SelectSelectionInput(...)`,
+`fixes.SelectCursorInput(...)` — because that is a request each protocol
+shapes differently. Delivery is ntk's: a compositor's repaint loop is one
+listener, with the same per-frame coalescing a window's own `expose` gets:
 
 ```js
-app.X.on('event', (ev) => {
-  if (ev.name === 'DamageNotify') repaint(ev.drawable, ev.area);
-  if (ev.name === 'ShapeNotify') reshape(ev.window);
+const damage = await app.damage();
+if (!damage) throw new Error('no DAMAGE on this server');
+
+const wnd = app.createWindow({ id: clientWid }); // adopt the composited window
+damage.Create(app.X.AllocID(), wnd.id, damage.ReportLevel.NonEmpty);
+wnd.on('damage', (ev) => {
+  // once per paced frame, however many rectangles the burst reported
+  for (const r of ev.rects) repaint(wnd, r);
 });
 ```
 
-Selecting for them still goes through the extension (`damage.Create(...)`,
-`shape.SelectInput(...)`), and there is no `wnd.on('damage')` — so a repaint
-driven this way sits outside ntk's own event and frame machinery.
+Events about drawables nothing wraps — an id never made into a `Window` or
+`Pixmap` — still arrive parsed on the node-x11 client, as every event does:
+`app.X.on('event', (ev) => ...)`, matching `ev.name`. A `Pixmap` joins the
+routed path the moment it gets a listener for one of these names, and
+leaves it in `destroy()`.
 
 ## Picture formats
 
