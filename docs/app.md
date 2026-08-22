@@ -25,7 +25,11 @@ const app2 = await createClient({ display: ':1' });
   - `onXError` — called with X protocol errors that no request callback
     claimed (races like a request landing after its window was destroyed).
     Defaults to a `console.warn`; without any listener node-x11's error
-    emit would throw inside its packet parser and wedge the connection.
+    emit would throw inside its packet parser and wedge the connection;
+  - `sharedGlyphs` — the cross-process shared glyph cache
+    ([shared-glyphs.md](shared-glyphs.md)): on by default, `false` turns it
+    off (as does `NTK_NO_SHARED_GLYPHS=1` in the environment), an object
+    (`{ budgetBytes }`) sets the directory-side budget.
 - **Requests are buffered by default**, so a frame is one socket write
   instead of one per drawing request (see
   [Frames, coalescing and slow connections](window.md#frames-coalescing-and-slow-connections)).
@@ -57,6 +61,9 @@ const app2 = await createClient({ display: ':1' });
 - `app.fonts` — lazy [FontManager](fonts.md): font matching/loading, shaping
 - `app.clipboard` — lazy [Clipboard](clipboard.md): selection/clipboard
   transfer (`write()`/`read()`/`clear()`), text or arbitrary targets
+- `app.sharedGlyphs` — the cross-process shared glyph cache client
+  ([shared-glyphs.md](shared-glyphs.md)); `null` when disabled via
+  `createClient({ sharedGlyphs: false })` or `NTK_NO_SHARED_GLYPHS`
 - `app.rasterizer` — the Rasterizer small fills, strokes and clip masks go
   through; writable, `null` sends every drawing to the server
   ([context-2d.md](context-2d.md#swapping-the-rasterizer))

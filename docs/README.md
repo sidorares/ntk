@@ -35,6 +35,9 @@ matching file here (see AGENTS.md).
 - [Fonts](fonts.md) — font lookup, loading, rasterization pipeline
 - [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout,
   wire-efficiency design, the vector (trapezoid) path for large/animated sizes
+- [Shared glyphs](shared-glyphs.md) — the display-wide glyph cache: every
+  ntk process on one X server shares rasterized glyphs through a
+  `_NTK_GLYPHD` directory (design, protocol, config, prior art)
 - [SVG widget](svg.md) — `SvgView`: static SVG rendering through the 2d
   context (shapes, gradients, transforms, `use`), plus `Path2D`/SVG path data
 - [OpenGL rendering context](context-opengl.md) — indirect GLX / OpenGL 1.4 API
