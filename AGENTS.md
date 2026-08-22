@@ -83,7 +83,15 @@ lib/region.js              XFIXES Region wrapper: the server-side rectangle
 lib/shadow.js              canvas shadows: the blur (sigma = shadowBlur/2,
                            run as two separable passes), the coverage
                            surfaces it needs and their per-connection cache
-lib/glyphset.js            XRender GlyphSet wrapper
+lib/glyphset.js            XRender GlyphSet wrapper (+ referenceTo: alias an
+                           existing set, possibly another client's)
+lib/sharedglyphs.js        cross-process shared glyph cache, client half:
+                           discovery via the _NTK_GLYPHD manager selection,
+                           the ensure/added property RPC, the XID-reuse
+                           fence, per-page bindings (docs/shared-glyphs.md)
+lib/glyphdirectory.js      its directory half: claims the selection, single
+                           writer of compact lids, presence bits, generations
+lib/glyphdwire.js          the _NTK_GLYPHD property payload codecs
 lib/rasterize.js           pure-JS coverage rasterizer (signed-area
                            accumulation): glyph outlines and path/stroke
                            geometry -> a8; the pluggable Rasterizer seam and

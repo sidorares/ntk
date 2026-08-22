@@ -90,6 +90,12 @@ For scale: a 60-character line of 16px Latin text is ~70 bytes of
 `CompositeGlyphs` after warm-up. The one-time glyph upload for a full
 Latin face at 16px is a few kilobytes.
 
+And that one-time upload is shared across *processes*: ntk apps on one
+display keep a common glyph cache through a `_NTK_GLYPHD` directory, so
+the n-th app drawing an already-shared face skips the rasterization and
+the upload entirely — see [shared-glyphs.md](shared-glyphs.md) for the
+design, the protocol and the `NTK_NO_SHARED_GLYPHS` kill switch.
+
 ## The vector (trapezoid) text path
 
 Bitmap glyph uploads scale with size² while outline complexity scales with
