@@ -35,7 +35,11 @@ in the meantime. For long-running apps, destroy what you create — or let
 `using` do it.
 
 Objects wrapping ids ntk did not create (`new Window(app, { id })`,
-`new Pixmap(app, { id })`) are not owned and are never freed by ntk.
+`new Pixmap(app, { id })`) are not owned and are never freed by ntk — unless
+adopted with ownership declared: `Pixmap.adopt(app, id)` owns by default,
+`new Pixmap(app, { id, own: true })` on request, and both then free the
+pixmap through `destroy()`, `using` and the GC fallback like any other
+(see [pixmap.md](pixmap.md#adoption)).
 
 Cleanup — explicit or GC-driven — becomes a silent no-op once the connection
 is closing or closed: the X server frees all of a client's resources on

@@ -413,8 +413,8 @@ test('a window whose depth is unknown names a wait that exists (issue #293)', as
   assert.throws(
     () => ctx.createPattern(wnd, 'repeat'),
     (err) => {
-      assert.match(err.message, /await wnd\.getGeometry\(\)/, 'the remedy that works on any window');
-      assert.match(err.message, /await wnd\.ready/, 'and the cheaper one for an adopted window');
+      assert.match(err.message, /await tile\.getGeometry\(\)/, 'the remedy that works on any tile');
+      assert.match(err.message, /await tile\.ready/, 'and the cheaper one for an adopted one');
       // both are real API, which is the whole point of the issue
       assert.equal(typeof wnd.getGeometry, 'function');
       assert.equal(typeof wnd.ready?.then, 'function');
