@@ -101,27 +101,103 @@ paced slower can never reach the rate its display offers.
   [smooth scrolling](window.md#wheel-and-smooth-scrolling) consults to find
   the axis behind a wheel delta, and it must not cost a round trip per
   event; pass `{ refresh: true }` to re-read it
-- `app.xinput() → Promise<ext|null>` — the raw node-x11 XInput extension
-  object, or `null` where there is none. `ext.xi2` is `null` on a server
-  that speaks XI1 only. The escape hatch for the XI2 requests ntk does not
-  wrap (grabs, device properties, barriers)
+- `app.composite()` / `app.damage()` / `app.xfixes()` / `app.shape()` /
+  `app.xinput() → Promise<ext|null>` — the raw node-x11 extension objects,
+  each `null` where the server has none. See [Extensions](#extensions)
 - `app.createRegion(rects) → Promise<Region>` — a server-side XFIXES region
   of the given rectangles (`{x, y, width, height}` or ntk's own
   `{x, y, w, h}`), empty by default. Regions are how X describes a
   non-rectangular area — expose damage, a window's SHAPE, what a compositor
   has left to paint — and `ctx.clipRegion(region)` clips a 2d context to
   one. See [Region clips](context-2d.md#region-clips)
-- `app.fixes() → Promise<ext>` — the raw node-x11 XFIXES extension object,
-  loaded once and shared. `createRegion` awaits this for you; call it
-  directly when you build regions through node-x11 yourself, or need the
-  XFIXES requests ntk does not wrap. Rejects with `code`
-  `'ERR_NTK_NO_XFIXES'` on a server that has no XFIXES at all
+- `app.fixes() → Promise<ext>` — the throwing spelling of `app.xfixes()`:
+  same query, same cache, but rejects with `code` `'ERR_NTK_NO_XFIXES'` on a
+  server that has no XFIXES at all. `createRegion` awaits this for you; call
+  it directly when you build regions through node-x11 yourself, or need the
+  XFIXES requests ntk does not wrap
 - `app.pictFormatFor(visual, { depth }) → Promise<formatId>` — the RENDER
   picture format a drawable on that visual is read and written through. See
   [Picture formats](#picture-formats)
 - `app.pictFormats() → Promise<{formats, byVisual}>` — the whole table: the
   server's formats list as objects, and a `Map` from visual id to format id
 - `app.close() → Promise` — flush pending requests, then close the connection
+
+## Extensions
+
+Everything past the core protocol is an extension, and which ones a server
+has is a property of that server rather than of its version. These accessors
+ask once per connection and hand back node-x11's extension object — or
+`null`, which is a real answer and usually the one worth branching on:
+
+```js
+const composite = await app.composite();
+if (!composite) throw new Error('no Composite: this server cannot be composited');
+
+const damage = await app.damage();
+const fixes = await app.xfixes();
+const shape = await app.shape();
+```
+
+- `app.composite() → Promise<ext|null>` — **Composite**: redirect a window's
+  own or its children's rendering into an offscreen pixmap and name that
+  pixmap (`RedirectWindow`, `RedirectSubwindows`, `NameWindowPixmap`), plus
+  the overlay window a compositing manager paints its output into
+  (`GetOverlayWindow` / `ReleaseOverlayWindow`)
+- `app.damage() → Promise<ext|null>` — **DAMAGE**: "this drawable changed"
+  as an event (`Create`, `Subtract`), so a repaint costs the region a client
+  drew into rather than the whole screen
+- `app.xfixes() → Promise<ext|null>` — **XFIXES**: server-side regions and
+  the algebra over them (`CreateRegion`, `CreateRegionFromWindow`,
+  `UnionRegion`, `SubtractRegion`, `FetchRegion`), which is how a damaged
+  area becomes a clip — `app.createRegion(rects)` builds one wrapped, and
+  `ctx.clipRegion(region)` narrows a 2d context to it, entirely server-side
+  ([Region clips](context-2d.md#region-clips)). node-x11 calls the module
+  `fixes`; the accessor is named after the extension. `app.fixes()` is the
+  same query through the same cache, rejecting instead of resolving `null`
+- `app.shape() → Promise<ext|null>` — **SHAPE**: non-rectangular bounding,
+  clip and input shapes (`Rectangles`, `Mask`, `Combine`, `GetRectangles`),
+  which is what has to be read back to paint a shaped client without
+  square corners
+- `app.xinput() → Promise<ext|null>` — **XInput**. `ext.xi2` is `null` on a
+  server that answers the extension query but speaks XI1 only, and every XI2
+  request needs it, so callers check both. The escape hatch for the XI2
+  requests ntk does not wrap (grabs, device properties, barriers)
+
+The requests themselves are node-x11's, unwrapped: this is a discovery and
+caching seam, not a second API over the extensions. See node-x11's
+`lib/ext/` for each one's signatures.
+
+The answer is cached per connection, the absent one included — node-x11 keeps
+an extension object it built but not a query that came back absent, so
+without this cache "does this server have Composite?" would cost a
+`QueryExtension` round trip every time it was asked.
+
+### Not every server has them
+
+The four above are what a **compositing manager** is built out of; the
+window-manager half of one is
+[Being the window manager](window.md#being-the-window-manager). They do not
+travel together, so ask rather than assume: XQuartz carries DAMAGE, XFIXES,
+SHAPE, RENDER and Present, but **no Composite at all**. `null` is therefore
+where a compositor stops — before it redirects anything — and where a plainer
+app that only wanted a region or a shape degrades to doing without.
+
+### Extension events
+
+Extension events do not currently reach the `Window` or `Pixmap` they name.
+They arrive parsed on the node-x11 client, where a compositor's repaint
+trigger reads them:
+
+```js
+app.X.on('event', (ev) => {
+  if (ev.name === 'DamageNotify') repaint(ev.drawable, ev.area);
+  if (ev.name === 'ShapeNotify') reshape(ev.window);
+});
+```
+
+Selecting for them still goes through the extension (`damage.Create(...)`,
+`shape.SelectInput(...)`), and there is no `wnd.on('damage')` — so a repaint
+driven this way sits outside ntk's own event and frame machinery.
 
 ## Picture formats
 

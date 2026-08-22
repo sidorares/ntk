@@ -13,7 +13,8 @@ matching file here (see AGENTS.md).
 ## Sections
 
 - [Getting started](getting-started.md) — installation, requirements, first window
-- [App](app.md) — connecting to the X server, the `App` factory object
+- [App](app.md) — connecting to the X server, the `App` factory object,
+  extension discovery (`composite`/`damage`/`xfixes`/`shape`/`xinput`)
 - [Window](window.md) — window creation, properties, methods, events,
   keyboard input, smooth scrolling (XI2), frame pacing / event coalescing,
   `requestAnimationFrame`
