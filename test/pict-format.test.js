@@ -424,3 +424,39 @@ test('the table arriving late rebinds a context that guessed', async () => {
   assert.equal(ctx.picture.format, 'r5g6b5', 'the answer arrives and the picture is rebuilt');
   wnd.destroy();
 });
+
+test("the reply's own screens section names the format, indexed visuals included", () => {
+  // node-x11 >= 4.0.0 decodes screens/depths/visuals, which is the server's
+  // own visual -> format table: it covers what masks cannot (an indexed
+  // visual) and it wins over mask matching where both have an answer.
+  const display = {
+    screen: [
+      {
+        depths: {
+          8: { 10: { vid: 10, red_mask: 0, green_mask: 0, blue_mask: 0 } },
+          24: { 34: visual(34, 0xff0000, 0xff00, 0xff) },
+          16: { 40: visual(40, 0xf800, 0x7e0, 0x1f) }
+        }
+      }
+    ]
+  };
+  const reply = {
+    screens: [
+      {
+        fallback: 41,
+        depths: [
+          { depth: 8, visuals: [{ visual: 10, format: 21 }] },
+          { depth: 24, visuals: [{ visual: 34, format: 41 }] }
+        ]
+      }
+    ]
+  };
+  assert.deepEqual(
+    [...visualFormats(display, FORMATS, reply)],
+    [
+      [10, 21], // indexed — only the server can name this one
+      [34, 41],
+      [40, 53] // left out of the reply, so matched on masks
+    ]
+  );
+});
