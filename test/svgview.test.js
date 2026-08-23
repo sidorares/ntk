@@ -362,3 +362,79 @@ test('paint scan: re-adopting a document re-scans it', () => {
   assert.equal(view.paintKind, 'multi');
   assert.equal(view.soloPaint, null);
 });
+
+// --- presentation attributes on the root <svg> (issue #306) ----------------
+
+// how lucide, feather, heroicons, tabler and Material Symbols all ship:
+// the paint lives on the root, and the shapes name nothing at all
+const LUCIDE_X =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+
+test('root <svg> paint reaches the shapes: an outline icon strokes, not fills', () => {
+  const view = new SvgView(null).setSvg(LUCIDE_X);
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 24, 24, { color: '#c8d3e0' });
+
+  // fill="none" on the root must reach both paths, or a closed outline icon
+  // renders as a black silhouette
+  assert.equal(of(ctx.calls, 'fill').length, 0);
+  const strokes = of(ctx.calls, 'stroke');
+  assert.equal(strokes.length, 2);
+  for (const s of strokes) {
+    assert.equal(s[2], '#c8d3e0'); // stroke="currentColor" from the root
+    assert.equal(s[3], 2); // stroke-width="2" from the root
+  }
+});
+
+test('root <svg> presentation attributes still lose to a child that names its own', () => {
+  const view = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 20 10" fill="#f00" stroke-width="4">' +
+      '<rect width="4" height="4"/>' +
+      '<rect x="10" width="4" height="4" fill="#0f0" stroke="#00f"/></svg>'
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 20, 10);
+  const fills = of(ctx.calls, 'fill');
+  assert.equal(fills[0][3], '#f00'); // inherited from the root
+  assert.equal(fills[1][3], '#0f0'); // own attribute wins
+  assert.equal(of(ctx.calls, 'stroke')[0][3], 4); // root stroke-width inherits
+});
+
+test('inline style="" on the root applies like it does anywhere else', () => {
+  const view = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10" fill="#f00" style="fill: #0f0">' +
+      '<rect width="10" height="10"/></svg>'
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 10, 10);
+  assert.equal(of(ctx.calls, 'fill')[0][3], '#0f0');
+});
+
+test('paint scan agrees with what the root actually paints', () => {
+  const icon = new SvgView(null).setSvg(LUCIDE_X);
+  assert.equal(icon.paintKind, 'mono');
+  assert.equal(icon.soloPaint, 'currentColor');
+
+  const red = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10" fill="red"><rect width="10" height="10"/></svg>'
+  );
+  assert.equal(red.paintKind, 'mono');
+  assert.equal(red.soloPaint, 'red');
+
+  // a child overriding the root's paint is still two distinct colours
+  const both = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 20 10" fill="red"><rect width="4" height="4"/>' +
+      '<rect x="10" width="4" height="4" fill="blue"/></svg>'
+  );
+  assert.equal(both.paintKind, 'multi');
+  assert.equal(both.soloPaint, null);
+
+  // fill="none" on the root leaves only the stroke to count
+  const strokeOnly = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 10 10" fill="none" stroke="#333"><rect width="10" height="10"/></svg>'
+  );
+  assert.equal(strokeOnly.paintKind, 'mono');
+  assert.equal(strokeOnly.soloPaint, '#333');
+});
