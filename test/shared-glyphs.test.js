@@ -109,7 +109,8 @@ function makeWorld() {
           ...options
         }),
         5000,
-        'connecting an app to the js server'
+        'connecting an app to the js server',
+        (late) => late.close()
       );
       app._testErrors = errors;
       this.apps.push(app);
@@ -427,7 +428,12 @@ test('two real-server apps share glyphs (smoke)', async (t) => {
   }
   let app1;
   try {
-    app1 = await withTimeout(createClient({ fontSource: makeFontSource() }), 5000, 'connecting to X server');
+    app1 = await withTimeout(
+      createClient({ fontSource: makeFontSource() }),
+      5000,
+      'connecting to X server',
+      (late) => late.close()
+    );
   } catch (err) {
     t.skip(`cannot connect to X server: ${err.message}`);
     return;
@@ -439,7 +445,12 @@ test('two real-server apps share glyphs (smoke)', async (t) => {
     const img1 = await drawText(app1, 'Hello shared');
     assert.ok(inkOf(img1) > 40, 'first app inked');
 
-    const app2 = await withTimeout(createClient({ fontSource: makeFontSource() }), 5000, 'connecting to X server');
+    const app2 = await withTimeout(
+      createClient({ fontSource: makeFontSource() }),
+      5000,
+      'connecting to X server',
+      (late) => late.close()
+    );
     apps.push(app2);
     const font2 = app2.fonts.match('sans-serif');
     const uploads = spyRender(app2, 'AddGlyphs');

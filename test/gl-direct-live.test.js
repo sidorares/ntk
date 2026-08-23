@@ -85,7 +85,12 @@ before(async () => {
   }
   keepalive = setInterval(() => {}, 1000);
   try {
-    app = await withTimeout(createClient({ glPolicy: 'auto' }), 5000, 'connecting to X server');
+    app = await withTimeout(
+      createClient({ glPolicy: 'auto' }),
+      5000,
+      'connecting to X server',
+      (late) => late.close()
+    );
   } catch (err) {
     skip = `cannot connect to X server: ${err.message}`;
     return;
