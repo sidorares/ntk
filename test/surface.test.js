@@ -219,7 +219,9 @@ describe('clipping a surface composite', () => {
     });
     ctx.restore();
 
-    assert.equal(counts.SetPictureClipRectangles, 2, 'set and reset around the composite');
+    // the reset is owed rather than stamped, and nothing has read the slot
+    // since (#308)
+    assert.equal(counts.SetPictureClipRectangles, 1, 'one stamp for the composite');
     assert.equal(counts.Composite, 1, 'one composite, with no mask to intersect first');
 
     const px = await readPixels(ctx);
