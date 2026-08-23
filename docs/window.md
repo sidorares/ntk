@@ -1196,6 +1196,13 @@ constant) is accepted too. Unknown names throw synchronously, listing the
 valid names. Created cursors are server-side resources, cached per
 connection on `app.cursors` and freed on `app.close()`.
 
+`setCursor` remembers what it last set (and what `createWindow({ cursor })`
+started the window with), so setting the cursor the window already has sends
+nothing — a hover handler that calls `setCursor` on every motion event costs
+one request per boundary crossing, not one per frame. Aliases resolve first,
+so `'pointer'` after `'hand'` is the same cursor and is free too. The name is
+still validated on every call.
+
 **`'none'` and `null` are not the same thing**, and the difference is the
 one people get wrong. `setCursor('none')` hides the pointer.
 `setCursor(null)` sets X cursor `None`, which means *inherit the parent's

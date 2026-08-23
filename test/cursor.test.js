@@ -163,3 +163,93 @@ test('app.close() frees the cached cursors and the cursor font', async () => {
   assert.equal(server.resources.get(fontId), undefined, 'font closed');
   await app2.close();
 });
+
+// The cost of a callback on a *void* request: node-x11 guarantees it fires
+// (node-x11 issue #85), and where nothing else in the tick expects a reply it
+// keeps that promise by injecting a GetInputFocus round trip. A callback that
+// ignores its argument therefore buys a round trip per cursor change and
+// nothing else — an X error reaches client.emit('error') either way (#309).
+const countInjectedSyncs = async (fn) => {
+  const original = app.X.GetInputFocus;
+  let injected = 0;
+  app.X.GetInputFocus = function (...args) {
+    injected++;
+    return original.apply(this, args);
+  };
+  try {
+    fn();
+    // node-x11 schedules the void sync on setImmediate; give it two turns
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    app.X.GetInputFocus = original;
+  }
+  return injected;
+};
+
+test('setCursor does not inject a void-sync round trip', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  const cid = app.cursors.get('wait'); // create it now, outside the measurement
+  await roundtrip(app);
+
+  const injected = await countInjectedSyncs(() => wnd.setCursor('wait'));
+  assert.equal(injected, 0, 'no GetInputFocus rides along with the attribute change');
+
+  await roundtrip(app);
+  assert.equal(server.resources.get(wnd.id).cursor, cid, 'and the cursor still got set');
+  wnd.destroy();
+});
+
+test('setting the cursor a window already has sends nothing', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  wnd.setCursor('pointer');
+  await roundtrip(app);
+
+  const before = app.X.seq_num;
+  wnd.setCursor('pointer');
+  wnd.setCursor('hand'); // an alias: the same cursor id
+  assert.equal(app.X.seq_num, before, 'no requests for a cursor that is already current');
+
+  wnd.setCursor(null);
+  assert.equal(app.X.seq_num, before + 1, 'a different cursor still goes out');
+  await roundtrip(app);
+  assert.equal(server.resources.get(wnd.id).cursor, 0);
+  wnd.destroy();
+});
+
+test('a window created with a cursor knows it, and re-setting it is free', async () => {
+  const cid = app.cursors.get('crosshair');
+  await roundtrip(app);
+  const wnd = app.createWindow({ width: 40, height: 30, cursor: cid });
+  await roundtrip(app);
+  assert.equal(server.resources.get(wnd.id).cursor, cid, 'set at creation time');
+
+  const before = app.X.seq_num;
+  wnd.setCursor('crosshair');
+  assert.equal(app.X.seq_num, before, 'the creation attribute seeded the memo');
+  wnd.destroy();
+});
+
+test('an X error from the callback-less request still reaches onXError', async () => {
+  const [serverEnd, clientEnd] = createStreamPair();
+  server.addClientStream(serverEnd);
+  const errors = [];
+  const app2 = await createClient({
+    stream: clientEnd,
+    fontSource: new StaticFontSource(),
+    onXError: (err) => errors.push(err)
+  });
+  const wnd = app2.createWindow({ width: 40, height: 30 });
+  await roundtrip(app2);
+
+  // the window is gone, so the ChangeWindowAttributes that follows is a
+  // BadWindow — with no callback to route it, node-x11 emits it on the client
+  // and App's listener hands it to onXError
+  wnd.destroy();
+  wnd.setCursor('text');
+  await roundtrip(app2);
+
+  assert.equal(errors.length, 1, 'exactly one error surfaced');
+  assert.equal(errors[0].error, 3, 'BadWindow');
+  await app2.close();
+});
