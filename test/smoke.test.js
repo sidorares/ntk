@@ -314,6 +314,37 @@ test('backing store: opt out keeps drawing direct', async (t) => {
   wnd.destroy();
 });
 
+test('backing store: an adopted window opts in and is drawn into (#294)', async (t) => {
+  if (skip) return t.skip(skip);
+  assertConnected();
+  // A bare id and nothing else, which is what GetOverlayWindow and an
+  // embedding host's handoff give you: dropping the wrapper leaves the X
+  // window standing and takes this connection back to knowing only its id,
+  // so adopting it runs the real path — GetGeometry, GetWindowAttributes,
+  // and a backing pixmap that cannot be built until they answer.
+  const created = app.createWindow({ width: 64, height: 64 });
+  const id = created.id;
+  created._forget();
+
+  const adopted = app.createWindow({ id, backingStore: true, present: true });
+  assert.notEqual(adopted, created, 'a fresh wrapper, adopted rather than created');
+  assert.equal(adopted._backing, null, 'nothing to build a pixmap from yet');
+
+  await withTimeout(adopted.ready, 5000, 'adopted geometry');
+  const ctx = adopted.getContext('2d');
+
+  assert.ok(adopted._backing, 'the ownership claim gets it a backing pixmap');
+  assert.equal(ctx._target, adopted._backing, 'and the context draws into it');
+  assert.equal(adopted._backing.depth, adopted.depth, "at the window's own depth");
+
+  ctx.fillStyle = 'rgb(0, 128, 255)';
+  ctx.fillRect(0, 0, 64, 64);
+  const image = await ctx.getImageData(0, 0, 64, 64);
+  assert.deepEqual([image.data[0], image.data[1], image.data[2]], [0, 128, 255]);
+
+  adopted.destroy();
+});
+
 test('vector text: sizes above vectorFrom render via trapezoids', async (t) => {
   if (skip) return t.skip(skip);
   assertConnected();

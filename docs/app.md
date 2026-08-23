@@ -149,7 +149,10 @@ const shape = await app.shape();
   own or its children's rendering into an offscreen pixmap and name that
   pixmap (`RedirectWindow`, `RedirectSubwindows`, `NameWindowPixmap`), plus
   the overlay window a compositing manager paints its output into
-  (`GetOverlayWindow` / `ReleaseOverlayWindow`)
+  (`GetOverlayWindow` / `ReleaseOverlayWindow`). The overlay comes back as a
+  bare id; `createWindow({ id, backingStore: true, present: true })` wraps it
+  as a window ntk paints itself, double buffer and all — see
+  [Painting an adopted window](window.md#painting-an-adopted-window)
 - `app.damage() → Promise<ext|null>` — **DAMAGE**: "this drawable changed"
   as an event (`Create`, `Subtract`), so a repaint costs the region a client
   drew into rather than the whole screen
