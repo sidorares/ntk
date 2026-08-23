@@ -67,9 +67,9 @@ Elements:
 
 - shapes: `path` (full path-data grammar, arcs included), `rect`
   (+`rx`/`ry`), `circle`, `ellipse`, `line`, `polyline`, `polygon`
-- structure: `svg` (`viewBox`, `width`/`height`), `g`, `defs`, `use`
-  (`href`/`xlink:href` to a local `#id`, `x`/`y` offset, `symbol` targets),
-  `a` (rendered, not clickable)
+- structure: `svg` (`viewBox`, `width`/`height`, presentation attributes),
+  `g`, `defs`, `use` (`href`/`xlink:href` to a local `#id`, `x`/`y` offset,
+  `symbol` targets), `a` (rendered, not clickable)
 - paint servers: `linearGradient`, `radialGradient` with `stop`
   (`offset`, `stop-color`, `stop-opacity`), `gradientUnits` of
   `objectBoundingBox` (default) or `userSpaceOnUse`
@@ -85,6 +85,21 @@ Presentation attributes (also inside inline `style="…"`, which wins):
 - `transform` — `matrix`, `translate`, `scale`, `rotate` (incl. the
   3-argument center form), `skewX`, `skewY`, in any list combination
 - `color` (for `currentColor`)
+
+These apply on the root `<svg>` too, and inherit from there like they do
+from a `<g>` — which is how every mainstream icon set is written:
+
+```xml
+<!-- lucide, feather, heroicons, tabler, Material Symbols all look like this -->
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+</svg>
+```
+
+Nothing on the shapes names a paint, so dropping the root's attributes would
+leave them at SVG's initial values — `fill: #000`, `stroke: none` — and an
+outline icon would fill black, or paint nothing at all if its strokes enclose
+no area.
 
 Not supported (skipped silently): CSS stylesheets/`<style>`, `clipPath`,
 `mask`, `filter`, `pattern`, `marker`, animation/SMIL, `foreignObject`,

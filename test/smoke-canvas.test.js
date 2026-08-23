@@ -244,6 +244,29 @@ test('SvgView draws a document into any 2d context', async (t) => {
   pixmap.destroy();
 });
 
+test('SvgView: paint declared on the root <svg> reaches the shapes', async (t) => {
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx } = freshCtx();
+
+  // how lucide/feather/heroicons/tabler ship an outline icon: the shape names
+  // no paint at all, it is all on the root element (issue #306)
+  const view = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<circle cx="12" cy="12" r="9"/></svg>'
+  );
+  assert.equal(view.paintKind, 'mono');
+  assert.equal(view.soloPaint, 'currentColor', 'the scan sees the root defer its colour');
+  view.draw(ctx, 0, 0, 64, 64, { color: '#ff0000' });
+
+  const image = await readPixels(ctx, 64, 64);
+  // fill="none" from the root: the disc is a ring, not a black silhouette
+  assert.deepEqual(px(image, 64, 32, 32), [255, 255, 255], 'circle interior is not filled');
+  // stroke="currentColor" from the root, r=9/24 scaled to 64 -> ring top at y=8
+  assert.deepEqual(px(image, 64, 32, 8), [255, 0, 0], 'ring drawn in the caller colour');
+  assert.deepEqual(px(image, 64, 8, 32), [255, 0, 0], 'ring left side too');
+  pixmap.destroy();
+});
+
 test('createPattern: a tile repeats across a fill, on a real server', async (t) => {
   if (skip) return t.skip(skip);
   const { pixmap, ctx } = freshCtx();
