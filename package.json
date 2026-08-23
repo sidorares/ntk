@@ -44,7 +44,7 @@
     "linebreak": "^1.1.0",
     "parse-color": "^1.0.0",
     "pngjs": "^7.0.0",
-    "x11": "^3.9.2"
+    "x11": "^4.0.1"
   },
   "optionalDependencies": {
     "x11-dri": ">=0.2.0 <1"

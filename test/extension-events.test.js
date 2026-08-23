@@ -132,15 +132,16 @@ test('ShapeNotify and the XFIXES notifies route by their window field', async ()
   assert.equal(cursor.time, 101, "the timestamp under the name ntk's other events use");
 });
 
-test('a parsed event with a name but no type still routes', async () => {
-  // node-x11's DamageNotify parser (x11 <= 3.9) sets `name` but not `type`,
-  // unlike every other extension parser — the wire name is the key then
+test('the type code is what routes, not the name the parser wrote', async () => {
+  // every extension parser sets `type` since x11 4.0.0 (node-x11#284), so the
+  // server-assigned code is the whole key: a name alone reaches nothing, and
+  // a type alone is enough
   const { app, X } = makeApp();
   const wnd = consumer();
   X.event_consumers[5001] = wnd;
 
   await app.damage();
-  X.emit('event', {
+  const damage = {
     name: 'DamageNotify',
     level: 0,
     drawable: 5001,
@@ -148,7 +149,11 @@ test('a parsed event with a name but no type still routes', async () => {
     time: 0,
     area: { x: 1, y: 1, w: 2, h: 2 },
     geometry: { x: 0, y: 0, w: 9, h: 9 }
-  });
+  };
+  X.emit('event', damage);
+  assert.equal(wnd.delivered.length, 0, 'a name is not a route');
+
+  X.emit('event', { ...damage, name: undefined, type: EXTS.damage.firstEvent });
   assert.equal(wnd.delivered.length, 1);
   assert.equal(wnd.delivered[0].name, 'damage');
 });
