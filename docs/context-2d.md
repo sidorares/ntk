@@ -58,10 +58,20 @@ ctx.fillRect(0, 0, 100, 100);
 
 Everything that puts ink on the surface goes through the clip: fills,
 strokes, images, text (`fillText`, `TextLayout.draw`) and the vector shapes
-`SvgView` draws. Rectangular clips take a server-side fast path
-(`SetPictureClipRectangles`); non-rectangular ones build an a8 mask; and an
-XFIXES region is a third kind the server applies itself — see
-[Region clips](#region-clips).
+`SvgView` draws. A **rectangular** clip stack never becomes a mask. It is
+either a rectangle handed to the server around the drawing
+(`SetPictureClipRectangles`) or — where the drawing is a single composite of
+a box, as `fillRect` and `drawImage` are — the same rectangle intersected
+into that box, which costs no requests and no pixels at all. That is what
+makes a renderer's `save()`/`clip(damage)`/…/`restore()` frame cheap.
+Non-rectangular clips build an a8 mask, and an XFIXES region is a third kind
+the server applies itself — see [Region clips](#region-clips).
+
+The exception is the composite ops that paint where the clip is *not*:
+`copy`, `source-in`, `destination-in`, `source-out` and `destination-atop`
+clear the rest of the drawing's box rather than leaving it alone. Under a
+clip they go through the mask, and the pixels inside the drawing but outside
+the clip come out cleared rather than kept.
 
 ## Color
 
@@ -123,7 +133,8 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
 ## Rectangles and images
 
 - `fillRect(x, y, w, h)` — respects clip, transform, `globalAlpha` and the
-  composite op
+  composite op. Under an identity transform and a rectangular clip it is one
+  `Render.Composite` over the intersection and nothing else
 - `fillRects(rects)` — batched `fillRect`: `rects` is an array of
   `[x, y, w, h]` quadruples or one flat `[x0, y0, w0, h0, x1, ...]` array;
   rectangles with non-positive width or height are skipped. Semantically it
@@ -153,8 +164,8 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   surfaces that paint in the current `fillStyle`), anything else exposing
   `width`/`height`/`picture(app)`, another ntk 2d context (server-side
   composite of the whole drawable) or a node-canvas-like object exposing
-  `image.context.getImageData()` (pixels are uploaded). Under a rectangular
-  clip the clip goes to the server directly, rather than through a
+  `image.context.getImageData()` (pixels are uploaded). A rectangular clip
+  is applied by the server or by narrowing the composite, never through a
   full-surface mask
 - `ctx.destroy()` / `Symbol.dispose` — release the context's server-side
   resources: its GCs, its Picture and its masks. Solid-colour sources are
