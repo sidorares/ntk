@@ -22,11 +22,28 @@
  *
  * Holding the loop costs nothing here because the timer is cleared as soon as
  * the promise settles, which is what `unref` was reaching for.
+ *
+ * A timeout ends *this* wait, never the work behind it: a promise cannot be
+ * cancelled, so whatever it was making still arrives, unowned and unwatched.
+ * Where that is a live X connection the socket refs the event loop forever —
+ * every test skips, the file reports, and then `node --test` simply never
+ * exits (seen on #316: a 20-minute stall on two matrix legs, on its way to
+ * the six-hour job limit). Pass `dispose` for anything holding a resource and
+ * the late arrival is handed to it instead of being dropped on the floor:
+ *
+ *     withTimeout(createClient(), 5000, 'connecting', (app) => app.close())
+ *
+ * `dispose` runs at most once, only on the timeout path — a promise that
+ * rejects on its own left nothing to dispose of — and anything it throws is
+ * swallowed, since by then nobody is waiting to hear it.
  */
-export function withTimeout(promise, ms, what) {
+export function withTimeout(promise, ms, what, dispose) {
   let timer;
   const limit = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms: ${what}`)), ms);
+    timer = setTimeout(() => {
+      if (dispose) Promise.resolve(promise).then(dispose).catch(() => {});
+      reject(new Error(`timeout after ${ms}ms: ${what}`));
+    }, ms);
   });
   return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
 }

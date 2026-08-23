@@ -31,7 +31,12 @@ before(async () => {
     const fontSource = new StaticFontSource();
     fontSource.add(readFileSync(VF), { family: 'Test VF' });
     fontSource.alias('sans-serif', 'test vf');
-    app = await withTimeout(createClient({ fontSource }), 5000, 'connecting to X server');
+    app = await withTimeout(
+      createClient({ fontSource }),
+      5000,
+      'connecting to X server',
+      (late) => late.close()
+    );
     win = app.createWindow({ width: 400, height: 120 });
     ctx = win.getContext('2d');
   } catch (err) {

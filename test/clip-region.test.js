@@ -37,7 +37,12 @@ before(async () => {
   source.add(readFileSync(join(fontDir, 'KaTeX_Main-Regular.ttf')), { family: 'Test Main' });
   source.alias('sans-serif', 'Test Main');
   try {
-    app = await withTimeout(createClient({ fontSource: source }), 5000, 'connecting to X server');
+    app = await withTimeout(
+      createClient({ fontSource: source }),
+      5000,
+      'connecting to X server',
+      (late) => late.close()
+    );
   } catch (err) {
     skip = `cannot connect to X server: ${err.message}`;
     return;
@@ -367,7 +372,8 @@ test('clipRegion before XFIXES is loaded says what to do about it', async (t) =>
   const other = await withTimeout(
     createClient({ fontSource: new StaticFontSource() }),
     5000,
-    'second connection'
+    'second connection',
+    (late) => late.close()
   );
   try {
     const pixmap = other.createPixmap({ width: 32, height: 32, depth: 24 });

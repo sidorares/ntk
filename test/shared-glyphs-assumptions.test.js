@@ -34,12 +34,23 @@ function connect(opts) {
       const X = display.client;
       const errors = [];
       X.on('error', (e) => errors.push(e));
+      // the connection is already up by the time these can fail; rejecting
+      // hands the caller an error but no handle, so drop the socket here or
+      // it refs the event loop for the rest of the process
+      const failed = (cause) => {
+        try {
+          X.terminate();
+        } catch {
+          // already gone
+        }
+        reject(cause);
+      };
       X.require('render', (rerr, Render) => {
-        if (rerr) return reject(rerr);
+        if (rerr) return failed(rerr);
         // QueryVersion also flushes the ext's QueryPictFormat, so a8/rgb24
         // are populated once this roundtrip completes
         Render.QueryVersion(0, 11, (verr) => {
-          if (verr) return reject(verr);
+          if (verr) return failed(verr);
           resolve({ display, X, Render, errors });
         });
       });
@@ -146,11 +157,20 @@ async function waitClosedown(c, canvas, deadGsid, what) {
 
 /** the whole scenario, over any pair-of-connections factory */
 async function runScenarios(t, makeConn) {
-  const A = await makeConn();
-  const B = await makeConn();
-  const C = await makeConn();
-  const open = [A, B, C];
+  // every connection joins `open` the moment it exists: a factory that fails
+  // (or times out) on the second or third call would otherwise strand the
+  // ones already made, and a live X socket refs the event loop for as long as
+  // the process lives — `node --test` reports and then never exits
+  const open = [];
+  const conn = async () => {
+    const c = await makeConn();
+    open.push(c);
+    return c;
+  };
   try {
+    const A = await conn();
+    const B = await conn();
+    const C = await conn();
     // A creates the set and uploads two glyphs
     const gsA = A.X.AllocID();
     A.Render.CreateGlyphSet(gsA, A.Render.a8);
@@ -221,7 +241,12 @@ test('shared glyphsets across connections (pure-JS server)', async (t) => {
   await runScenarios(t, () => {
     const [serverEnd, clientEnd] = xserver.createStreamPair();
     server.addClientStream(serverEnd);
-    return withTimeout(connect({ stream: clientEnd }), 5000, 'connecting to js server');
+    return withTimeout(
+      connect({ stream: clientEnd }),
+      5000,
+      'connecting to js server',
+      (late) => late.X.terminate()
+    );
   });
 });
 
@@ -232,7 +257,7 @@ test('shared glyphsets across connections (real X server)', async (t) => {
   }
   let first;
   try {
-    first = await withTimeout(connect({}), 5000, 'connecting to X server');
+    first = await withTimeout(connect({}), 5000, 'connecting to X server', (late) => late.X.terminate());
   } catch (err) {
     t.skip(`cannot connect to X server: ${err.message}`);
     return;
@@ -243,6 +268,6 @@ test('shared glyphsets across connections (real X server)', async (t) => {
       used = true;
       return first;
     }
-    return withTimeout(connect({}), 5000, 'connecting to X server');
+    return withTimeout(connect({}), 5000, 'connecting to X server', (late) => late.X.terminate());
   });
 });
