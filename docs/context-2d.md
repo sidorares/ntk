@@ -65,7 +65,10 @@ a box, as `fillRect` and `drawImage` are — the same rectangle intersected
 into that box, which costs no requests and no pixels at all. That is what
 makes a renderer's `save()`/`clip(damage)`/…/`restore()` frame cheap.
 Non-rectangular clips build an a8 mask, and an XFIXES region is a third kind
-the server applies itself — see [Region clips](#region-clips).
+the server applies itself — see [Region clips](#region-clips). Where a mask
+is genuinely needed, the work it costs is bounded to the box the drawing
+composites, not the surface: a translucent fill inside a rounded-corner clip
+pays for its own rectangle.
 
 The exception is the composite ops that paint where the clip is *not*:
 `copy`, `source-in`, `destination-in`, `source-out` and `destination-atop`
