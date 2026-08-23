@@ -1,5 +1,34 @@
 # Changelog
 
+## [8.3.0](https://github.com/sidorares/ntk/compare/v8.2.0...v8.3.0) (2026-08-23)
+
+
+### Features
+
+* **2d:** clip to an XFIXES region, and put the picture clip back ([#296](https://github.com/sidorares/ntk/issues/296)) ([a8bad58](https://github.com/sidorares/ntk/commit/a8bad5873cb3cbd2ce9ade3be0488bc27660bb48))
+* **app:** the four extensions a compositor needs, asked once per connection ([#301](https://github.com/sidorares/ntk/issues/301)) ([7e7689e](https://github.com/sidorares/ntk/commit/7e7689eb06013e92e1a01fe1832f0747d5e426a3)), closes [#289](https://github.com/sidorares/ntk/issues/289)
+* **deps:** x11 4.0.1, and the visual to format table it decodes ([#320](https://github.com/sidorares/ntk/issues/320)) ([4e8999a](https://github.com/sidorares/ntk/commit/4e8999af2811e1bec7b5b0c94cb546ed122775fa))
+* **events:** deliver extension events to the window or pixmap they name ([#305](https://github.com/sidorares/ntk/issues/305)) ([64878b7](https://github.com/sidorares/ntk/commit/64878b7f406c4679ecfedd56f8eb9a2be5ebf45a)), closes [#290](https://github.com/sidorares/ntk/issues/290)
+* **pixmap:** adopt an existing id with real geometry, depth and ownership ([#304](https://github.com/sidorares/ntk/issues/304)) ([2344f3d](https://github.com/sidorares/ntk/commit/2344f3d1a68fe6c1565e2fa1507d733d2caa74ca))
+* **render:** pick a picture format from the drawable's visual, not its depth ([#300](https://github.com/sidorares/ntk/issues/300)) ([caa7ab0](https://github.com/sidorares/ntk/commit/caa7ab06919e4de6e6d85945cb6291d360863a45))
+* **text:** share glyphs across processes via a _NTK_GLYPHD directory ([#302](https://github.com/sidorares/ntk/issues/302)) ([49a85ee](https://github.com/sidorares/ntk/commit/49a85ee830b956f88651c098c70f78d6bd80c9c7))
+* **window:** a public wait for an adopted window's geometry ([#299](https://github.com/sidorares/ntk/issues/299)) ([c691a76](https://github.com/sidorares/ntk/commit/c691a765737a1cde715327ad6ac06b84e7cdeca6))
+* **window:** let an adopted window opt into a backing store and Present ([#316](https://github.com/sidorares/ntk/issues/316)) ([9710685](https://github.com/sidorares/ntk/commit/9710685390602a31dcdf69046fcf18649624fa32))
+
+
+### Bug Fixes
+
+* **svg:** apply presentation attributes on the root &lt;svg&gt; ([#310](https://github.com/sidorares/ntk/issues/310)) ([201c08a](https://github.com/sidorares/ntk/commit/201c08a1f807040be722f119fc3c666528c2a019))
+* **test:** dispose of the connection a timed-out wait still receives ([#317](https://github.com/sidorares/ntk/issues/317)) ([97df026](https://github.com/sidorares/ntk/commit/97df026604070212504e1f7169b4fb084c165a4e))
+
+
+### Performance Improvements
+
+* **2d:** apply a rectangular clip by shrinking the composite box ([#312](https://github.com/sidorares/ntk/issues/312)) ([367b778](https://github.com/sidorares/ntk/commit/367b7783ce127b1c61897ecbf3c72657fbefe811))
+* **2d:** bound the composite-mask fallback to the drawing's own box ([#315](https://github.com/sidorares/ntk/issues/315)) ([2b94c43](https://github.com/sidorares/ntk/commit/2b94c43803681e46e049a2f2466942cc71ee4f46))
+* **2d:** the picture clip is context state, not a stamp per drawing ([#314](https://github.com/sidorares/ntk/issues/314)) ([f3b7a4b](https://github.com/sidorares/ntk/commit/f3b7a4bdc9befbf1690ed9d24572f4e5d163b2ef))
+* **window:** drop no-op callbacks on void requests, memo the cursor ([#311](https://github.com/sidorares/ntk/issues/311)) ([c9a58e0](https://github.com/sidorares/ntk/commit/c9a58e0fff246029e3fb168e39a807bbbddc434b))
+
 ## [8.2.0](https://github.com/sidorares/ntk/compare/v8.1.1...v8.2.0) (2026-08-18)
 
 
