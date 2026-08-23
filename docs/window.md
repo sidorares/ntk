@@ -29,7 +29,9 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   window's geometry, and only inside `hints`/`sizeHints` do they mean the
   `WM_NORMAL_HINTS` fields of the same name
 - `pid: false` — do not declare the process and host (below)
-- `backingStore: false` — opt out of double buffering (below)
+- `backingStore: false` — opt out of double buffering (below); `backingStore:
+  true` opts an *adopted* window back **in** (see
+  [Painting an adopted window](#painting-an-adopted-window))
 - X window attributes, forwarded into the `CreateWindow` value list under
   their node-x11 names: `backgroundPixmap`, `backgroundPixel`,
   `borderPixmap`, `borderPixel`, `bitGravity`, `winGravity`,
@@ -61,7 +63,10 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   fence, and no waiting for the display either
 - `present: false` — blit with `CopyArea` instead of the Present extension,
   and keep the frame clock off the display
-  (see [Blitting with Present](#blitting-with-present))
+  (see [Blitting with Present](#blitting-with-present)). `present: true` sets
+  Present up before the first paint, and on an *adopted* window it is also an
+  ownership claim (see
+  [Painting an adopted window](#painting-an-adopted-window))
 - `frameClock: 'fence'` — keep the round-trip clock on a window that presents
   (see [What ends a frame](#what-ends-a-frame))
 - `frameInterval: ms` — minimum time between paced frames, and the minimum
@@ -137,6 +142,57 @@ visual, so `wnd.visualId` is right from the start.
 - `wnd.getAttributes()` also writes the visual back to `visualId`, so a
   window manager that asks for `mapState` has paid for it already.
 
+### Painting an adopted window
+
+By default ntk touches an adopted window's pixels as little as it can: no
+[backing store](#double-buffering-backing-store), no
+[Present](#blitting-with-present), and `setBackgroundPixel` changes only what
+a backing store would clear to, not the window attribute. That is the safe
+reading of `{ id }` — the window belongs to another client, which is painting
+it.
+
+It is not always true. **Adopting a window is not the same as another client
+owning its pixels**, and two cases are ours completely:
+
+- the **Composite overlay window**, which `GetOverlayWindow` hands back as a
+  bare id (see [Extensions](app.md#extensions)). The compositor draws the
+  whole screen into it and is the only client that ever will — it is exactly
+  the window that most wants an unflickering double buffer and a
+  vblank-paced blit
+- a window handed over by an **embedding host** — XEmbed's plug side
+  ([xembed.md](xembed.md)), or an `--wid` style handoff — where the client is
+  the sole painter
+
+Say so, and such a window behaves like any other window ntk owns:
+
+```js
+const composite = await app.composite();
+const root = app.display.screen[0].root;
+const overlayId = await new Promise((resolve, reject) => {
+  composite.GetOverlayWindow(root, (err, wid) => (err ? reject(err) : resolve(wid)));
+});
+
+const overlay = app.createWindow({ id: overlayId, backingStore: true, present: true });
+await overlay.ready;                     // its geometry, depth and visual
+const ctx = overlay.getContext('2d');    // draws into the backing pixmap
+```
+
+- `backingStore: true` and `present: true` are each an ownership claim on
+  their own, and either one enables both halves — presenting needs a pixmap
+  to present from. `present: false` still opts out of Present alone, and
+  `backingStore: false` still opts out of everything.
+- **The buffer waits for `ready`.** A backing pixmap needs a width, a height,
+  a depth and a visual, and an adopted window knows none of them until its
+  constructor's replies land — so the allocation is scheduled at
+  construction and happens when they do. A 2d context taken in the meantime
+  draws straight to the window and re-binds itself to the pixmap when it
+  appears, the same way it does across a resize; `await wnd.ready` before the
+  first drawing is what keeps a frame out of the gap. A window destroyed
+  before the replies arrive gets no pixmap at all.
+- `setBackgroundPixel` now writes the window attribute too, so the colour the
+  server paints into exposed area and the colour the backing store clears to
+  agree — see [Double buffering](#double-buffering-backing-store).
+
 ## Transparent windows
 
 `app.findArgbVisual([screen])` looks for a 32-bit TrueColor visual and
@@ -206,8 +262,10 @@ automatically (opt out with `createWindow({ backingStore: false })`):
 - Windows are created with NorthWest `bit-gravity`, so the server keeps old
   content anchored during a resize instead of clearing to background.
 
-Foreign windows (`{ id }`) and windows drawing via the `'opengl'` or
-`'x11'` contexts are not double-buffered.
+Windows drawing via the `'opengl'` or `'x11'` contexts are not
+double-buffered, and neither is a window adopted by id — until it says the
+pixels are its own, with `createWindow({ id, backingStore: true })`. See
+[Painting an adopted window](#painting-an-adopted-window).
 
 ### Blitting with Present
 
@@ -231,6 +289,9 @@ await wnd.enablePresent();
 
 // to stay on CopyArea:
 const plain = app.createWindow({ width: 800, height: 600, present: false });
+
+// an adopted window presents once it says the pixels are its own:
+const overlay = app.createWindow({ id: overlayId, present: true });
 ```
 
 Two things follow. A frame is a fixed two requests however fragmented the

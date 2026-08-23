@@ -314,6 +314,43 @@ test('backing store: opt out keeps drawing direct', async (t) => {
   wnd.destroy();
 });
 
+test('backing store: an adopted window opts in and is drawn into (#294)', async (t) => {
+  if (skip) return t.skip(skip);
+  assertConnected();
+  // a second connection, so the window really belongs to another client the
+  // way the Composite overlay and an embedding host's handoff do
+  let other = null;
+  try {
+    other = await withTimeout(createClient(), 5000, 'second connection');
+  } catch (err) {
+    return t.skip(`cannot open a second connection: ${err.message}`);
+  }
+  try {
+    const theirs = other.createWindow({ width: 64, height: 64 });
+    // let CreateWindow reach the server before we ask about it from here
+    await withTimeout(theirs.getGeometry(), 5000, 'CreateWindow round trip');
+
+    const adopted = app.createWindow({ id: theirs.id, backingStore: true, present: true });
+    await withTimeout(adopted.ready, 5000, 'adopted geometry');
+    const ctx = adopted.getContext('2d');
+
+    assert.ok(adopted._backing, 'the ownership claim gets it a backing pixmap');
+    assert.equal(ctx._target, adopted._backing, 'and the context draws into it');
+    assert.equal(adopted._backing.depth, adopted.depth, "the window's own depth");
+
+    ctx.fillStyle = 'rgb(0, 128, 255)';
+    ctx.fillRect(0, 0, 64, 64);
+    const image = await ctx.getImageData(0, 0, 64, 64);
+    assert.deepEqual([image.data[0], image.data[1], image.data[2]], [0, 128, 255]);
+
+    // destroying the wrapper frees the backing pixmap and the window itself;
+    // `theirs` is the same X window, so it must not be destroyed twice
+    adopted.destroy();
+  } finally {
+    await other.close();
+  }
+});
+
 test('vector text: sizes above vectorFrom render via trapezoids', async (t) => {
   if (skip) return t.skip(skip);
   assertConnected();
