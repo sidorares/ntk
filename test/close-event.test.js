@@ -15,7 +15,39 @@ let server = null;
 let app = null; // the application
 let wm = null; // a second client, playing the window manager
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** a round trip on one connection, plus a turn for what it delivered */
+const settle = (client) =>
+  new Promise((resolve) => client.X.GetInputFocus(() => setImmediate(resolve)));
+
+/**
+ * The wm has spoken and the app has heard it. The wm's round trip proves the
+ * server processed what it sent; the app's proves the bytes the server wrote
+ * for it — the ClientMessage among them — arrived and were dispatched, since
+ * a reply cannot overtake an event already queued on the same stream.
+ */
+const delivered = async () => {
+  await settle(wm);
+  await settle(app);
+};
+
+/**
+ * Wait until `wnd` advertises `name` in WM_PROTOCOLS.
+ *
+ * `on('close')` starts the read-modify-write that advertises
+ * WM_DELETE_WINDOW and hands back no promise to wait on, so the property
+ * itself is the wait: read it until it names the atom, rather than guess how
+ * long the interning and the round trips behind it take. Each attempt is a
+ * round trip, which is what paces the loop.
+ */
+async function advertised(wnd, name = 'WM_DELETE_WINDOW') {
+  const atom = await wnd.atom(name);
+  for (let i = 0; i < 100; i++) {
+    const protocols = await wnd.getProperty('WM_PROTOCOLS', { as: 'numbers' });
+    if (protocols?.includes(atom)) return protocols;
+    await settle(app);
+  }
+  throw new Error(`WM_PROTOCOLS never came to name ${name}`);
+}
 
 before(async () => {
   server = xserver.createServer({ width: 200, height: 200 });
@@ -37,7 +69,7 @@ after(async () => {
 async function pair(onClose) {
   const wnd = app.createWindow({ width: 40, height: 40 });
   wnd.on('close', onClose);
-  await sleep(30); // let addProtocol's read-modify-write reach the server
+  await advertised(wnd);
   return { wnd, asWm: new Window(wm, { id: wnd.id }) };
 }
 
@@ -48,9 +80,8 @@ describe("on('close')", () => {
     assert.equal(await wnd.getProperty('WM_PROTOCOLS'), null, 'nothing advertised yet');
 
     wnd.on('close', () => {});
-    await sleep(30);
 
-    const protocols = await wnd.getProperty('WM_PROTOCOLS', { as: 'numbers' });
+    const protocols = await advertised(wnd);
     const del = await wnd.atom('WM_DELETE_WINDOW');
     assert.ok(protocols.includes(del));
     wnd.destroy();
@@ -60,8 +91,7 @@ describe("on('close')", () => {
     const wnd = app.createWindow({ width: 40, height: 40 });
     wnd.on('close', () => {});
     wnd.on('close', () => {});
-    await sleep(30);
-    const protocols = await wnd.getProperty('WM_PROTOCOLS', { as: 'numbers' });
+    const protocols = await advertised(wnd);
     assert.equal(protocols.length, 1, 'one atom, not one per listener');
     wnd.destroy();
   });
@@ -70,9 +100,8 @@ describe("on('close')", () => {
     const wnd = app.createWindow({ width: 40, height: 40 });
     await wnd.addProtocol('WM_TAKE_FOCUS');
     wnd.on('close', () => {});
-    await sleep(30);
 
-    const protocols = await wnd.getProperty('WM_PROTOCOLS', { as: 'numbers' });
+    const protocols = await advertised(wnd);
     assert.equal(protocols.length, 2);
     assert.ok(protocols.includes(await wnd.atom('WM_TAKE_FOCUS')));
     assert.ok(protocols.includes(await wnd.atom('WM_DELETE_WINDOW')));
@@ -84,14 +113,14 @@ describe("on('close')", () => {
     const { wnd, asWm } = await pair(() => fired++);
 
     assert.equal(await asWm.close(), true, 'asked rather than killed');
-    await sleep(30);
+    await delivered();
     assert.equal(fired, 1);
   });
 
   test('the default action is to destroy the window', async () => {
     const { wnd, asWm } = await pair(() => {});
     await asWm.close();
-    await sleep(30);
+    await delivered();
     assert.equal(wnd._destroyed, true);
   });
 
@@ -105,13 +134,13 @@ describe("on('close')", () => {
     });
 
     await asWm.close();
-    await sleep(30);
+    await delivered();
     assert.equal(asked, 1);
     assert.equal(wnd._destroyed, false, 'still open');
 
     // and asking again still works — declining is not a one-off
     await asWm.close();
-    await sleep(30);
+    await delivered();
     assert.equal(asked, 2);
     assert.equal(wnd._destroyed, false);
     wnd.destroy();
@@ -125,7 +154,7 @@ describe("on('close')", () => {
       seen.push(ev.defaultPrevented);
     });
     await asWm.close();
-    await sleep(30);
+    await delivered();
     assert.deepEqual(seen, [false, true]);
     wnd.destroy();
   });
@@ -134,10 +163,10 @@ describe("on('close')", () => {
     const wnd = app.createWindow({ width: 40, height: 40 });
     wnd.on('close', () => {}); // indifferent
     wnd.on('close', (ev) => ev.preventDefault()); // objects
-    await sleep(30);
+    await advertised(wnd);
 
     await new Window(wm, { id: wnd.id }).close();
-    await sleep(30);
+    await delivered();
     assert.equal(wnd._destroyed, false);
     wnd.destroy();
   });
@@ -149,7 +178,7 @@ describe("on('close')", () => {
       e.preventDefault();
     });
     await asWm.close();
-    await sleep(30);
+    await delivered();
     assert.equal(typeof ev.time, 'number');
     assert.equal(ev.target, wnd);
     assert.equal(ev.window, wnd);
@@ -165,7 +194,7 @@ describe("on('close') and the raw message event", () => {
 
     // _NET_WM_PING arrives down the same WM_PROTOCOLS channel
     wm.X.SendClientMessage(wnd.id, wnd.id, wmProtocols, 32, [ping, 1, wnd.id, 0, 0], 0);
-    await sleep(30);
+    await delivered();
     assert.equal(wnd._destroyed, false, 'a ping is not a close request');
     wnd.destroy();
   });
@@ -176,7 +205,7 @@ describe("on('close') and the raw message event", () => {
     const del = await wnd.atom('WM_DELETE_WINDOW');
 
     wm.X.SendClientMessage(wnd.id, wnd.id, other, 32, [del, 0, 0, 0, 0], 0);
-    await sleep(30);
+    await delivered();
     assert.equal(wnd._destroyed, false, 'matched on data alone, ignoring the type');
     wnd.destroy();
   });
@@ -190,10 +219,10 @@ describe("on('close') and the raw message event", () => {
       order.push('close');
       ev.preventDefault();
     });
-    await sleep(30);
+    await advertised(wnd);
 
     await new Window(wm, { id: wnd.id }).close();
-    await sleep(30);
+    await delivered();
     assert.deepEqual(order, ['message', 'close']);
     wnd.destroy();
   });
@@ -204,10 +233,9 @@ describe("on('close') and the raw message event", () => {
     await wnd.addProtocol('WM_DELETE_WINDOW');
     let messages = 0;
     wnd.on('message', () => messages++);
-    await sleep(30);
 
     await new Window(wm, { id: wnd.id }).close();
-    await sleep(30);
+    await delivered();
     assert.equal(messages, 1, 'the message arrived');
     assert.equal(wnd._destroyed, false, 'and ntk did not act on it');
     wnd.destroy();
@@ -217,7 +245,7 @@ describe("on('close') and the raw message event", () => {
 describe('the window manager side', () => {
   test('a window that never listened is killed rather than asked', async () => {
     const wnd = app.createWindow({ width: 40, height: 40 });
-    await sleep(20);
+    await settle(app); // the window exists on the server before the wm asks
     assert.equal(await new Window(wm, { id: wnd.id }).close(), false);
   });
 });
