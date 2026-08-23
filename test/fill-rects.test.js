@@ -106,8 +106,10 @@ test('a rectangular clip is honored, still without a mask', async () => {
   const at = await pixels(ctx);
   assert.deepEqual(at(12, 11), RED, 'inside the clip');
   assert.deepEqual(at(20, 11), WHITE, 'outside the clip is untouched');
-  // SetPictureClipRectangles + FillRectangles + the clip reset
-  assert.equal(emitted, 3, 'server-side clip, no a8 mask');
+  // SetPictureClipRectangles + FillRectangles. The reset is owed, not sent:
+  // it is only stamped when something that does not set its own clip draws
+  // next, and a second batch under the same clip skips the set too (#308).
+  assert.equal(emitted, 2, 'server-side clip, no a8 mask');
 });
 
 test('globalAlpha folds into the colour', async () => {

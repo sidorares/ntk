@@ -182,6 +182,38 @@ test('the other clip-rectangle fast paths leave the region alone', async (t) => 
   pixmap.destroy();
 });
 
+// Issue #308 made the picture clip lazy: a rectangle already in the slot is
+// not re-stamped. A region is never treated that way, because it is the
+// caller's and they may have edited it — server-side, invisibly to us —
+// between two drawings under the same rectangle.
+test('a region edited between two identically clipped drawings is honored', async (t) => {
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx } = freshCtx();
+  const region = await app.createRegion([{ x: 0, y: 0, width: W, height: 100 }]);
+  ctx.clipRegion(region);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, 100, H); // one rectangular clip for both drawings
+  ctx.clip();
+
+  ctx.fillStyle = 'red';
+  ctx.fillRects([[0, 0, W, H]]); // region: the top half
+
+  region.set([{ x: 0, y: 100, width: W, height: 100 }]);
+  ctx.fillStyle = 'blue';
+  ctx.fillRects([[0, 0, W, H]]); // region: the bottom half now
+  ctx.restore();
+
+  const image = await ctx.getImageData(0, 0, W, H);
+  assert.deepEqual(at(image, 50, 50), RED, 'the first drawing, top half');
+  assert.deepEqual(at(image, 50, 150), BLUE, 'the second saw the edited region');
+  assert.deepEqual(at(image, 150, 50), WHITE, 'the rectangle still applies');
+  assert.deepEqual(at(image, 150, 150), WHITE, 'to both of them');
+  region.destroy();
+  pixmap.destroy();
+});
+
 test('a region and a rectangular clip intersect, in either order', async (t) => {
   if (skip) return t.skip(skip);
   const region = await app.createRegion([{ x: 0, y: 0, width: 100, height: 100 }]);

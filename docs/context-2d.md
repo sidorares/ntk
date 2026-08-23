@@ -70,6 +70,13 @@ is genuinely needed, the work it costs is bounded to the box the drawing
 composites, not the surface: a translucent fill inside a rounded-corner clip
 pays for its own rectangle.
 
+Where the rectangle does go to the server it is **context state, not a
+per-drawing stamp**: a second drawing under a clip the picture already carries
+sends no clip request at all, and neither does a repaint of the same damage
+rectangle on the next frame. A rounded box under a damage clip — a fill and a
+border, each of them corner glyphs plus strips — costs one clip request rather
+than four.
+
 The exception is the composite ops that paint where the clip is *not*:
 `copy`, `source-in`, `destination-in`, `source-out` and `destination-atop`
 clear the rest of the drawing's box rather than leaving it alone. Under a
@@ -337,6 +344,10 @@ the picture to a rectangle around the drawing and put it back afterwards. Any
 region in that slot is overwritten, silently, and which drawings do it depends
 on which internal route they take (issue
 [#292](https://github.com/sidorares/ntk/issues/292)).
+
+Reading `ctx.picture` does settle the slot first, so a region you install
+right after one is not fighting a rectangle left over from the last drawing —
+but the next drawing takes the slot back.
 
 `clipRegion()` is the same region as a clip ntk knows about: it is part of the
 `save()`/`restore()` state, the fast paths intersect *with* it and restore *to*
