@@ -116,6 +116,17 @@ const ctx = wnd.getContext('2d');   // now binds the right picture format
   answer is written back to `wnd.x`/`y`/`width`/`height`/`depth`, and
   settles `ready` if it was still pending.
 
+Wrapping a window selects nothing on the server. X event masks are absolute
+per client — a `ChangeWindowAttributes` replaces this connection's whole
+selection on a window rather than adding to it — and what another client's
+window already had selected on it is not something ntk can know. So adoption
+asks the two questions above and writes nothing at all, and the events an
+adopted window emits are the ones you ask for, with `.on(...)` or
+[`selectInput`](#claiming-the-role). Ask through ntk rather than around it
+once you have: a raw absolute write of your own on the same window would
+overwrite the mask ntk has accumulated, and ntk's next selection would
+overwrite yours.
+
 Size and position also arrive on their own, as `resize`
 ([ConfigureNotify](#resize-fires-for-moves)) — the **depth and the visual** do
 not, and they are the ones nothing recovers from. `getContext('2d')` picks its
@@ -1104,7 +1115,8 @@ try {
 ```
 
 `selectInput(mask)` ORs `mask` into whatever handlers already asked for and
-resolves once the server accepts it. Handler-driven selection
+resolves once the server accepts it — or immediately, without a request, when
+this connection holds every bit already. Handler-driven selection
 (`root.on('map_request', ...)`, or the `onMapRequest` creation argument)
 still works and covers the ordinary case; `selectInput` exists for the mask
 that can be refused, because a rejected selection is the answer rather than
