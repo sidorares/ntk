@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.4.0](https://github.com/sidorares/ntk/compare/v8.3.1...v8.4.0) (2026-08-24)
+
+
+### Features
+
+* **gl:** direct rendering on macOS/XQuartz via the Apple-DRI extension ([#326](https://github.com/sidorares/ntk/issues/326)) ([da64a90](https://github.com/sidorares/ntk/commit/da64a90cb361693e1f6a1e8f6c47e420c3933cba))
+
 ## [8.3.1](https://github.com/sidorares/ntk/compare/v8.3.0...v8.3.1) (2026-08-24)
 
 
