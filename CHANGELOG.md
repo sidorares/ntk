@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.3.1](https://github.com/sidorares/ntk/compare/v8.3.0...v8.3.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **window:** adopt a window without selecting events on it ([#323](https://github.com/sidorares/ntk/issues/323)) ([d2534d0](https://github.com/sidorares/ntk/commit/d2534d01f0927683bbe7d32ce364e1bb6f39c956)), closes [#322](https://github.com/sidorares/ntk/issues/322)
+* **window:** adopt nothing on a closing connection, so a routed event cannot throw ([#324](https://github.com/sidorares/ntk/issues/324)) ([6535504](https://github.com/sidorares/ntk/commit/6535504e2f3ffcd2bc771283ae44ef98533b93d5)), closes [#321](https://github.com/sidorares/ntk/issues/321)
+
 ## [8.3.0](https://github.com/sidorares/ntk/compare/v8.2.0...v8.3.0) (2026-08-23)
 
 

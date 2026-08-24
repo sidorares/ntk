@@ -1,6 +1,6 @@
 {
   "name": "ntk",
-  "version": "8.3.0",
+  "version": "8.3.1",
   "description": "Desktop UI toolkit for X11 with canvas-like 2d and OpenGL rendering",
   "author": "Andrey Sidorov <sidorares@yandex.ru>",
   "license": "MIT",
