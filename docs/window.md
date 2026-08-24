@@ -108,7 +108,9 @@ const ctx = wnd.getContext('2d');   // now binds the right picture format
   window need not know where it came from. It never rejects — a window
   destroyed before the replies arrive resolves all the same, with `width`
   still `undefined`, and the next request sent to it is what reports that it
-  is gone.
+  is gone. A window adopted while the connection is closing resolves the same
+  way, having asked nothing: adopting is what a substructure event does, and
+  those keep arriving for a moment after `app.close()`.
 - `wnd.getGeometry()` → `Promise<{ x, y, width, height, depth, borderWidth,
   root }>` — ask the server where the window is *now*, rather than take what
   the event stream last said. `x`/`y` are relative to the parent, as X
