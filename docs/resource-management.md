@@ -45,6 +45,16 @@ Cleanup — explicit or GC-driven — becomes a silent no-op once the connection
 is closing or closed: the X server frees all of a client's resources on
 disconnect, so late finalizers after `app.close()` have nothing left to do.
 
+The same holds for the bookkeeping the event dispatch does on its own.
+`app.close()` flags the connection immediately and then drains what is still
+in the read buffer, so events keep being delivered for a moment afterwards —
+including substructure events, which adopt a `Window` for the child they name.
+Those adoptions ask the server nothing once the connection is going away:
+`ready` resolves with the geometry still unknown, exactly as it does for a
+window that was destroyed before the reply came back. Nothing on that path
+throws, so a program that watches a window's children can exit while its
+notifications are still arriving.
+
 ## The connection keeps the process alive
 
 An open X connection holds the node event loop open. Call
