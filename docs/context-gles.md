@@ -1,8 +1,7 @@
-# Direct rendering: OpenGL ES 2 on the GPU
+# Direct rendering: shader GL on the GPU
 
-ntk can draw a window's contents on the GPU and hand the finished frame to
-the X server as a buffer it already has — no pixels on the socket, no GL
-commands on the socket, and a modern shader pipeline instead of a
+ntk can draw a window's contents on the GPU with no pixels on the socket, no
+GL commands on the socket, and a modern shader pipeline instead of a
 fixed-function one.
 
 This is the **direct** backend. The other one, [indirect
@@ -10,6 +9,21 @@ GLX](context-opengl.md), serializes GL commands into the X connection and is
 what ntk has always used. They are different pipelines with different APIs,
 and which one a window gets is [`glPolicy`](#glpolicy) — whose default is
 still `indirect`, so nothing changes until you ask.
+
+The direct backend comes in two *flavors*, one per platform, behind one
+context contract and one `gl` API:
+
+- **`dri3`** (Linux): OpenGL ES 2 on a DRM render node, finished frames
+  handed to the server as dma-buf descriptors over DRI3 + Present.
+- **`appledri`** ([macOS/XQuartz](#macos)): the server exports the window's
+  WindowServer surface over the Apple-DRI extension, and a CGL context draws
+  straight into it — Apple's GL-on-Metal, ES2-compatible, so the same
+  shaders compile.
+
+Draw code does not choose between them: `getContext('opengl')` picks the
+flavor for the platform, and everything below applies to both except where a
+flavor is named. The Linux flavor is described first; [macOS](#macos) covers
+what differs.
 
 ![A shaded cube in an ntk window, its faces patterned by a fragment shader](img/direct-gl-cube.png)
 
@@ -33,6 +47,7 @@ wnd.map();
 
 const gl = wnd.getContext('opengl', config);
 await gl.ready; // the whole path is proven, or this rejects with a reason
+draw(); // an expose that raced `ready` had nothing to present into yet
 
 function draw() {
   gl.makeCurrent();
@@ -44,7 +59,7 @@ function draw() {
 }
 ```
 
-## How it works
+## How it works (the `dri3` flavor)
 
 ```
 GPU (DRM render node)                     X server
@@ -111,11 +126,16 @@ Object form knobs, over `DEFAULT_GL_POLICY`:
 | `maxInFlight` | `2` | presents outstanding before a frame waits for a buffer |
 | `linearFallback` | `true` | retry a refused buffer once with a linear layout, which is what makes rendering on one GPU and displaying on another work |
 
+The three knobs below `mode` describe dma-buf machinery the `appledri`
+flavor does not have — it ignores them silently.
+
 ## What is available, and why not
 
 ```js
 const caps = await app.glCapabilities();
-// { direct: true, indirect: true, device: '/dev/dri/renderD128', reason: null }
+// { direct: true, indirect: true, flavor: 'dri3',
+//   device: '/dev/dri/renderD128', reason: null }
+// — and on macOS/XQuartz: { direct: true, flavor: 'appledri', device: null }
 ```
 
 `reason` is an `Error` whose `code` is one of `GLError` — branch on the code,
@@ -124,13 +144,15 @@ not the message:
 | code | meaning | remedy |
 | --- | --- | --- |
 | `GL_NO_ADDON` | `x11-dri` is not installed | `npm install x11-dri` |
-| `GL_NO_DRIVER` | no `libgbm`/`libEGL`/`libGLESv2`, or not Linux | install Mesa; direct rendering is Linux-only |
-| `GL_NO_DEVICE` | no readable `/dev/dri/renderD*` | map the device into the container, or join the `render` group |
+| `GL_NO_DRIVER` | the platform libraries are missing — `libgbm`/`libEGL`/`libGLESv2` on Linux, libXplugin/OpenGL.framework on macOS — or the platform has no direct path | install Mesa / install XQuartz; elsewhere direct rendering does not exist |
+| `GL_NO_DEVICE` | no readable `/dev/dri/renderD*` (Linux) | map the device into the container, or join the `render` group |
 | `GL_REMOTE_DISPLAY` | a TCP or forwarded display | direct rendering is local-only; use indirect over a network |
-| `GL_NO_FD_PASSING` | local display, but this runtime cannot pass a descriptor | run under Node — Bun does not implement the internal x11 uses |
-| `GL_NO_DRI3` | the server has no DRI3/Present | Xvfb, Xephyr and XQuartz have none |
+| `GL_NO_FD_PASSING` | local display, but this runtime cannot pass a descriptor (`dri3` flavor only) | run under Node — Bun does not implement the internal x11 uses |
+| `GL_NO_DRI3` | the server has no DRI3/Present | Xvfb, Xephyr and XQuartz have none (XQuartz has [its own path](#macos)) |
+| `GL_NO_APPLEDRI` | macOS, and the server has no usable Apple-DRI | is the display an XQuartz server? |
+| `GL_NO_WINDOWSERVER` | macOS, but no WindowServer session — SSH | run from the logged-in GUI session |
 | `GL_IMPORT_FAILED` | the server refused the buffer | usually different DRM devices — set `devicePath` |
-| `GL_CONTEXT_FAILED` | GBM/EGL setup failed | the message says what did |
+| `GL_CONTEXT_FAILED` | GPU context setup failed | the message says what did |
 | `GL_DISABLED` | `glPolicy: 'off'` | — |
 
 The probe runs during `createClient()` whenever the policy could choose
@@ -142,28 +164,28 @@ be created.
 
 ### Runtimes
 
-Direct rendering needs a runtime that can send a file descriptor over a unix
-socket, because that is how DRI3 hands the server a buffer. `x11` does it
-through Node's internal `process.binding('pipe_wrap')`, so:
+The `dri3` flavor needs a runtime that can send a file descriptor over a
+unix socket, because that is how DRI3 hands the server a buffer. `x11` does
+it through Node's internal `process.binding('pipe_wrap')`, so:
 
-| runtime | direct | indirect |
-| --- | --- | --- |
-| Node | yes | yes |
-| Bun | **no** — `process.binding('pipe_wrap')` is not implemented | yes |
+| runtime | direct (`dri3`) | direct (`appledri`) | indirect |
+| --- | --- | --- | --- |
+| Node | yes | yes | yes |
+| Bun | **no** — `process.binding('pipe_wrap')` is not implemented | yes — no descriptor ever crosses the socket | yes |
 
-Under Bun the capability probe reports `GL_NO_FD_PASSING` and `'auto'` falls
-back to indirect GLX, which needs no descriptor passing at all. Nothing else
-about the display has to change.
+Under Bun on Linux the capability probe reports `GL_NO_FD_PASSING` and
+`'auto'` falls back to indirect GLX, which needs no descriptor passing at
+all. Nothing else about the display has to change.
 
 ## The API is not the GLX one
 
-| | direct (`'gles'`) | indirect (`'opengl'`) |
+| | direct | indirect (`'opengl'`) |
 | --- | --- | --- |
-| pipeline | OpenGL ES 2.0 | OpenGL 1.x fixed-function |
+| pipeline | OpenGL ES 2.0 (`dri3`) / desktop GL, ES2-compatible (`appledri`) | OpenGL 1.x fixed-function |
 | naming | `gl.clearColor`, `gl.drawArrays` | `gl.ClearColor`, `gl.Begin` |
 | shaders | **yes**, GLSL ES 1.00 | none — the protocol encodes no shader objects |
 | geometry | VBOs, `drawArrays`/`drawElements` | immediate mode + display lists |
-| reach | local connections, Linux, a GPU | any server allowing indirect contexts |
+| reach | local connections, Linux or macOS/XQuartz, a GPU | any server allowing indirect contexts |
 
 Code that runs on either branches on `gl.backend`, which is `'direct'` or
 `'indirect'`:
@@ -174,8 +196,11 @@ else gl.Clear(gl.COLOR_BUFFER_BIT);
 ```
 
 `getContext('opengl')` is the backend-neutral name and obeys the policy.
-`getContext('gles')` asks for the direct one by name and throws if it is not
-available — useful when the code only knows how to drive ES 2 anyway.
+`getContext('gles')` asks for the Linux direct flavor by name and
+`getContext('cgl')` for the macOS one; each throws where its flavor is not
+the one available — useful when the code wants no silent substitution.
+Direct contexts also carry `gl.flavor` (`'dri3'` or `'appledri'`) for the
+rare code that cares which pipeline is under it.
 
 The ES 2 surface is whatever `x11-dri` exposes, which is the core of ES 2
 (shaders, programs, uniforms, buffers, attributes, draws, `readPixels`) and
@@ -184,10 +209,12 @@ entry point is a small wrapper in that package.
 
 ### Context lifetime
 
-- **One GPU context per app and pixel format.** Programs, buffers and other
-  GL objects are shared between surfaces on a connection, the way they are
-  between canvases in a browser tab, and exactly one surface is current at a
-  time.
+- **One GPU context per app and pixel format** on the `dri3` flavor.
+  Programs, buffers and other GL objects are shared between surfaces on a
+  connection, the way they are between canvases in a browser tab, and
+  exactly one surface is current at a time. (The `appledri` flavor owns one
+  CGL context per window instead — see [macOS](#macos); code that caches GL
+  resources by the `gl` object identity is correct on both.)
 - `gl.makeCurrent()` binds this context's surface and picks up a resize —
   call it at the top of every frame. Individual `gl.*` calls also bind if
   another surface stole currency, so a stray call cannot draw into the wrong
@@ -220,6 +247,11 @@ entry point is a small wrapper in that package.
   shows them at the next vblank and may flip rather than copy. Frame *pacing*
   is still the window's frame clock ([window.md](window.md)); the swap chain
   only bounds how many frames can be in flight.
+- The `appledri` flavor keeps the same contract with different machinery
+  underneath: there is no swap chain and the server applies no backpressure,
+  so each `SwapBuffers()` closes the `canRender()` gate itself for one
+  display period and `onFrameAvailable` reopens it. A loop written as above
+  runs at ~display rate on both flavors.
 
 ### Draw on expose
 
@@ -233,6 +265,65 @@ draws on expose:
 wnd.on('expose', draw); // adding the listener is what selects Exposure
 wnd.map();
 ```
+
+## macOS
+
+XQuartz never implemented DRI3 — its direct rendering is the **Apple-DRI**
+extension, and it runs the transfer the other way round. Where DRI3 is
+client-allocates-and-pushes, Apple-DRI is server-exports-and-attaches:
+
+```
+this process                              X server (XQuartz)
+------------                              ------------------
+apple.clientId()  --- AppleDRICreateSurface(win, cid) --->  exports the
+                  <-------------- key[2] ----------------   window's surface
+ctx.attach(key)      (import surface + bind a CGL context)
+gl draws straight into the window's backing store
+ctx.flush()          (CGLFlushDrawable — the WindowServer composites)
+                  <--- AppleDRISurfaceNotify ------------   moved / resized /
+                                                            destroyed
+```
+
+After the attach, nothing crosses the X socket per frame — no pixels, no
+descriptors, no requests. Rendering is the real GPU (Apple's GL-on-Metal;
+`gl.renderer` reports the chip), and the same `gl` API and the same GLSL ES
+1.00 shaders as the Linux flavor. The pieces:
+
+| piece | what it is | where it comes from |
+| --- | --- | --- |
+| `x11-dri` >= 0.5.0 | the WindowServer handshake, the surface import and the CGL context | the same optional dependency, prebuilt for macOS arm64 |
+| Apple-DRI | exports a window's surface to a local process | the X server — XQuartz only |
+| a GUI session | the WindowServer connection surfaces are imported into | log in at the machine; SSH sessions report `GL_NO_WINDOWSERVER` |
+
+The protocol half — the requests, the reply layouts and the
+`AppleDRISurfaceNotify` event — is pure JS in `lib/appledri.js`; the halves
+that cannot be (Xplugin, CGL) are the addon's `dri.apple` namespace.
+
+What differs from the `dri3` flavor, beyond the wire:
+
+- **The surface exists only while the window is mapped.** The context is
+  created synchronously and `gl.*` works immediately (shaders compile,
+  FBOs render), but `gl.ready` settles — and `canRender()` first turns
+  true — after `map()`, when the server has a physical window to export.
+  Unmapping destroys the surface (`AppleDRISurfaceNotify` says so) and the
+  context re-attaches by itself on the next map. The draw-on-expose pattern
+  above absorbs all of this without extra code.
+- **One CGL context per window**, not a shared one per app: a CGL context
+  attaches to exactly one surface. GL resources are therefore per-window on
+  this flavor; cache them by the `gl` object identity and both flavors are
+  handled.
+- **The GL dialect is desktop 4.1 core with `ARB_ES2_compatibility`**, not
+  ES: GLSL ES 1.00 sources compile unchanged (the addon injects
+  `#version 100` where a source has no version line), ES3-class entry
+  points (VAOs, instancing) exist, but `#version 300 es` shaders do not
+  compile — ES 3.00 *shading* is Linux-only today.
+- **Verify pixels with `gl.readPixels`, not `GetImage`.** The GL surface is
+  composited by the WindowServer *above* the X framebuffer, so X-side reads
+  of a GL window — `GetImage`, screenshots of the X screen — show stale
+  contents by design.
+- Depth-32/ARGB windows are untested on this flavor (XQuartz typically
+  publishes no 32-bit visual, so `chooseGLConfig({ ALPHA_SIZE: 8 })` fails
+  there with `GL_CONTEXT_FAILED`).
 
 ## Choosing a window to draw into
 
@@ -256,7 +347,11 @@ spec is ignored there, and honoured by
 ## Testing
 
 `test/gl-policy.test.js` covers the decisions — policy resolution, the client
-probe, capability gating, error codes — hermetically, with the addon stubbed,
-so it runs with no display and no GPU. `test/gl-direct-live.test.js` renders a
-shader-drawn triangle and reads the window back with `GetImage`; it skips
-wherever the path is unavailable, which includes CI (Xvfb has no DRI3).
+probe, capability gating, error codes, flavor dispatch — hermetically, with
+the addon stubbed, so it runs with no display and no GPU, and
+`test/appledri.test.js` checks the Apple-DRI wire encoding the same way. The
+live halves skip wherever their path is unavailable, which includes CI (Xvfb
+has neither DRI3 nor Apple-DRI): `test/gl-direct-live.test.js` renders a
+shader-drawn triangle over DRI3 and reads the window back with `GetImage`;
+`test/gl-appledri-live.test.js` does the same against XQuartz and verifies
+with `gl.readPixels` (see [macOS](#macos) for why not `GetImage`).

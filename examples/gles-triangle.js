@@ -3,11 +3,13 @@
 //
 //   node examples/gles-triangle.js
 //
-// Needs the optional x11-dri addon (`npm install x11-dri`), a DRM render node,
-// and a server with DRI3 — Xorg with glamor or Xwayland. Where any of those is
-// missing it says which, and the same drawing has to be written against the
-// fixed-function pipeline instead (examples/glclock.js). Compare the two: this
-// one has shaders, and its per-frame cost is one request.
+// Needs the optional x11-dri addon (`npm install x11-dri`) and a server with
+// a direct path: DRI3 plus a DRM render node on Linux (Xorg with glamor,
+// Xwayland), or Apple-DRI on macOS (XQuartz, from the logged-in GUI
+// session). Where any of that is missing it says which, and the same drawing
+// has to be written against the fixed-function pipeline instead
+// (examples/glclock.js). Compare the two: this one has shaders, and its
+// per-frame cost is one request on Linux and none at all on macOS.
 import { createClient } from '../lib/index.js';
 
 const app = await createClient({ glPolicy: 'auto' });
@@ -41,7 +43,7 @@ wnd.on('expose', () => wnd.requestAnimationFrame(draw));
 wnd.map();
 
 const gl = wnd.getContext('opengl', config);
-console.log(`${gl.backend} rendering on ${caps.device}: ${gl.renderer}`);
+console.log(`${gl.backend} rendering (${caps.flavor}) on ${caps.device ?? 'the window surface'}: ${gl.renderer}`);
 
 try {
   await gl.ready;
@@ -108,9 +110,14 @@ const uAngle = gl.getUniformLocation(program, 'uAngle');
 const started = Date.now();
 let frames = 0;
 
-// A buffer the server still holds cannot be drawn into. Rather than spin,
-// stop — and pick up again when one comes back.
+// A frame that cannot go out — every buffer with the server (Linux), or the
+// surface not attached / the pacing gate closed (macOS) — is not drawn.
+// Rather than spin, stop, and pick up again when the gate reopens.
 gl.onFrameAvailable = () => wnd.requestAnimationFrame(draw);
+// The expose that started the loop can land while canRender() was still
+// false and before this handler was installed — kick it once now that
+// everything is wired; a redundant frame is absorbed by the guard in draw().
+wnd.requestAnimationFrame(draw);
 
 function draw() {
   if (!gl.canRender()) return;

@@ -122,9 +122,16 @@ Server-side resources support `using` / `await using` (Node 24+):
 
 ## 3d graphics
 
-Only indirect GLX is supported, with most of the OpenGL 1.4 api implemented.
-Note that on many systems indirect GLX is disabled by default —
-[you'll need to enable it for gl to work](https://github.com/sidorares/node-x11/issues/117#issuecomment-214762185).
+Two backends, chosen by `glPolicy`
+([docs/context-gles.md](docs/context-gles.md)):
+
+- **direct** (opt-in) — shader GL on the real GPU with no pixels on the
+  socket: OpenGL ES 2 over DRI3 + Present on Linux, CGL over the Apple-DRI
+  extension on macOS/XQuartz. Needs the optional `x11-dri` addon.
+- **indirect GLX** (default) — most of the OpenGL 1.4 api, serialized into
+  the X connection. Note that on many systems indirect GLX is disabled by
+  default —
+  [you'll need to enable it for gl to work](https://github.com/sidorares/node-x11/issues/117#issuecomment-214762185).
 
 ```js
 import { createClient } from 'ntk';

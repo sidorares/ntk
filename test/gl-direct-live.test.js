@@ -97,6 +97,9 @@ before(async () => {
   }
   const caps = await app.glCapabilities();
   if (!caps.direct) skip = `no direct rendering here: ${caps.reason.code} — ${caps.reason.message}`;
+  // this file exercises the dri3 flavor (swapchain, DRI3 imports, Present
+  // pacing); the appledri one has its own — test/gl-appledri-live.test.js
+  else if (caps.flavor !== 'dri3') skip = `direct here is ${caps.flavor}, not DRI3`;
 });
 
 after(async () => {

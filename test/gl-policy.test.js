@@ -20,10 +20,11 @@ import {
 } from '../lib/gl.js';
 import { GLXError } from '../lib/glx.js';
 
-// registers both GL contexts on Drawable; the direct one wraps the 'opengl'
-// factory, which is what the dispatch tests below exercise
+// registers the GL contexts on Drawable; the direct ones wrap the 'opengl'
+// factory in turn, which is what the dispatch tests below exercise
 import '../lib/renderingcontext_opengl.js';
 import '../lib/renderingcontext_gles.js';
+import '../lib/renderingcontext_cgl.js';
 
 const withEnv = (value, fn) => {
   const had = Object.hasOwn(process.env, 'NTK_GL_POLICY');
@@ -44,25 +45,64 @@ const workingAddon = {
   listRenderNodes: () => ['/dev/dri/renderD128']
 };
 
-// a connection that can pass descriptors and has the extensions
+// the macOS shape of the same: no GBM/EGL, Apple-DRI + a WindowServer session
+const darwinAddon = {
+  probe: () => ({
+    platform: 'darwin',
+    gbm: 'GBM needs Linux DRM/dma-buf — no equivalent on darwin',
+    egl: 'no libEGL on this platform',
+    gles: true,
+    appledri: true
+  }),
+  listRenderNodes: () => [],
+  apple: { clientId: () => 0x1234 },
+  gl: {}
+};
+
+// a connection that can pass descriptors and has the extensions. `appledri`
+// simulates the server side of the Apple-DRI handshake glCapabilities runs on
+// the darwin flavor: the QueryExtension answer plus a wire stub that replies
+// to the one replied request the probe sends (QueryDirectRenderingCapable).
 function fakeApp({
   local = true,
   fdCapable = true,
   exts = { dri3: { fdCapable: true, major: 1, minor: 4 }, present: { major: 1, minor: 2 } },
+  appledri = null,
   glx = {},
   options = {}
 } = {}) {
+  const X = {
+    stream: fdCapable ? { _fdCapable: true, sendFds: () => {} } : {},
+    require: (name, cb) =>
+      queueMicrotask(() => (exts[name] ? cb(null, exts[name]) : cb(new Error(`unknown extension: ${name}`)))),
+    on: () => {}
+  };
+  if (appledri) {
+    const { present = true, capable = true } = appledri;
+    X.seq_num = 0;
+    X.replies = {};
+    X.eventParsers = {};
+    X.errorParsers = {};
+    X.QueryExtension = (name, cb) =>
+      queueMicrotask(() =>
+        cb(null, present ? { present: 1, majorOpcode: 130, firstEvent: 90, firstError: 140 } : { present: 0 })
+      );
+    X.pack_stream = {
+      put: () => {},
+      submit: (expectsReply) => {
+        if (!expectsReply) return;
+        const seq = X.seq_num;
+        queueMicrotask(() => {
+          const [decode, cb] = X.replies[seq];
+          cb(null, decode(Buffer.from([capable ? 1 : 0])));
+        });
+      }
+    };
+  }
   const app = {
     options,
-    display: {
-      isLocalSocket: local,
-      GLX: glx,
-      client: { stream: fdCapable ? { _fdCapable: true, sendFds: () => {} } : {} }
-    }
-  };
-  app.X = {
-    require: (name, cb) =>
-      queueMicrotask(() => (exts[name] ? cb(null, exts[name]) : cb(new Error(`unknown extension: ${name}`))))
+    X,
+    display: { isLocalSocket: local, GLX: glx, client: X }
   };
   Object.defineProperty(app, 'glPolicy', { get: () => resolveGLPolicy(app.options) });
   return app;
@@ -141,15 +181,50 @@ describe('probeDirect', () => {
     assert.match(probe.hint, /npm install x11-dri/);
   });
 
-  test('missing GPU libraries report which ones, and say Linux-only off Linux', () => {
+  test('missing GPU libraries report which ones, and name the supported platforms elsewhere', () => {
     setDriAddon({
-      probe: () => ({ platform: 'darwin', gbm: 'no libgbm on this platform', egl: true, gles: true }),
+      probe: () => ({ platform: 'freebsd', gbm: 'no libgbm on this platform', egl: true, gles: true }),
       listRenderNodes: () => []
     });
     const probe = probeDirect(DEFAULT_GL_POLICY);
     assert.equal(probe.code, GLError.NO_DRIVER);
     assert.match(probe.message, /no libgbm/);
-    assert.match(probe.hint, /Linux-only/);
+    assert.match(probe.hint, /Linux.*macOS/s);
+  });
+
+  test('darwin: the Apple-DRI flavor, no render node needed', () => {
+    setDriAddon(darwinAddon);
+    const probe = probeDirect(DEFAULT_GL_POLICY);
+    assert.equal(probe.ok, true);
+    assert.equal(probe.flavor, 'appledri');
+    assert.equal(probe.device, null, 'the window surface is the target — no DRM device scan');
+  });
+
+  test('darwin: an unusable Apple-DRI reports the reason and names XQuartz', () => {
+    setDriAddon({
+      ...darwinAddon,
+      probe: () => ({ platform: 'darwin', appledri: 'dlopen(/opt/X11/lib/libXplugin.1.dylib) failed' })
+    });
+    const probe = probeDirect(DEFAULT_GL_POLICY);
+    assert.equal(probe.code, GLError.NO_DRIVER);
+    assert.match(probe.message, /libXplugin/);
+    assert.match(probe.hint, /XQuartz/);
+  });
+
+  test('darwin: an addon predating Apple-DRI support says to upgrade', () => {
+    // x11-dri < 0.5.0 probes darwin without an `appledri` key at all
+    setDriAddon({
+      probe: () => ({ platform: 'darwin', gbm: 'no equivalent on darwin', egl: true, gles: true }),
+      listRenderNodes: () => []
+    });
+    const probe = probeDirect(DEFAULT_GL_POLICY);
+    assert.equal(probe.code, GLError.NO_DRIVER);
+    assert.match(probe.hint, /npm install x11-dri@latest/);
+  });
+
+  test('linux answers carry the flavor too', () => {
+    setDriAddon(workingAddon);
+    assert.equal(probeDirect(DEFAULT_GL_POLICY).flavor, 'dri3');
   });
 
   test('no render node is a permissions/container answer', () => {
@@ -253,6 +328,60 @@ describe('glCapabilities', () => {
     assert.equal(caps.indirect, false);
   });
 
+  test('darwin: direct through Apple-DRI, with no fd passing required', async () => {
+    setDriAddon(darwinAddon);
+    // fdCapable false is the point: Apple-DRI sends no descriptors, so the
+    // runtime check that gates the dri3 flavor must not gate this one
+    const caps = await glCapabilities(
+      fakeApp({ fdCapable: false, appledri: {}, options: { glPolicy: 'auto' } })
+    );
+    assert.equal(caps.direct, true);
+    assert.equal(caps.flavor, 'appledri');
+    assert.equal(caps.device, null);
+    assert.equal(caps.appleClientId, 0x1234);
+    assert.ok(caps.AppleDRI, 'the extension object rides along for the context');
+    assert.equal(caps.DRI3, null);
+  });
+
+  test('darwin: a server without Apple-DRI asks whether this is XQuartz', async () => {
+    setDriAddon(darwinAddon);
+    const caps = await glCapabilities(
+      fakeApp({ appledri: { present: false }, options: { glPolicy: 'auto' } })
+    );
+    assert.equal(caps.reason.code, GLError.NO_APPLEDRI);
+    assert.match(caps.reason.hint, /XQuartz/);
+  });
+
+  test('darwin: a server that answers "not capable" is the same coded no', async () => {
+    setDriAddon(darwinAddon);
+    const caps = await glCapabilities(
+      fakeApp({ appledri: { capable: false }, options: { glPolicy: 'auto' } })
+    );
+    assert.equal(caps.reason.code, GLError.NO_APPLEDRI);
+    assert.match(caps.reason.message, /not direct-rendering capable/);
+  });
+
+  test('darwin: no WindowServer session (SSH) is its own remedy', async () => {
+    setDriAddon({
+      ...darwinAddon,
+      apple: {
+        clientId: () => {
+          throw new Error('xp_init failed: no connection to the WindowServer');
+        }
+      }
+    });
+    const caps = await glCapabilities(fakeApp({ appledri: {}, options: { glPolicy: 'auto' } }));
+    assert.equal(caps.reason.code, GLError.NO_WINDOWSERVER);
+    assert.match(caps.reason.hint, /SSH/);
+    assert.match(caps.reason.hint, /GUI session/);
+  });
+
+  test('darwin: a remote display is refused before anything else, like linux', async () => {
+    setDriAddon(darwinAddon);
+    const caps = await glCapabilities(fakeApp({ local: false, options: { glPolicy: 'auto' } }));
+    assert.equal(caps.reason.code, GLError.REMOTE_DISPLAY);
+  });
+
   test('asked once, cached after', async () => {
     setDriAddon(workingAddon);
     const app = fakeApp({ options: { glPolicy: 'auto' } });
@@ -341,6 +470,69 @@ describe("getContext('opengl') dispatch", () => {
       assert.throws(() => dispatch(fakeWindow('direct', { direct: false, reason })), {
         code: GLError.NO_DEVICE
       });
+    });
+  });
+
+  // enough of a darwin capability answer and a window for the CGL context to
+  // construct against — an unmapped window, so no surface round trip starts
+  const appleCaps = () => ({
+    direct: true,
+    flavor: 'appledri',
+    AppleDRI: { NotifyKind: { Changed: 0, Destroyed: 1 } },
+    appleClientId: 0x1234
+  });
+  const appleContextStub = class {
+    attach() {}
+    makeCurrent() {}
+    flush() {}
+    update() {}
+    destroy() {}
+  };
+  const fakeAppleWindow = () => {
+    const window = fakeWindow('auto', appleCaps());
+    window.on = () => {};
+    window.removeListener = () => {};
+    window._mapped = false;
+    return window;
+  };
+
+  test("the appledri flavor routes 'opengl' to the CGL context", () => {
+    withEnv(undefined, () => {
+      setDriAddon({ ...darwinAddon, apple: { ...darwinAddon.apple, Context: appleContextStub } });
+      const gl = dispatch(fakeAppleWindow());
+      assert.equal(gl.backend, 'direct');
+      assert.equal(gl.flavor, 'appledri');
+      assert.equal(gl.canRender(), false, 'nothing to render into before the surface attaches');
+    });
+  });
+
+  test("'gles' by name on the appledri flavor points at the neutral name", () => {
+    withEnv(undefined, () => {
+      setDriAddon(darwinAddon);
+      assert.throws(
+        () => Drawable.renderingContextFactory['gles'](fakeAppleWindow(), {}),
+        (err) => {
+          assert.equal(err.code, GLError.CONTEXT_FAILED);
+          assert.match(err.message, /appledri/);
+          assert.match(err.hint, /'opengl'/);
+          return true;
+        }
+      );
+    });
+  });
+
+  test("'cgl' by name on the dri3 flavor points back the same way", () => {
+    withEnv(undefined, () => {
+      setDriAddon(workingAddon);
+      const window = fakeWindow('auto', { direct: true, flavor: 'dri3', device: '/dev/dri/renderD128' });
+      assert.throws(
+        () => Drawable.renderingContextFactory['cgl'](window, {}),
+        (err) => {
+          assert.equal(err.code, GLError.CONTEXT_FAILED);
+          assert.match(err.message, /dri3/);
+          return true;
+        }
+      );
     });
   });
 });
