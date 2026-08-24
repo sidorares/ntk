@@ -47,7 +47,7 @@
     "x11": "^4.0.1"
   },
   "optionalDependencies": {
-    "x11-dri": ">=0.2.0 <1"
+    "x11-dri": ">=0.5.0 <1"
   },
   "scripts": {
     "test": "NTK_STRICT_COLORS=1 node --test",

@@ -41,8 +41,9 @@ matching file here (see AGENTS.md).
 - [SVG widget](svg.md) — `SvgView`: static SVG rendering through the 2d
   context (shapes, gradients, transforms, `use`), plus `Path2D`/SVG path data
 - [OpenGL rendering context](context-opengl.md) — indirect GLX / OpenGL 1.4 API
-- [Direct rendering](context-gles.md) — OpenGL ES 2 on the GPU, frames handed to
-  the server over DRI3 + Present; `glPolicy` and what makes it available
+- [Direct rendering](context-gles.md) — shader GL on the GPU with no pixels on
+  the socket: DRI3 + Present on Linux, Apple-DRI + CGL on macOS/XQuartz;
+  `glPolicy` and what makes it available
 - [Raw X11 rendering context](context-x11.md) — core X drawing requests
 - [Resource management](resource-management.md) — `using` / `Symbol.dispose`, GC-based cleanup
 - [Packaging](packaging.md) — bundling to one file, and shipping a single

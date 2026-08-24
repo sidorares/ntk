@@ -13,10 +13,12 @@ client) with familiar, modern API concepts:
   composition, gradients and glyph drawing happen **server-side**
 - a webgl-ish **opengl context** over indirect GLX (OpenGL 1.4 command
   serialization, no client GL library)
-- a **direct rendering context** — OpenGL ES 2 on the GPU, frames handed to
-  the server as dma-buf descriptors over DRI3 + Present — where the optional
-  `x11-dri` addon and a local DRI3 server are both there. Off by default;
-  `glPolicy` chooses (docs/context-gles.md)
+- a **direct rendering context** — shader GL on the GPU with no pixels on
+  the socket, where the optional `x11-dri` addon and a local server that can
+  take it are both there. Two flavors behind one contract: OpenGL ES 2 with
+  frames handed over as dma-buf descriptors via DRI3 + Present (Linux), and
+  CGL drawing into the window surface the server exports via Apple-DRI
+  (macOS/XQuartz). Off by default; `glPolicy` chooses (docs/context-gles.md)
 
 ### Direction
 
@@ -65,12 +67,19 @@ lib/renderingcontext_opengl.js  indirect GLX context (queues GL commands
                            until MakeCurrent's context tag arrives)
 lib/glx.js                 GLX visual/fbconfig discovery (app.chooseGLXConfig)
 lib/gl.js                  which GL backend, and whether it can: glPolicy,
-                           the x11-dri probe, GLError, app.glCapabilities()
-lib/renderingcontext_gles.js    direct rendering context (OpenGL ES 2 on the
-                           GPU); also wraps the 'opengl' factory so that name
-                           dispatches on glPolicy
+                           the x11-dri probe, GLError, app.glCapabilities(),
+                           the direct flavor per platform (dri3 / appledri)
+lib/renderingcontext_gles.js    direct rendering context, dri3 flavor
+                           (OpenGL ES 2 on the GPU); also wraps the 'opengl'
+                           factory so that name dispatches on glPolicy
 lib/glswapchain.js         its buffers: dma-buf -> DRI3 pixmap -> Present,
                            recycled on IdleNotify, generations across resizes
+lib/appledri.js            the Apple-DRI protocol binding (XQuartz's
+                           direct-rendering extension): requests, replies,
+                           the SurfaceNotify event, the extension errors
+lib/renderingcontext_cgl.js     direct rendering context, appledri flavor
+                           (CGL into the server-exported window surface);
+                           wraps 'opengl' above the gles module's dispatch
 lib/renderingcontext_x11.js     raw core-X drawing context
 lib/picture.js             XRender Picture wrapper (+ blur filter)
 lib/pictformat.js          which RENDER picture format describes a drawable:
