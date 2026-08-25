@@ -567,6 +567,48 @@ up the fence, and so does the vblank clock (a completion is an event, not a
 reply); the flush then happens when the event loop is about to poll — still
 one write per frame.
 
+### Hinted motion — `setMouseHintOnly(isOn)`
+
+Coalescing decides how much motion your handlers *see*; it does nothing about
+how much of it crosses the wire. Every `MotionNotify` is 32 bytes the server
+sends whether or not the frame it lands in wants it, and a window on XI2 pays
+around 136 bytes per pointer move — some 8 KB/s at 60 Hz. On a local socket
+that is free. Over ssh, a tunnel or a slow network it is not.
+
+`setMouseHintOnly(true)` selects X's `PointerMotionHint`, which changes the
+deal with the server: it reports the pointer moving **once**, with a
+`MotionNotify` whose detail is `NotifyHint`, and then says nothing more about
+it until the client asks where the pointer went. ntk does the asking — the
+frame that delivers a hinted move sends the `QueryPointer` that lets the
+server speak again, one poll per frame and one in flight at a time, which is
+the same rate coalescing already reduces motion to. The reply is delivered as
+a `mousemove` too when it lands somewhere no event reported (`synthetic:
+true`), which is how the last position of a gesture that ends mid-flight
+still arrives.
+
+What you buy and what you pay are the same thing: motion stops being paced by
+the input device and starts being paced by the connection.
+
+- **bandwidth** falls, a lot. Measured on XQuartz, 600 pointer moves: 21.9 KB
+  from the server without the hint, 8.4 KB with it, for the same number of
+  events delivered to the handler. On a link where bytes are the constraint
+  the saving grows with the round-trip time, because that is what now sets
+  the sampling rate.
+- **latency** rises. A handler acts on a position up to one round trip old,
+  and no amount of pointer movement produces a sample faster than the
+  connection answers.
+
+So: reach for it when bandwidth is the problem, leave it alone when latency
+is — which is the opposite of what "reduces motion events" usually suggests.
+`setMouseHintOnly(false)` puts the stream back.
+
+Two things it is not. It does not *select* motion — the hint modifies
+`PointerMotion`, so a window with no `mousemove` listener still receives
+nothing — and it is not an XI2 control: a window that called
+`selectXI2(['Motion'])` is off the core motion stream altogether (see
+[Wheel and smooth scrolling](#wheel-and-smooth-scrolling)), and the core
+hint has nothing left to thin.
+
 ### requestAnimationFrame
 
 For animation and manual render scheduling, windows offer the DOM-style
@@ -660,7 +702,11 @@ All return `this` unless noted.
   AlreadyGrabbed. With `ownerEvents` the client's own windows still get
   their events normally, so a submenu keeps working
 - `grabKeyboard(options, cb)` / `ungrabKeyboard(time)` — the same for keys
-- `queryPointer(cb)`, `setMouseHintOnly(isOn)`
+- `queryPointer(cb)` — `cb(err, { root, child, rootX, rootY, childX, childY,
+  keyMask, sameScreen })`: where the pointer is right now
+- `setMouseHintOnly(isOn)` — trade motion events for round trips on a
+  bandwidth-constrained connection, see
+  [Hinted motion](#hinted-motion--setmousehintonlyison)
 - `selectXI2(types, options)` — take this window's input from XInput 2:
   smooth scrolling, per-device ids, touch. Returns a promise for whether the
   server has XI2, not `this` — see
@@ -1321,7 +1367,7 @@ constructor arg) automatically extends the window's X event mask.
 | event | X event | notes |
 |---|---|---|
 | `mousedown` / `mouseup` | ButtonPress/Release | `ev.x`, `ev.y`, `ev.keycode` (button) |
-| `mousemove` | MotionNotify | coalesced per frame; full trail in `ev.coalesced` |
+| `mousemove` | MotionNotify | coalesced per frame; full trail in `ev.coalesced`. Under [hinted motion](#hinted-motion--setmousehintonlyison) one per frame may be `synthetic`, built from a `QueryPointer` reply |
 | `wheel` | ButtonPress 4-7, or an XI2 scroll valuator | derived: `ev.deltaX`/`ev.deltaY` in notches, positive down and right. Coalesced per frame, and a frame's deltas **add up**. See [Wheel and smooth scrolling](#wheel-and-smooth-scrolling) |
 | `touchstart` / `touchmove` / `touchend` | XI2 TouchBegin/Update/End | only with `selectXI2(['TouchBegin', …])`; `ev.touchId` identifies the finger |
 | `mouseover` / `mouseout` | Enter/LeaveNotify | |
