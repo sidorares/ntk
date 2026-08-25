@@ -914,6 +914,11 @@ no per-size server cache — see
   variable font. The `wght` axis needs none of this: a numeric weight in the
   `font` shorthand already drives it (`ctx.font = '460 40px Inter'`). Set
   either before or after `font` — see [fonts.md](fonts.md#variable-fonts)
+- `fontOpticalSizing` — `'auto'` (default) sets a variable face's `opsz`
+  axis at the size the text is drawn at, as CSS's `font-optical-sizing`
+  does; `'none'` leaves it at the font file's own default. Order-independent
+  like `fontVariationSettings` — see
+  [fonts.md](fonts.md#optical-size-follows-the-size)
 - `layoutText(content, options)` → `TextLayout` — ntk extension: wrap text
   (or styled spans) to a target width without drawing, inspect lines and
   metrics, then `layout.draw(ctx, x, y)`

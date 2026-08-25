@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import Font, { normalizeVariations, variationKey } from '../lib/text/font.js';
 import FontManager from '../lib/text/fontmanager.js';
 import { StaticFontSource } from '../lib/text/fontsource.js';
+import { opszFixture } from './helpers/opsz-fixture.js';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const VF = join(fixtures, 'MonelogicsSubset[wght].ttf');
@@ -193,4 +194,106 @@ test('two points of one axis do not share a shaped run', () => {
   const thin = fonts.shape(SAMPLE, { ...style, variations: { wght: 100 } });
   const black = fonts.shape(SAMPLE, { ...style, variations: { wght: 900 } });
   assert.ok(black.width > thin.width, 'the shaping memo keys on the coordinate');
+});
+
+// --- optical size is the size ------------------------------------------------
+//
+// `opsz` is the axis a style never names and always sets: CSS has had
+// `font-optical-sizing: auto` as the initial value since optical sizing was
+// specified, so the coordinate follows `font-size` unless the author takes
+// it over. The face here is the fixture with its axis relabelled — see
+// helpers/opsz-fixture.js for why that is a real axis and not a fiction.
+
+function opszManager() {
+  const source = new StaticFontSource();
+  source.add(opszFixture(), { family: 'Test OPSZ' });
+  return new FontManager({ source });
+}
+
+test('the fixture relabelled for these tests really does carry an opsz axis', () => {
+  const fonts = opszManager();
+  const axes = fonts.match('Test OPSZ', { opticalSizing: 'none' }).variationAxes;
+  assert.deepEqual(Object.keys(axes), ['opsz']);
+  assert.deepEqual([axes.opsz.min, axes.opsz.default, axes.opsz.max], [17, 28, 96]);
+});
+
+test('the size text is set at drives the opsz axis', () => {
+  const fonts = opszManager();
+  assert.deepEqual(fonts.match('Test OPSZ', { size: 40 }).variationCoords, { opsz: 40 });
+  assert.deepEqual(fonts.match('Test OPSZ', { size: 96 }).variationCoords, { opsz: 96 });
+});
+
+test('a UI size below the axis clamps to its Text end, not the file default', () => {
+  const fonts = opszManager();
+  const label = fonts.match('Test OPSZ', { size: 13 });
+  assert.deepEqual(label.variationCoords, { opsz: 17 });
+  assert.equal(label, fonts.match('Test OPSZ', { size: 17 }));
+  // the bug: 13px text set in the display cut the file happens to default to
+  assert.notEqual(label, fonts.match('Test OPSZ', { opticalSizing: 'none' }));
+});
+
+test('each size gets its own instance — the match cache is not keyed on the first', () => {
+  const fonts = opszManager();
+  const small = fonts.match('Test OPSZ', { size: 24 });
+  const large = fonts.match('Test OPSZ', { size: 72 });
+  assert.notEqual(small.key, large.key);
+  assert.equal(small, fonts.match('Test OPSZ', { size: 24 }), 'and still cached per size');
+  assert.ok(widthOf(large) > widthOf(small), 'a display cut sets wider at one size');
+});
+
+test('an explicit opsz beats the size, as font-variation-settings does in CSS', () => {
+  const fonts = opszManager();
+  const pinned = fonts.match('Test OPSZ', { size: 13, variations: { opsz: 72 } });
+  assert.deepEqual(pinned.variationCoords, { opsz: 72 });
+  assert.equal(pinned, fonts.match('Test OPSZ', { size: 72 }));
+});
+
+test("opticalSizing 'none' leaves the axis where the file put it", () => {
+  const fonts = opszManager();
+  const off = fonts.match('Test OPSZ', { size: 13, opticalSizing: 'none' });
+  assert.equal(off.variationCoords, undefined, 'the base face, not an instance of it');
+  assert.notEqual(off, fonts.match('Test OPSZ', { size: 13 }));
+  // and it is the switch, not a pin: an explicit coordinate still applies
+  assert.deepEqual(
+    fonts.match('Test OPSZ', { size: 13, opticalSizing: 'none', variations: { opsz: 40 } })
+      .variationCoords,
+    { opsz: 40 }
+  );
+});
+
+test('opticalSize is the size for the axis when it is not the size for the glyphs', () => {
+  const fonts = opszManager();
+  // a caller that pre-multiplied by a 2x device scale: 26 device pixels of
+  // glyph, still a 13px label to whoever is reading it
+  const scaled = fonts.match('Test OPSZ', { size: 26, opticalSize: 13 });
+  assert.deepEqual(scaled.variationCoords, { opsz: 17 });
+  assert.equal(scaled, fonts.match('Test OPSZ', { size: 13 }));
+});
+
+test('a face without an opsz axis is not touched by any of this', () => {
+  const fonts = manager();
+  const small = fonts.match('Test VF', { weight: 500, size: 13 });
+  const large = fonts.match('Test VF', { weight: 500, size: 96 });
+  assert.equal(small, large, 'one instance, whatever size it is drawn at');
+  assert.deepEqual(small.variationCoords, { wght: 500 }, 'the weight still lands');
+});
+
+test('shaping follows the axis: the same string is not just scaled up', () => {
+  const fonts = opszManager();
+  const style = { family: 'Test OPSZ' };
+  const small = fonts.shape(SAMPLE, { ...style, size: 13 });
+  const large = fonts.shape(SAMPLE, { ...style, size: 96 });
+  // both come from the memo's family path, which has to tell the two apart
+  assert.ok(
+    large.width / 96 > small.width / 13,
+    `the display cut sets relatively wider, got ${large.width / 96} vs ${small.width / 13}`
+  );
+});
+
+test('a span turns optical sizing off for itself', () => {
+  const fonts = opszManager();
+  const style = { family: 'Test OPSZ', size: 96 };
+  const auto = fonts.layout([{ text: SAMPLE }], style, {});
+  const off = fonts.layout([{ text: SAMPLE, opticalSizing: 'none' }], style, {});
+  assert.ok(auto.width > off.width, `${auto.width} (opsz 96) should exceed ${off.width} (opsz 28)`);
 });

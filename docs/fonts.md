@@ -351,6 +351,47 @@ Settings for axes a font does not have are ignored and values are clamped to
 each axis's range, so any of this is safe to set without checking first —
 and `font.variationAxes` is there when you want to (`{}` for a static face).
 
+### Optical size follows the size
+
+`opsz` is the second axis a style drives without naming it. A face with an
+optical-size axis is drawn at the size it is *set* at — small text in the
+family's Text cut, headlines in its Display cut — which is what CSS does
+with `font-optical-sizing: auto`, its initial value:
+
+```js
+ctx.font = '13px "SF Pro"'; // opsz 13, clamped into the axis
+ctx.font = '96px "SF Pro"'; // opsz 96
+```
+
+This matters more than it sounds like it does. The only San Francisco
+fontconfig can see on a stock macOS box is `SFNS.ttf`, a variable file whose
+`opsz` axis runs 17–96 and **defaults to 28** — a display cut. Without a
+coordinate, every 13px menu label, button and list row was set in display
+letterforms: tighter tracking, smaller apertures, lighter stems, visibly not
+what the same font looks like in a native menu beside it. Inter, Roboto
+Flex, Newsreader and most recent variable text families ship the axis too.
+
+Three ways to take it over, in the order they win:
+
+```js
+// 1. name the axis, as CSS's font-variation-settings does
+ctx.fontVariationSettings = { opsz: 17 };
+// 2. turn it off — the face stays at whatever its file defaults to
+ctx.fontOpticalSizing = 'none';
+// 3. give the axis a different size from the glyphs
+app.fonts.match('Inter', { size: 26, opticalSize: 13 });
+```
+
+The third is for callers that have already multiplied by a device scale.
+`size` on the lookup path is CSS px, so a 13px label pre-scaled for a 2×
+display arrives as 26 and would pick a display cut; pass the unscaled size
+as `opticalSize` and keep the scaled one for the glyphs. `opticalSize` and
+`opticalSizing` are style fields like `variations` — a `TextLayout` span may
+carry either.
+
+Clamping does the rest, and does it well: 13 against SF's `17..96` lands on
+17, which is exactly where Apple's own Text cut sits.
+
 ### What it costs
 
 An instance is a font in its own right: its own shaping, its own rasterized
@@ -393,7 +434,9 @@ this is only about instantiating an axis.
   and `null`/`undefined` pass through
 - `StaticFontSource`: `add(bytes, opts)`, `alias(generic, family)`,
   `inferGenerics()`, `aliases`, `skipped` (files a spec could not parse)
-- `app.fonts.match(family, { weight, style, variations })` → `Font`
+- `app.fonts.match(family, { weight, style, size, variations, opticalSize,
+  opticalSizing })` → `Font` — `size` drives `opsz` (CSS px);
+  `opticalSizing: 'none'` leaves that axis alone
 - `app.fonts.fallbackFor(codepoint, family, opts)` → `Font | null` — best
   installed font covering a codepoint (fontconfig coverage data, confirmed
   against the parsed font)
