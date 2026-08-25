@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.4.1](https://github.com/sidorares/ntk/compare/v8.4.0...v8.4.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* **app:** fall back to the native display rate when RandR's answer is implausible ([#329](https://github.com/sidorares/ntk/issues/329)) ([5c6f9e9](https://github.com/sidorares/ntk/commit/5c6f9e93c646bc2b468d8d6cbf786526fcf54d86))
+* **window:** answer the motion hint with QueryPointer, so it thins motion instead of stopping it ([#331](https://github.com/sidorares/ntk/issues/331)) ([9e1645c](https://github.com/sidorares/ntk/commit/9e1645c9d3a63a3f4214e50806b2fa40b0c78afa))
+
 ## [8.4.0](https://github.com/sidorares/ntk/compare/v8.3.1...v8.4.0) (2026-08-24)
 
 
