@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.5.0](https://github.com/sidorares/ntk/compare/v8.4.1...v8.5.0) (2026-08-25)
+
+
+### Features
+
+* **text:** drive the opsz axis from the size text is set at ([#333](https://github.com/sidorares/ntk/issues/333)) ([d7d5282](https://github.com/sidorares/ntk/commit/d7d528256958f2316dc8d1f3bdaf14ab77e88725))
+
 ## [8.4.1](https://github.com/sidorares/ntk/compare/v8.4.0...v8.4.1) (2026-08-25)
 
 
