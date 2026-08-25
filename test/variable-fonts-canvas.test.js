@@ -12,6 +12,7 @@ import { after, before, test } from 'node:test';
 
 import { StaticFontSource, createClient } from '../lib/index.js';
 import { withTimeout } from './helpers/async.js';
+import { opszFixture } from './helpers/opsz-fixture.js';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const VF = join(fixtures, 'MonelogicsSubset[wght].ttf');
@@ -30,6 +31,7 @@ before(async () => {
   try {
     const fontSource = new StaticFontSource();
     fontSource.add(readFileSync(VF), { family: 'Test VF' });
+    fontSource.add(opszFixture(), { family: 'Test OPSZ' });
     fontSource.alias('sans-serif', 'test vf');
     app = await withTimeout(
       createClient({ fontSource }),
@@ -57,20 +59,20 @@ const widthAt = (font) => {
 
 test('a numeric weight in the font shorthand drives the wght axis', (t) => {
   if (skip) return t.skip(skip);
-  const light = widthAt('200 40px Test VF');
-  const black = widthAt('900 40px Test VF');
+  const light = widthAt('200 40px "Test VF"');
+  const black = widthAt('900 40px "Test VF"');
   assert.ok(black > light, `900 (${black}) should set wider than 200 (${light})`);
 });
 
 test('weights between the named instances measure between them', (t) => {
   if (skip) return t.skip(skip);
-  const widths = [400, 500, 600].map((w) => widthAt(`${w} 40px Test VF`));
+  const widths = [400, 500, 600].map((w) => widthAt(`${w} 40px "Test VF"`));
   assert.ok(widths[0] < widths[1] && widths[1] < widths[2], `monotonic, got ${widths}`);
 });
 
 test('fontVariationSettings takes the CSS string and an object alike', (t) => {
   if (skip) return t.skip(skip);
-  ctx.font = '40px Test VF';
+  ctx.font = '40px "Test VF"';
   ctx.fontVariationSettings = '"wght" 900';
   const fromString = ctx.measureText(SAMPLE).width;
 
@@ -85,14 +87,14 @@ test('order does not matter: settings before or after font', (t) => {
   if (skip) return t.skip(skip);
   ctx.fontVariationSettings = null;
 
-  ctx.font = '40px Test VF';
+  ctx.font = '40px "Test VF"';
   ctx.fontVariationSettings = { wght: 800 };
   const afterFont = ctx.measureText(SAMPLE).width;
 
   ctx.fontVariationSettings = null;
-  ctx.font = '16px Test VF'; // something else entirely in between
+  ctx.font = '16px "Test VF"'; // something else entirely in between
   ctx.fontVariationSettings = { wght: 800 };
-  ctx.font = '40px Test VF';
+  ctx.font = '40px "Test VF"';
   const beforeFont = ctx.measureText(SAMPLE).width;
 
   assert.equal(beforeFont, afterFont);
@@ -102,7 +104,7 @@ test('order does not matter: settings before or after font', (t) => {
 test('save/restore carries the axis with the rest of the text state', (t) => {
   if (skip) return t.skip(skip);
   ctx.fontVariationSettings = null;
-  ctx.font = '40px Test VF';
+  ctx.font = '40px "Test VF"';
   const flat = ctx.measureText(SAMPLE).width;
 
   ctx.save();
@@ -117,9 +119,60 @@ test('save/restore carries the axis with the rest of the text state', (t) => {
 test('an axis the font does not have is ignored, not an error', (t) => {
   if (skip) return t.skip(skip);
   ctx.fontVariationSettings = null;
-  ctx.font = '40px Test VF';
+  ctx.font = '40px "Test VF"';
   const flat = ctx.measureText(SAMPLE).width;
   ctx.fontVariationSettings = '"wdth" 75';
   assert.equal(ctx.measureText(SAMPLE).width, flat);
+  ctx.fontVariationSettings = null;
+});
+
+test('opsz follows the font shorthand\'s size, without anything being set', (t) => {
+  if (skip) return t.skip(skip);
+  ctx.fontVariationSettings = null;
+  ctx.font = '13px "Test OPSZ"';
+  const label = ctx._resolvedTextStyle().font;
+  assert.deepEqual(label.variationCoords, { opsz: 17 }, '13px clamps to the Text end');
+  ctx.font = '96px "Test OPSZ"';
+  assert.deepEqual(ctx._resolvedTextStyle().font.variationCoords, { opsz: 96 });
+});
+
+test("fontOpticalSizing 'none' hands the axis back to the file", (t) => {
+  if (skip) return t.skip(skip);
+  ctx.fontVariationSettings = null;
+  ctx.font = '13px "Test OPSZ"';
+  const auto = ctx.measureText(SAMPLE).width;
+
+  ctx.fontOpticalSizing = 'none';
+  assert.equal(ctx.fontOpticalSizing, 'none');
+  // order-independent, like fontVariationSettings: the face in force re-resolves
+  assert.equal(ctx._resolvedTextStyle().font.variationCoords, undefined);
+  const off = ctx.measureText(SAMPLE).width;
+  assert.notEqual(off, auto, `opsz 28 (${off}) is not opsz 17 (${auto})`);
+
+  ctx.fontOpticalSizing = 'auto';
+  assert.equal(ctx.measureText(SAMPLE).width, auto);
+});
+
+test('optical sizing rides save/restore with the rest of the text state', (t) => {
+  if (skip) return t.skip(skip);
+  ctx.fontOpticalSizing = 'auto';
+  ctx.font = '13px "Test OPSZ"';
+  const auto = ctx.measureText(SAMPLE).width;
+
+  ctx.save();
+  ctx.fontOpticalSizing = 'none';
+  assert.notEqual(ctx.measureText(SAMPLE).width, auto);
+  ctx.restore();
+
+  assert.equal(ctx.fontOpticalSizing, 'auto');
+  assert.equal(ctx.measureText(SAMPLE).width, auto, 'restore put the axis back');
+});
+
+test('an explicit opsz still wins over the size it is drawn at', (t) => {
+  if (skip) return t.skip(skip);
+  ctx.fontOpticalSizing = 'auto';
+  ctx.font = '13px "Test OPSZ"';
+  ctx.fontVariationSettings = { opsz: 96 };
+  assert.deepEqual(ctx._resolvedTextStyle().font.variationCoords, { opsz: 96 });
   ctx.fontVariationSettings = null;
 });

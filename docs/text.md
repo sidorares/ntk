@@ -267,9 +267,11 @@ ctx.drawGlyphs(ctx.Render.PictOp.Over, ctx.createSolidPicture(1, 1, 1, 1), [
 
 ### `app.fonts` → FontManager
 
-- `match(family, { weight, style })` → `Font` — system-font resolution
-  (fontconfig by default) with registered fonts first. `family` may be a
-  comma-separated list.
+- `match(family, { weight, style, size, variations, opticalSize,
+  opticalSizing })` → `Font` — system-font resolution (fontconfig by
+  default) with registered fonts first. `family` may be a comma-separated
+  list. On a variable face `weight` drives the `wght` axis and `size` drives
+  `opsz` — see [fonts.md](fonts.md#variable-fonts).
 - `load(pathOrData, { postscriptName, family, weight, style })` → `Font` —
   register a font file, given a path or its bytes (bundled/custom fonts;
   issue-16-style usage):
@@ -484,6 +486,8 @@ Conventions:
 ### 2d context
 
 - `ctx.font` — CSS shorthand; `ctx.textAlign`, `ctx.textBaseline`
+- `ctx.fontVariationSettings`, `ctx.fontOpticalSizing` — variable-font axes;
+  see [fonts.md](fonts.md#variable-fonts)
 - `ctx.fillText(text, x, y)` / `ctx.measureText(text)` (canvas-style
   TextMetrics: `width`, `actualBoundingBox*`, `fontBoundingBox*`)
 - `ctx.layoutText(content, options)` → `TextLayout` with the current
