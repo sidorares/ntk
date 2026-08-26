@@ -49,16 +49,73 @@ answers that question for SVG documents.
 `globalAlpha` still applies — it folds into the source colour rather than the
 mask, since the mask slot is taken.
 
-Coverage is also what a *filter* wants, and blur is the filter worth knowing
-about: `surface.picture().setFilter('convolution', [w, h, ...kernel])` is
-applied by the server every time the picture is sampled, so an a8 surface
-blurred this way composites as a soft version of whatever was drawn into it.
-That is exactly how [shadows](context-2d.md#shadows) are built — reach for
-those first — and if you build your own, note the two things that are easy
-to get wrong: the surface needs **padding of the kernel's half-width on every
-side**, or the blur ends in a straight line where it ran out of pixels
-(outside a picture, RepeatNone reads transparent), and a 2d kernel costs k²
-multiplies per pixel where two 1d passes cost 2k.
+## Baking a blur
+
+`blurCoverage(coverage, sigma)` blurs an a8 surface and hands back a new one
+with the blur **in its pixels**:
+
+```js
+import { blurCoverage, shadowReach, shadowSigma } from 'ntk';
+
+const sigma = shadowSigma(blurRadius); // a canvas/CSS blur is a diameter
+const pad = shadowReach(sigma);        // how far coverage can spread: ceil(3σ)
+
+const shape = new Surface(app, {
+  width: w + 2 * pad,
+  height: h + 2 * pad,
+  format: 'a8'
+});
+shape.render((c) => {
+  c.fillStyle = '#fff'; // white on transparent: every pixel is its own alpha
+  c.roundRect(pad, pad, w, h, radius);
+  c.fill();
+});
+
+const blurred = blurCoverage(shape, sigma); // `shape` is destroyed
+ctx.fillStyle = shadowColor;
+ctx.drawImage(blurred, x - pad, y - pad);   // an ordinary masked composite
+```
+
+[Shadows](context-2d.md#shadows) are built exactly this way, and if the four
+`ctx.shadow*` properties cover what you need, reach for those first — they do
+the padding, the clipping and the caching too. `blurCoverage` is for a caller
+that draws its own shapes and keeps its own paint cache (a widget toolkit
+drawing a `box-shadow`, say) and only wants the blur.
+
+**Bake, don't filter.** The other way to blur a picture is
+`picture().setBlurFilter(size, sigma)` — and a picture's filter is a property
+of the picture, so the server re-runs the whole kernel *every time it is
+composited*. Blur once, cache the surface, draw it each frame, and you have
+bought a k×k convolution per frame forever: a 61×61 kernel over a 489×134
+surface is 244M multiply-accumulates per draw (issue #335). `blurCoverage`
+runs two separable 1d passes once — 2k multiplies per pixel instead of k² —
+and the surface it returns carries no filter at all, so compositing it costs
+what compositing any mask costs.
+
+The rest of what is easy to get wrong:
+
+- **Pad by the blur's full reach on all four sides.** A convolution samples
+  outside the picture, where RepeatNone reads transparent, so a shape drawn
+  flush to the edge ends in a straight line where the kernel ran out of
+  pixels. `shadowReach(sigma)` is that padding — the gaussian truncated at
+  3σ, which leaves 0.3% of its weight outside, below one step of 8-bit
+  coverage
+- **`sigma` is not a blur radius.** A canvas `shadowBlur` and a CSS
+  `box-shadow` blur are *diameters*: σ is half of them. `shadowSigma(blur)`
+  does that halving and applies `maxSigma` from
+  [`app.shadowPolicy`](context-2d.md#shadows), the cap that keeps a kernel
+  (and the request carrying it) from growing without bound
+- **The input is destroyed** — the sharp copy has no use afterwards, and
+  keeping it alive would double what a cache holds. The returned surface is
+  the caller's, to `destroy()` when its cache evicts it
+- A blurred shadow only reaches full `shadowColor` where the shape casting it
+  is wide compared with σ; the numbers, and how to write a test that does not
+  assert an exact colour, are in
+  [How strong a shadow gets](context-2d.md#how-strong-a-shadow-gets-and-how-to-test-one)
+
+`gaussianKernel1d(sigma[, reach])` is exported alongside them for a caller
+running the passes itself — normalized over the *truncated* kernel, which is
+what keeps a flat interior at full coverage.
 
 ## Scrolling and panning: `copyWithin`
 
@@ -121,6 +178,24 @@ caller's normal job.
   instead of a pane-sized coverage mask per frame
 - `surface.destroy()` / `Symbol.dispose` — free the pixmap and the picture.
   Both carry finalizers, so a dropped surface still releases
+
+The blur primitives, imported from `ntk` itself rather than hung off a
+surface (see [Baking a blur](#baking-a-blur)):
+
+- `blurCoverage(coverage, sigma)` → `Surface` — blur an a8 surface into a new
+  a8 surface of the same size, as two separable passes run **once**. The
+  input is destroyed; the output carries no filter, so compositing it is an
+  ordinary masked composite. Throws when `sigma` is not a finite number above
+  zero, or when the surface is not `'a8'`
+- `shadowSigma(blur[, policy])` → number — the σ a canvas/CSS blur *diameter*
+  names, which is half of it, capped at the policy's `maxSigma`
+- `shadowReach(sigma)` → number — `ceil(3σ)`: the kernel's half-width, and
+  therefore the padding a coverage surface needs on each side
+- `gaussianKernel1d(sigma[, reach])` → number[] — the normalized 1d kernel,
+  `2 * reach + 1` taps wide
+- `DEFAULT_SHADOW_POLICY` — the defaults `app.shadowPolicy` merges over
+  (`cacheBytes`, `maxSigma`, `maxPixels`; see
+  [Shadows](context-2d.md#shadows))
 
 ## Drawing sources in general
 

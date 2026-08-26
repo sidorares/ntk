@@ -14,7 +14,7 @@ import { after, before, describe, test } from 'node:test';
 
 import xserver from 'x11/lib/xserver/index.js';
 
-import { createClient, StaticFontSource, Surface } from '../lib/index.js';
+import { blurCoverage, createClient, StaticFontSource, Surface } from '../lib/index.js';
 import {
   DEFAULT_SHADOW_POLICY,
   gaussianKernel1d,
@@ -565,5 +565,114 @@ describe('how strong a blurred shadow gets', () => {
     // which is why a test that looks for `shadowColor` itself finds nothing
     assert.ok(peak < 165, 'nothing on the canvas is within 90 of the colour');
     ctx.destroy();
+  });
+});
+
+// ------------------------------------------------------------------
+// the blur as a primitive someone else can call (issue #335)
+
+describe('blurCoverage on the public surface', () => {
+  test('the bake and its maths reach a consumer', async () => {
+    // The whole of the issue: the exports map names '.' and './xembed', so a
+    // consumer cannot reach into lib/ — anything they are meant to call has
+    // to leave through the entry point. Self-reference resolves the package
+    // by name here, through the very map an installed copy would use.
+    await assert.rejects(import('ntk/lib/shadow.js'), {
+      code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+    });
+    const ntk = await import('ntk');
+    assert.equal(ntk.blurCoverage, blurCoverage);
+    assert.equal(ntk.shadowSigma, shadowSigma);
+    assert.equal(ntk.shadowReach, shadowReach);
+    assert.equal(ntk.gaussianKernel1d, gaussianKernel1d);
+    assert.deepEqual(ntk.DEFAULT_SHADOW_POLICY, DEFAULT_SHADOW_POLICY);
+  });
+
+  test('the blur lands in the pixels, and the result carries no filter', async () => {
+    // Bake against filter is the point of exporting this: a picture's filter
+    // is re-run by the server on every composite, so a cached blurred picture
+    // pays its kernel per frame. What is asserted is both halves — the
+    // coverage that comes back is blurred, and drawing it sets no filter.
+    const sigma = 4;
+    const pad = shadowReach(sigma);
+    const shape = new Surface(app, {
+      width: 60 + 2 * pad,
+      height: 40 + 2 * pad,
+      format: 'a8'
+    });
+    shape.render((c) => {
+      c.fillStyle = '#ffffff';
+      c.fillRect(pad, pad, 60, 40);
+    });
+
+    const blurred = blurCoverage(shape, sigma);
+    assert.notEqual(blurred, shape, 'a new surface, not the same one filtered');
+    assert.equal(blurred.format, 'a8');
+    assert.equal(blurred.width, shape.width);
+    assert.equal(blurred.height, shape.height);
+    assert.equal(shape._destroyed, true, 'the sharp copy is not left behind');
+
+    const R = app.display.Render;
+    const original = R.SetPictureFilter;
+    let filters = 0;
+    R.SetPictureFilter = function (...args) {
+      filters += 1;
+      return original.apply(this, args);
+    };
+    const ctx = target();
+    try {
+      ctx.fillStyle = '#000000';
+      ctx.drawImage(blurred, 0, 0);
+    } finally {
+      R.SetPictureFilter = original;
+    }
+    assert.equal(filters, 0, 'compositing the bake is a plain masked composite');
+
+    const at = await readAll(ctx);
+    const alphaAt = (x) => at(x, pad + 20)[3] / 255;
+    // the left edge of the rect is at x = pad, so the profile there is the
+    // gaussian's CDF — the same claim the shadow properties make, made by
+    // the primitive on its own
+    for (const [x, want] of [
+      [pad - sigma, 0.159],
+      [pad, 0.5],
+      [pad + sigma, 0.841]
+    ]) {
+      const got = alphaAt(Math.round(x));
+      assert.ok(
+        Math.abs(got - want) < 0.06,
+        `coverage at x=${x} is ${got.toFixed(3)}, expected ~${want}`
+      );
+    }
+    assert.ok(alphaAt(pad + 30) > 0.99, 'the interior of the rect stays covered');
+    // the padding is 3 sigma, so the coverage has all but died by its edge
+    assert.ok(alphaAt(0) < 0.01, `the blur ends inside the padding, got ${alphaAt(0)}`);
+
+    blurred.destroy();
+    ctx.destroy();
+  });
+
+  test('a sigma that is not one, or a surface that is not coverage, is refused', () => {
+    const coverage = new Surface(app, { width: 8, height: 8, format: 'a8' });
+    for (const bad of [0, -1, NaN, Infinity, undefined]) {
+      assert.throws(() => blurCoverage(coverage, bad), /sigma/, `sigma ${bad}`);
+    }
+    // the message names the call that turns a canvas blur into a sigma,
+    // because halving it is exactly what a caller coming from CSS forgets
+    assert.throws(() => blurCoverage(coverage, 0), /shadowSigma/);
+    assert.equal(coverage._destroyed, undefined, 'a refused call destroys nothing');
+
+    const colour = new Surface(app, { width: 8, height: 8 });
+    assert.throws(() => blurCoverage(colour, 2), /a8/);
+    coverage.destroy();
+    colour.destroy();
+  });
+
+  test('the docs section the picture API points at exists', () => {
+    // `setBlurFilter` sends whoever reads it to docs/surface.md#baking-a-blur
+    // for the version that does not re-convolve; nothing else checks that
+    // anchor, and the heading is what makes it one
+    const docs = readFileSync(new URL('../docs/surface.md', import.meta.url), 'utf8');
+    assert.match(docs, /^## Baking a blur$/m);
   });
 });
