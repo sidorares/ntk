@@ -818,6 +818,18 @@ passes cost 2k. At `shadowBlur: 30` that is 8281 against 182. It also runs
 re-applied by the server on every composite, so a cached blurred picture
 re-runs its whole kernel every frame it is drawn.
 
+**A wide blur does not run at full resolution.** Two passes still cost
+`2 * taps * w * h`, and both factors grow with the blur, so a large soft
+shadow is most of what a first paint spends — ten of them on react-x11's
+configurator came to 118M multiply-accumulates, 73% of it in two (issue
+#338). A gaussian carries no detail finer than about σ/2 px, so past σ 8 the
+coverage is shrunk by 2 or 4, blurred at `sigma / scale`, and resolved back:
+`scale` off the kernel, `scale²` off the area, and a difference from the
+exact blur of at most three levels of 8-bit alpha. Nothing downstream sees it —
+the surface is the size it always was and still carries no filter, so a
+cached shadow composites exactly as before. `scaleSigma` and `maxScale` in
+the policy below tune it, and `maxScale: 1` turns it off.
+
 Step (2) is the one piece worth having on its own, and it is exported as
 [`blurCoverage(coverage, sigma)`](surface.md#baking-a-blur) for a toolkit
 that draws its own shapes and wants only the blur — the padding rule, the
@@ -856,6 +868,13 @@ defaults):
   stall. This is the one place a shadow stops matching a browser
 - `maxPixels` (8 M) — the largest coverage surface built for one shadow;
   past it the shadow is dropped and the drawing is unaffected
+- `scaleSigma` (4) — the σ a reduced-scale blur may not fall below. The
+  coverage is shrunk by the largest power of two that keeps `sigma / scale`
+  at or above this, so a blur under σ 8 runs exactly as before. The error is
+  a property of that reduced σ rather than of the ratio: three alpha levels
+  at 4, four at 3, seven at 2
+- `maxScale` (4) — how far that shrink may go whatever the floor allows.
+  `maxScale: 1` blurs everything at full resolution, which is what 8.6 did
 
 Only what could be seen is rendered: a shape's ink is clipped to the part
 whose shadow can land on the target at all (its own bounds, moved back by

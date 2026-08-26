@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
-import { createClient, Path2D, Surface, SvgView } from '../lib/index.js';
+import { blurCoverage, blurScale, createClient, Path2D, Surface, SvgView } from '../lib/index.js';
 import { withTimeout } from './helpers/async.js';
 
 let app = null;
@@ -418,4 +418,69 @@ test('shadows: a wide blur keeps the same fraction of its colour here (#287)', a
     `the middle of the shadow is ${alpha.toFixed(3)} of the colour, expected ~0.784`
   );
   pixmap.destroy();
+});
+
+test('shadows: blurring shrunk coverage draws the same pixels here (#338)', async (t) => {
+  if (skip) return t.skip(skip);
+  // A wide blur is run on coverage shrunk by 2 or 4 and resolved back, which
+  // trades three levels of 8-bit alpha for most of a first paint's server
+  // time — and three is the number *here*, where pixman's bilinear works in
+  // fixed point, against the two the JS server's exact arithmetic gives.
+  // The hermetic run asserts the trade against node-x11's JS server; this
+  // asserts that a real RENDER — where the resampling is pixman's bilinear
+  // and not ours — agrees, because the whole scheme is the server's arithmetic
+  // and none of it is visible from the client.
+  const sigma = 21;
+  const pad = 3 * sigma; // shadowReach: the blur's full spread, on all sides
+  const width = 60 + 2 * pad;
+  // tall enough that the middle row is 3 sigma clear of the rect's own top
+  // and bottom, so the profile there is one edge's rather than a small
+  // rect's two — which is what makes the CDF below the exact prediction
+  const height = 160 + 2 * pad;
+
+  const bake = (scale) => {
+    const shape = new Surface(app, { width, height, format: 'a8' });
+    shape.render((c) => {
+      c.fillStyle = '#ffffff';
+      c.fillRect(pad, pad, 60, 160);
+    });
+    return blurCoverage(shape, sigma, { scale });
+  };
+  const paint = async (coverage) => {
+    const pixmap = app.createPixmap({ width, height, depth: 24 });
+    const ctx = pixmap.getContext('2d');
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = 'black';
+    ctx.drawImage(coverage, 0, 0);
+    const image = await readPixels(ctx, width, height);
+    coverage.destroy();
+    pixmap.destroy();
+    return image;
+  };
+
+  assert.equal(blurScale(sigma), 4, 'sigma 21 is worth a 4x shrink');
+  const exact = await paint(bake(1));
+  const scaled = await paint(bake(undefined));
+  let worst = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      worst = Math.max(worst, Math.abs(px(exact, width, x, y)[0] - px(scaled, width, x, y)[0]));
+    }
+  }
+  assert.ok(worst <= 3, `the shrunk blur differs by ${worst} of 255, expected 3 or less`);
+  // and it is a blur, not a smear: the profile of the edge at x = pad still
+  // follows the gaussian's CDF
+  const coverage = (x) => 1 - px(scaled, width, x, height >> 1)[0] / 255;
+  for (const [x, want] of [
+    [pad - sigma, 0.159],
+    [pad, 0.5],
+    [pad + sigma, 0.841]
+  ]) {
+    const got = coverage(Math.round(x));
+    assert.ok(
+      Math.abs(got - want) < 0.03,
+      `coverage at x=${x} is ${got.toFixed(3)}, expected ~${want}`
+    );
+  }
 });
