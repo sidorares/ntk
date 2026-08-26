@@ -14,7 +14,13 @@ import { after, before, describe, test } from 'node:test';
 
 import xserver from 'x11/lib/xserver/index.js';
 
-import { blurCoverage, createClient, StaticFontSource, Surface } from '../lib/index.js';
+import {
+  blurCoverage,
+  blurScale,
+  createClient,
+  StaticFontSource,
+  Surface
+} from '../lib/index.js';
 import {
   DEFAULT_SHADOW_POLICY,
   gaussianKernel1d,
@@ -565,6 +571,213 @@ describe('how strong a blurred shadow gets', () => {
     // which is why a test that looks for `shadowColor` itself finds nothing
     assert.ok(peak < 165, 'nothing on the canvas is within 90 of the colour');
     ctx.destroy();
+  });
+});
+
+// ------------------------------------------------------------------
+// the same blur, run on less of it (issue #338)
+
+describe('a wide blur runs at reduced scale', () => {
+  /** the alpha a coverage surface would paint, straight out of the server */
+  const coverageAlpha = async (surface) => {
+    const ctx = target(surface.width, surface.height);
+    ctx.fillStyle = '#000000';
+    ctx.drawImage(surface, 0, 0);
+    const img = await ctx.getImageData(0, 0, surface.width, surface.height);
+    ctx.destroy();
+    const alpha = new Uint8Array(surface.width * surface.height);
+    for (let i = 0; i < alpha.length; i++) alpha[i] = img.data[i * 4 + 3];
+    return alpha;
+  };
+
+  /** a rect's coverage, padded by the blur's reach as the blur requires */
+  const shapeFor = (sigma, w = 60, h = 40) => {
+    const pad = shadowReach(sigma);
+    const surface = new Surface(app, {
+      width: w + 2 * pad,
+      height: h + 2 * pad,
+      format: 'a8'
+    });
+    surface.render((c) => {
+      c.fillStyle = '#ffffff';
+      c.fillRect(pad, pad, w, h);
+    });
+    return surface;
+  };
+
+  /** what went to the server: the kernels hung on pictures, and the
+   * transforms, which are the whole visible signature of the shrink */
+  const record = (fn) => {
+    const R = app.display.Render;
+    const filters = [];
+    const transforms = [];
+    const setFilter = R.SetPictureFilter;
+    const setTransform = R.SetPictureTransform;
+    R.SetPictureFilter = function (id, name, params) {
+      filters.push({ name, params });
+      return setFilter.apply(this, arguments);
+    };
+    R.SetPictureTransform = function (id, matrix) {
+      transforms.push(matrix[0]);
+      return setTransform.apply(this, arguments);
+    };
+    try {
+      return { value: fn(), filters, transforms };
+    } finally {
+      R.SetPictureFilter = setFilter;
+      R.SetPictureTransform = setTransform;
+    }
+  };
+
+  const taps = (filters) => {
+    const convolution = filters.filter((f) => f.name === 'convolution');
+    assert.equal(convolution.length, 2, 'two separable passes, whatever the scale');
+    // params are [width, height, ...kernel]: one pass is k x 1, the other 1 x k
+    return Math.max(convolution[0].params[0], convolution[0].params[1]);
+  };
+
+  test('the scale is a power of two, bounded by a sigma floor and a cap', () => {
+    // Nothing below 2 * scaleSigma moves: the two resampling composites
+    // would cost more than the kernel they save.
+    for (const sigma of [0.5, 2, 4, 6, 7.9]) assert.equal(blurScale(sigma), 1, `sigma ${sigma}`);
+    for (const sigma of [8, 10, 12, 15.9]) assert.equal(blurScale(sigma), 2, `sigma ${sigma}`);
+    for (const sigma of [16, 21, 32]) assert.equal(blurScale(sigma), 4, `sigma ${sigma}`);
+    // the reduced sigma is what the floor is about, so it never goes under it
+    for (const sigma of [8, 12, 21, 32]) {
+      assert.ok(sigma / blurScale(sigma) >= DEFAULT_SHADOW_POLICY.scaleSigma);
+    }
+    // and the cap holds whatever the floor would allow
+    assert.equal(blurScale(64, { ...DEFAULT_SHADOW_POLICY, maxScale: 8 }), 8);
+    assert.equal(blurScale(64, { ...DEFAULT_SHADOW_POLICY, maxScale: 1 }), 1);
+    assert.equal(blurScale(12, { ...DEFAULT_SHADOW_POLICY, scaleSigma: 12 }), 1);
+    assert.equal(blurScale(12, { ...DEFAULT_SHADOW_POLICY, scaleSigma: 1 }), 4);
+    assert.equal(blurScale(0), 1, 'no blur, nothing to scale');
+  });
+
+  test('a wide blur shrinks the coverage, blurs small, and resolves back', () => {
+    const sigma = 21;
+    const shape = shapeFor(sigma);
+    const { width, height } = shape;
+    const { value: blurred, filters, transforms } = record(() => blurCoverage(shape, sigma));
+    // 4x: two halvings on the way down, one 1/4 on the way back up
+    assert.deepEqual(transforms, [2, 2, 0.25]);
+    assert.equal(
+      filters.filter((f) => f.name === 'bilinear').length,
+      3,
+      'every resampling composite is bilinear'
+    );
+    // the kernel is the reduced one — 2 * ceil(3 * 21/4) + 1, not 127
+    assert.equal(taps(filters), 2 * shadowReach(sigma / 4) + 1);
+    assert.equal(taps(filters), 33);
+    // and none of that is visible in what comes back
+    assert.equal(blurred.width, width);
+    assert.equal(blurred.height, height);
+    assert.equal(blurred.format, 'a8');
+    blurred.destroy();
+  });
+
+  test('and it is the same blur: three levels of alpha, at most', async () => {
+    // The claim the whole thing rests on. A gaussian carries no detail finer
+    // than about sigma/2 px, so resolving it at full resolution is work the
+    // result cannot hold — but "cannot hold" has to mean pixels, not theory.
+    // Three levels is the bound on a real server (test/smoke-canvas.test.js
+    // asserts the same thing against Xorg); this one, whose bilinear is
+    // exact arithmetic rather than fixed point, comes in at two.
+    for (const sigma of [10, 15, 21, 32]) {
+      const scale = blurScale(sigma);
+      assert.ok(scale > 1, `sigma ${sigma} is scaled at all`);
+      const exact = await coverageAlpha(blurCoverage(shapeFor(sigma), sigma, { scale: 1 }));
+      const scaled = await coverageAlpha(blurCoverage(shapeFor(sigma), sigma));
+      assert.equal(exact.length, scaled.length);
+      let worst = 0;
+      for (let i = 0; i < exact.length; i++) {
+        worst = Math.max(worst, Math.abs(exact[i] - scaled[i]));
+      }
+      assert.ok(worst <= 3, `sigma ${sigma} at ${scale}x differs by ${worst} of 255`);
+    }
+  });
+
+  test('the exact kernel is one option away, and one policy away', () => {
+    const sigma = 21;
+    const exact = record(() => blurCoverage(shapeFor(sigma), sigma, { scale: 1 }));
+    assert.deepEqual(exact.transforms, [], 'nothing is resampled');
+    assert.equal(taps(exact.filters), 2 * shadowReach(sigma) + 1, 'every tap of it');
+    exact.value.destroy();
+
+    app.shadowPolicy = { maxScale: 1 };
+    try {
+      const policy = record(() => blurCoverage(shapeFor(sigma), sigma));
+      assert.deepEqual(policy.transforms, []);
+      assert.equal(taps(policy.filters), 2 * shadowReach(sigma) + 1);
+      policy.value.destroy();
+    } finally {
+      delete app.shadowPolicy;
+    }
+  });
+
+  test('what comes back is a plain mask, exactly as it was before', async () => {
+    // The output of a *scaled* bake must be as ordinary as the output of an
+    // exact one: no filter, no transform left on it, or every composite of
+    // the cached shadow afterwards would pay to resample it again.
+    const sigma = 21;
+    const blurred = blurCoverage(shapeFor(sigma), sigma);
+    const drawn = record(() => {
+      const ctx = target(blurred.width, blurred.height);
+      ctx.fillStyle = '#000000';
+      ctx.drawImage(blurred, 0, 0);
+      ctx.destroy();
+    });
+    assert.deepEqual(drawn.filters, [], 'compositing it sets no filter');
+    assert.deepEqual(drawn.transforms, [], 'and no transform');
+    blurred.destroy();
+  });
+
+  test('a sliver is not shrunk into a smear', () => {
+    // Nothing a shadow builds is this thin — a blur wide enough to be scaled
+    // pads by 24px a side — but the primitive takes any a8 surface.
+    const sliver = new Surface(app, { width: 400, height: 9, format: 'a8' });
+    const { value, transforms } = record(() => blurCoverage(sliver, 21));
+    assert.deepEqual(transforms, [], '9 rows have nothing to give up');
+    assert.equal(value.width, 400);
+    assert.equal(value.height, 9);
+    value.destroy();
+  });
+
+  test('a scale that is not one is refused, and an odd one is snapped down', () => {
+    const coverage = new Surface(app, { width: 64, height: 64, format: 'a8' });
+    for (const bad of [0, -2, NaN, Infinity, 0.5]) {
+      assert.throws(() => blurCoverage(coverage, 8, { scale: bad }), /scale/, `scale ${bad}`);
+    }
+    assert.equal(coverage._destroyed, undefined, 'a refused call destroys nothing');
+    coverage.destroy();
+    // 3 is not a power of two, and a bilinear tap of a 3x shrink would skip
+    // pixels rather than average them: it shrinks by 2 instead
+    const { value, transforms } = record(() => blurCoverage(shapeFor(21), 21, { scale: 3 }));
+    assert.deepEqual(transforms, [2, 0.5]);
+    value.destroy();
+  });
+
+  test('the 2d context gets it without asking', async () => {
+    // The shadow properties call blurCoverage, so the reduced kernel is what
+    // the server sees for a wide `shadowBlur` — and the shadow still lands.
+    const ctx = target(160, 140);
+    const { filters } = record(() => {
+      ctx.shadowColor = '#ff0000';
+      ctx.shadowBlur = 42; // sigma 21
+      ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+      ctx.fillRect(50, 50, 60, 40);
+    });
+    assert.equal(taps(filters), 2 * shadowReach(21 / 4) + 1);
+    const at = await readAll(ctx, 160, 140);
+    assert.ok(at(80, 70)[3] > 100, `the shadow is there (alpha ${at(80, 70)[3]})`);
+    ctx.destroy();
+  });
+
+  test('blurScale reaches a consumer too', async () => {
+    const ntk = await import('ntk');
+    assert.equal(ntk.blurScale, blurScale);
+    assert.equal(ntk.DEFAULT_SHADOW_POLICY.scaleSigma, 4);
+    assert.equal(ntk.DEFAULT_SHADOW_POLICY.maxScale, 4);
   });
 });
 

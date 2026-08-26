@@ -33,7 +33,7 @@ matching file here (see AGENTS.md).
 - [Surface](surface.md) — draw once, composite many times; a8 coverage
   surfaces for drawings that take their colour from the caller, and
   `blurCoverage`, the blur baked into pixels rather than left as a filter the
-  server re-runs per composite
+  server re-runs per composite — and, past σ 8, run at reduced scale
 - [Fonts](fonts.md) — font lookup, loading, rasterization pipeline
 - [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout,
   wire-efficiency design, the vector (trapezoid) path for large/animated sizes

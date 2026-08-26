@@ -94,10 +94,11 @@ lib/region.js              XFIXES Region wrapper: the server-side rectangle
 lib/shadow.js              canvas shadows: the blur (sigma = shadowBlur/2,
                            run as two separable passes), the coverage
                            surfaces it needs and their per-connection cache.
-                           The bake and its maths (blurCoverage, shadowSigma,
-                           shadowReach, gaussianKernel1d) are public API —
-                           a picture filter re-convolves per composite, this
-                           does not (issue #335)
+                           The bake and its maths (blurCoverage, blurScale,
+                           shadowSigma, shadowReach, gaussianKernel1d) are
+                           public API — a picture filter re-convolves per
+                           composite, this does not (issue #335); a wide blur
+                           runs on shrunk coverage (issue #338)
 lib/glyphset.js            XRender GlyphSet wrapper (+ referenceTo: alias an
                            existing set, possibly another client's)
 lib/sharedglyphs.js        cross-process shared glyph cache, client half:

@@ -82,6 +82,59 @@ the padding, the clipping and the caching too. `blurCoverage` is for a caller
 that draws its own shapes and keeps its own paint cache (a widget toolkit
 drawing a `box-shadow`, say) and only wants the blur.
 
+**A wide blur runs small.** Past σ 8 `blurCoverage` shrinks the coverage by
+2 or 4 first, blurs at `sigma / scale`, and resolves the result back to the
+size you handed it — `scale` off the kernel and `scale²` off the area it runs
+over, so `scale³` off the work. A gaussian carries no detail finer than about
+σ/2 px, which is why this is nearly free visually: the difference from an
+exact blur is at most three levels of 8-bit alpha, on a shape whose own edges
+are already soft. It is worth a great deal in time — the two widest shadows
+on react-x11's configurator, 55.5M and 31.2M multiply-accumulates, become
+0.9M and 4.0M — which measured against XQuartz's software RENDER is 1.24s of
+a first paint against 37ms (issue #338; `scripts/bench-shadow-blur.mjs` is
+the measurement, on whatever server you point it at).
+
+Nothing about the call changes: the surface that comes back is the size it
+always was, and carries no filter, so compositing it is the same plain mask
+it was before. What changes is tunable per app:
+
+```js
+app.shadowPolicy = { scaleSigma: 4, maxScale: 4 }; // the defaults
+blurCoverage(shape, sigma, { scale: 1 });          // or per call: exact
+```
+
+`scaleSigma` is the σ a reduced-scale blur may not fall below — the scale is
+the largest power of two keeping `sigma / scale` at or above it, so σ under
+`2 * scaleSigma` is not shrunk at all. That floor is what bounds the error,
+and it is the reduced σ that matters rather than how far you came down to it:
+three alpha levels at σ 4, four at 3, seven at 2. `maxScale: 1` (or
+`{ scale: 1 }`) blurs everything at full resolution.
+
+**Drawing small yourself is better still**, when you can: `blurScale(sigma)`
+names the scale, so a caller that owns the geometry can draw the shape into a
+surface `1 / scale` the size — padding scaled with it — blur at
+`sigma / scale`, and composite through a `1 / scale` picture transform, which
+XRender resamples in the same pass it was already compositing. That skips the
+shrink, the full-size allocation and the resolve; the cost is that the mask
+is resampled on every composite rather than once.
+
+```js
+const scale = blurScale(sigma);
+const small = new Surface(app, {
+  width: Math.ceil((w + 2 * pad) / scale),
+  height: Math.ceil((h + 2 * pad) / scale),
+  format: 'a8'
+});
+small.render((c) => {
+  c.scale(1 / scale, 1 / scale);
+  c.fillStyle = '#fff';
+  c.roundRect(pad, pad, w, h, radius);
+  c.fill();
+});
+const blurred = blurCoverage(small, sigma / scale); // already small: scale 1
+ctx.drawImage(blurred, x - pad, y - pad, blurred.width * scale, blurred.height * scale);
+```
+
 **Bake, don't filter.** The other way to blur a picture is
 `picture().setBlurFilter(size, sigma)` — and a picture's filter is a property
 of the picture, so the server re-runs the whole kernel *every time it is
@@ -182,11 +235,16 @@ caller's normal job.
 The blur primitives, imported from `ntk` itself rather than hung off a
 surface (see [Baking a blur](#baking-a-blur)):
 
-- `blurCoverage(coverage, sigma)` → `Surface` — blur an a8 surface into a new
-  a8 surface of the same size, as two separable passes run **once**. The
-  input is destroyed; the output carries no filter, so compositing it is an
-  ordinary masked composite. Throws when `sigma` is not a finite number above
-  zero, or when the surface is not `'a8'`
+- `blurCoverage(coverage, sigma[, { scale }])` → `Surface` — blur an a8
+  surface into a new a8 surface of the same size, as two separable passes run
+  **once**. The input is destroyed; the output carries no filter, so
+  compositing it is an ordinary masked composite. A wide blur is run at
+  reduced scale (above); `scale` overrides the policy's choice and `1` is the
+  exact kernel. Throws when `sigma` is not a finite number above zero, when
+  `scale` is under 1, or when the surface is not `'a8'`
+- `blurScale(sigma[, policy])` → number — the power-of-two scale that blur
+  runs at: 1 (full resolution), 2 or 4. For a caller sizing its own coverage
+  surface
 - `shadowSigma(blur[, policy])` → number — the σ a canvas/CSS blur *diameter*
   names, which is half of it, capped at the policy's `maxSigma`
 - `shadowReach(sigma)` → number — `ceil(3σ)`: the kernel's half-width, and
@@ -194,7 +252,7 @@ surface (see [Baking a blur](#baking-a-blur)):
 - `gaussianKernel1d(sigma[, reach])` → number[] — the normalized 1d kernel,
   `2 * reach + 1` taps wide
 - `DEFAULT_SHADOW_POLICY` — the defaults `app.shadowPolicy` merges over
-  (`cacheBytes`, `maxSigma`, `maxPixels`; see
+  (`cacheBytes`, `maxSigma`, `maxPixels`, `scaleSigma`, `maxScale`; see
   [Shadows](context-2d.md#shadows))
 
 ## Drawing sources in general
