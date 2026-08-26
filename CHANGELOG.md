@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.7.0](https://github.com/sidorares/ntk/compare/v8.6.0...v8.7.0) (2026-08-26)
+
+
+### Features
+
+* **shadow:** run a wide blur on shrunk coverage ([#339](https://github.com/sidorares/ntk/issues/339)) ([5ec399e](https://github.com/sidorares/ntk/commit/5ec399ef2af678f481ce8f44c1e5fec6b68be1cd)), closes [#338](https://github.com/sidorares/ntk/issues/338)
+
 ## [8.6.0](https://github.com/sidorares/ntk/compare/v8.5.0...v8.6.0) (2026-08-26)
 
 
