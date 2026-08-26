@@ -31,7 +31,9 @@ matching file here (see AGENTS.md).
 - [Images](images.md) — PNG/JPEG loading (`loadImage`), the `Image` object,
   `drawImage`
 - [Surface](surface.md) — draw once, composite many times; a8 coverage
-  surfaces for drawings that take their colour from the caller
+  surfaces for drawings that take their colour from the caller, and
+  `blurCoverage`, the blur baked into pixels rather than left as a filter the
+  server re-runs per composite
 - [Fonts](fonts.md) — font lookup, loading, rasterization pipeline
 - [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout,
   wire-efficiency design, the vector (trapezoid) path for large/animated sizes

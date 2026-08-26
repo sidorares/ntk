@@ -812,15 +812,25 @@ kernel ran out of pixels. Everything here pads by the blur's full reach.
 Step (2) is two 1d passes rather than one 2d kernel because a gaussian is
 separable, and that is the difference between a shadow you can animate and
 one you cannot: a k-wide 2d kernel costs k² multiplies per pixel where two
-passes cost 2k. At `shadowBlur: 30` that is 8281 against 182.
+passes cost 2k. At `shadowBlur: 30` that is 8281 against 182. It also runs
+**once**: the passes leave the blur in the surface's pixels, where a
+`convolution` filter hung on a picture (`picture().setBlurFilter()`) is
+re-applied by the server on every composite, so a cached blurred picture
+re-runs its whole kernel every frame it is drawn.
+
+Step (2) is the one piece worth having on its own, and it is exported as
+[`blurCoverage(coverage, sigma)`](surface.md#baking-a-blur) for a toolkit
+that draws its own shapes and wants only the blur — the padding rule, the
+sigma-is-half-the-radius rule and the bake-don't-filter rule are all there.
 
 **Text shadows are cached** — keyed by (text, font, blur) on the connection —
 because text is the one drawing with a short, stable name. A label redrawn
 every frame, or a specimen redrawn on every slider tick, builds its coverage
 once and composites it afterwards. Paths, rectangles and images have no such
 key and rebuild their coverage per draw, so a large blurred path shadow in a
-render loop is the shape to watch for; draw it into a `Surface` yourself and
-`drawImage` that instead.
+render loop is the shape to watch for; draw it into a `Surface` yourself —
+with [`blurCoverage`](surface.md#baking-a-blur) if the blur is the expensive
+part — and `drawImage` that instead.
 
 **Laid-out text is cached too**, on the identity of the runs it is made of
 rather than on a string: a whole paragraph is one coverage surface, whatever

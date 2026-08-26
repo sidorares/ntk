@@ -81,7 +81,9 @@ lib/renderingcontext_cgl.js     direct rendering context, appledri flavor
                            (CGL into the server-exported window surface);
                            wraps 'opengl' above the gles module's dispatch
 lib/renderingcontext_x11.js     raw core-X drawing context
-lib/picture.js             XRender Picture wrapper (+ blur filter)
+lib/picture.js             XRender Picture wrapper (+ setBlurFilter, whose
+                           kernel the server re-runs on every composite —
+                           to blur once, bake with shadow.js's blurCoverage)
 lib/pictformat.js          which RENDER picture format describes a drawable:
                            visual -> format, matched on the channel masks
                            the handshake and QueryPictFormats agree on, with
@@ -91,7 +93,11 @@ lib/region.js              XFIXES Region wrapper: the server-side rectangle
                            ctx.clipRegion() installs on a picture
 lib/shadow.js              canvas shadows: the blur (sigma = shadowBlur/2,
                            run as two separable passes), the coverage
-                           surfaces it needs and their per-connection cache
+                           surfaces it needs and their per-connection cache.
+                           The bake and its maths (blurCoverage, shadowSigma,
+                           shadowReach, gaussianKernel1d) are public API —
+                           a picture filter re-convolves per composite, this
+                           does not (issue #335)
 lib/glyphset.js            XRender GlyphSet wrapper (+ referenceTo: alias an
                            existing set, possibly another client's)
 lib/sharedglyphs.js        cross-process shared glyph cache, client half:
