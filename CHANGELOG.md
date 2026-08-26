@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.6.0](https://github.com/sidorares/ntk/compare/v8.5.0...v8.6.0) (2026-08-26)
+
+
+### Features
+
+* **shadow:** export blurCoverage, the blur that bakes instead of re-filtering ([#336](https://github.com/sidorares/ntk/issues/336)) ([41da9f6](https://github.com/sidorares/ntk/commit/41da9f6044cd67ee92aa4d85d2fabd4e1d334c1a))
+
 ## [8.5.0](https://github.com/sidorares/ntk/compare/v8.4.1...v8.5.0) (2026-08-25)
 
 
