@@ -182,3 +182,141 @@ test('a handler whose selection is refused leaves the mask honest', async () => 
     (err) => err.error === 10
   );
 });
+
+// The other direction (issue #318): `on()` raises the mask and `off()` does
+// not lower it, so until deselectInput there was no way to stop being sent
+// an event — a window that no longer wants hover kept paying for motion for
+// the rest of its life. What the API has to get right is the refusal: bits
+// several event names share, and bits ntk's own machinery needs.
+
+test('deselectInput lowers a selection nothing is listening for', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  await wnd.selectInput(x11.eventMask.PropertyChange);
+  assert.ok((await maskOf(app, wnd.id)) & x11.eventMask.PropertyChange);
+
+  const kept = await wnd.deselectInput(x11.eventMask.PropertyChange);
+
+  assert.equal(kept, 0, 'nothing held it back');
+  assert.equal(wnd.eventMask & x11.eventMask.PropertyChange, 0, 'gone from the tracked mask');
+  assert.equal(
+    (await maskOf(app, wnd.id)) & x11.eventMask.PropertyChange,
+    0,
+    'and from the server'
+  );
+  assert.ok(
+    (await maskOf(app, wnd.id)) & x11.eventMask.StructureNotify,
+    'the bits it was not asked about are untouched'
+  );
+});
+
+test('a bit a live listener still needs is kept and reported, not cleared', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  const hover = () => {};
+  wnd.on('mousemove', hover);
+  await settle(app);
+  assert.ok((await maskOf(app, wnd.id)) & x11.eventMask.PointerMotion, 'on() selected it');
+
+  const kept = await wnd.deselectInput(x11.eventMask.PointerMotion);
+  assert.equal(kept, x11.eventMask.PointerMotion, 'the refusal is the return value');
+  assert.ok(
+    (await maskOf(app, wnd.id)) & x11.eventMask.PointerMotion,
+    'the listener would have stopped working'
+  );
+  assert.equal(
+    x11.eventMask.PointerMotion & wnd.heldEventMask,
+    x11.eventMask.PointerMotion,
+    'and the same answer without making the request'
+  );
+
+  // the listener gone, the same call goes through
+  wnd.off('mousemove', hover);
+  assert.equal(x11.eventMask.PointerMotion & wnd.heldEventMask, 0);
+  assert.equal(await wnd.deselectInput(x11.eventMask.PointerMotion), 0);
+  assert.equal((await maskOf(app, wnd.id)) & x11.eventMask.PointerMotion, 0);
+});
+
+test('a bit several event names share survives until the last of them', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  const click = () => {};
+  const scroll = () => {};
+  // 'wheel' is a click of button 4-7 in the core protocol, so both names
+  // are the same ButtonPress bit
+  wnd.on('mousedown', click);
+  wnd.on('wheel', scroll);
+  await settle(app);
+
+  wnd.off('mousedown', click);
+  assert.equal(
+    await wnd.deselectInput(x11.eventMask.ButtonPress),
+    x11.eventMask.ButtonPress,
+    "the other name's listener still needs it"
+  );
+  assert.ok((await maskOf(app, wnd.id)) & x11.eventMask.ButtonPress);
+
+  wnd.off('wheel', scroll);
+  assert.equal(await wnd.deselectInput(x11.eventMask.ButtonPress), 0);
+  assert.equal((await maskOf(app, wnd.id)) & x11.eventMask.ButtonPress, 0);
+});
+
+test('a deselection that would change nothing is not a request', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  wnd.on('mousemove', () => {});
+  await settle(app);
+
+  const writes = countWrites(app);
+  const unselected = await wnd.deselectInput(x11.eventMask.PropertyChange);
+  const held = await wnd.deselectInput(x11.eventMask.PointerMotion);
+  await settle(app);
+  writes.restore();
+
+  assert.equal(writes.n, 0, 'neither a bit that is off nor one that is spoken for');
+  assert.equal(unselected, 0, 'a bit that was never selected is not "kept"');
+  assert.equal(held, x11.eventMask.PointerMotion);
+});
+
+test("StructureNotify is held by ntk's own bookkeeping", async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  await settle(app);
+
+  // map/unmap/destroy tracking listens on every window without asking for a
+  // selection — but it does need the events once they are being sent
+  assert.equal(
+    await wnd.deselectInput(x11.eventMask.StructureNotify),
+    x11.eventMask.StructureNotify
+  );
+  assert.ok((await maskOf(app, wnd.id)) & x11.eventMask.StructureNotify);
+
+  const mapped = new Promise((resolve) => wnd.once('map', resolve));
+  wnd.map();
+  await mapped;
+  assert.equal(wnd._mapped, true);
+});
+
+test('Exposure is held while a backing store drives the redraw', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  wnd.getContext('2d'); // enables double buffering, which selects Exposure
+  await settle(app);
+  assert.ok((await maskOf(app, wnd.id)) & x11.eventMask.Exposure, 'nobody listens, ntk asked');
+
+  assert.equal(
+    await wnd.deselectInput(x11.eventMask.Exposure),
+    x11.eventMask.Exposure,
+    'the redraw cycle would have stopped'
+  );
+  assert.ok((await maskOf(app, wnd.id)) & x11.eventMask.Exposure);
+});
+
+test('a destroyed window lowers its tracked mask without a request', async () => {
+  const wnd = app.createWindow({ width: 40, height: 30 });
+  await wnd.selectInput(x11.eventMask.PropertyChange);
+  wnd.destroy();
+  await settle(app);
+
+  const writes = countWrites(app);
+  const kept = await wnd.deselectInput(x11.eventMask.PropertyChange);
+  writes.restore();
+
+  assert.equal(kept, 0);
+  assert.equal(writes.n, 0, 'the window is gone — there is nothing to tell the server');
+  assert.equal(wnd.eventMask & x11.eventMask.PropertyChange, 0);
+});

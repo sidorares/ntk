@@ -659,6 +659,14 @@ wnd.requestAnimationFrame(step); // now runs at the display's rate
   so a window capped below the display's rate never measures it
 - `wnd.droppedFrames` — vertical blanks the display went through without a
   frame from this window, where the server's counter can tell
+- `wnd.eventMask` — the X event mask this connection has selected on the
+  window. Raised by `.on(...)`, the `onXxx` creation arguments and
+  `selectInput`; lowered only by
+  [`deselectInput`](#lowering-a-selection--deselectinputmask)
+- `wnd.heldEventMask` — the bits of it something in this process still
+  needs: every event name with a live listener, plus what ntk's own
+  machinery requires. `mask & wnd.heldEventMask` is what `deselectInput`
+  would refuse to clear
 - `wnd.app`, `wnd.X`, `wnd.display` — owning app / raw client shortcuts
 
 ## Methods
@@ -707,6 +715,11 @@ All return `this` unless noted.
 - `setMouseHintOnly(isOn)` — trade motion events for round trips on a
   bandwidth-constrained connection, see
   [Hinted motion](#hinted-motion--setmousehintonlyison)
+- `deselectInput(mask)` — stop selecting `mask`; a promise for the bits it
+  kept because a listener still needs them, `0` when it cleared everything
+  asked for. The inverse of `selectInput`, and the only way the mask goes
+  down — see
+  [Lowering a selection](#lowering-a-selection--deselectinputmask)
 - `selectXI2(types, options)` — take this window's input from XInput 2:
   smooth scrolling, per-device ids, touch. Returns a promise for whether the
   server has XI2, not `this` — see
@@ -731,6 +744,7 @@ All return `this` unless noted.
 - `getProperty(name, options)`, `setProperty(name, value, options)`,
   `deleteProperty(name)`, `getTitle()`, `getSizeHints()`, `getWmHints()`,
   `getTransientFor()`, `getAttributes()`, `atom(name)`, `selectInput(mask)`,
+  `deselectInput(mask)`,
   `addToSaveSet()`, `sendConfigureNotify(geometry)`, `close()`,
   `grabButton(options)` — the window manager side, see
   [Being the window manager](#being-the-window-manager)
@@ -1362,7 +1376,9 @@ const wnd = app.createWindow({ width: 300, height: 200, cursor: app.cursors.get(
 ## Events
 
 DOM-inspired names. Selecting an event via `.on(...)` (or an `onXxx`
-constructor arg) automatically extends the window's X event mask.
+constructor arg) automatically extends the window's X event mask;
+[`deselectInput`](#lowering-a-selection--deselectinputmask) is what narrows
+it again, since `off()` only drops the listener.
 
 | event | X event | notes |
 |---|---|---|
@@ -1423,6 +1439,49 @@ the first event after the switch — spurious work, never missed work. The
 alternative is a `TranslateCoordinates` round trip per event, which is the
 cost these flags exist to avoid; ask for one explicitly if you need the true
 screen origin.
+
+### Lowering a selection — `deselectInput(mask)`
+
+`.on(name, fn)` raises the window's X event mask as a side effect. `off()`
+does not lower it again — it drops the JS listener and leaves the selection,
+so the server goes on sending events nobody reads. `deselectInput` is the
+inverse, and the only thing that takes a bit back out:
+
+```js
+import x11 from 'x11';
+
+wnd.off('mousemove', onHover);
+const kept = await wnd.deselectInput(x11.eventMask.PointerMotion);
+if (kept) {
+  // something in this process is still listening for it
+}
+```
+
+For most masks the difference is invisible: their events are occasional, and
+selecting one nobody reads costs nothing measurable. Motion is the exception,
+because it arrives at frame rate for as long as the pointer is over the
+window — around 2 KB/s of core `MotionNotify` at 60 Hz, and 8 KB/s where the
+motion is XI2's. A viewer that hides its chrome, a toolbar that unmounts, a
+window that goes to a background tab: they know when hover stopped mattering,
+and this is how they say so.
+
+**It refuses to break a live listener.** Several event names share one bit —
+`map`, `unmap`, `resize`, `reparent`, `gravity`, `circulate` and `destroy`
+are all `StructureNotify` — so losing the last `map` listener does not make
+the bit free, and clearing `PointerMotion` out from under an `on('mousemove')`
+is the one bug this API could have. Bits a listener still needs are kept, and
+the promise resolves with them rather than throwing, so "clear everything I
+can" is a single call. `wnd.heldEventMask` answers the same question without
+making the request.
+
+Two selections are therefore never cleared through it: `StructureNotify`,
+which ntk's own map/unmap/destroy bookkeeping listens for on every window,
+and `Exposure` on a [double-buffered](#double-buffering-backing-store) one,
+whose redraw cycle is driven by intercepting it.
+
+A mask that is not selected, or one that is entirely spoken for, resolves
+without a request. XI2 selections are separate and have their own inverse —
+`selectXI2([])`, [below](#wheel-and-smooth-scrolling).
 
 ## Wheel and smooth scrolling
 
