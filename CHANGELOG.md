@@ -1,5 +1,17 @@
 # Changelog
 
+## [8.8.0](https://github.com/sidorares/ntk/compare/v8.7.0...v8.8.0) (2026-08-27)
+
+
+### Features
+
+* **window:** deselectInput, the inverse of selectInput ([#342](https://github.com/sidorares/ntk/issues/342)) ([c8979fd](https://github.com/sidorares/ntk/commit/c8979fd3092a1f243a243a54622ac20f4d7e15b2))
+
+
+### Bug Fixes
+
+* **gl:** answer the multisample request instead of dropping it ([#343](https://github.com/sidorares/ntk/issues/343)) ([41af955](https://github.com/sidorares/ntk/commit/41af95519dad75e0c14317adcdd7e283db083ef3))
+
 ## [8.7.0](https://github.com/sidorares/ntk/compare/v8.6.0...v8.7.0) (2026-08-26)
 
 
