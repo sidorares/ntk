@@ -294,18 +294,19 @@ describe('glCapabilities', () => {
     assert.equal(asked, false, 'a connection that cannot pass an fd needs no round trip');
   });
 
-  test('a local socket the runtime cannot pass an fd down is a different answer', async () => {
-    // Bun is the case in the field: the display is local and perfectly
-    // usable, and x11 reaches for a Node internal Bun does not implement.
-    // Reporting "not a local socket" would send the reader off to check
-    // DISPLAY, which is fine.
+  test('a local socket that cannot carry an fd is a different answer', async () => {
+    // The display is local and perfectly usable; what is absent is the
+    // descriptor transport. x11 has one for Node (`process.binding`) and one
+    // for Bun (`bun:ffi` sendmsg, from x11 4.1.0), so this is an older x11
+    // under Bun, or a runtime with neither. Reporting "not a local socket"
+    // would send the reader off to check DISPLAY, which is fine.
     setDriAddon(workingAddon);
     const caps = await glCapabilities(
       fakeApp({ local: true, fdCapable: false, options: { glPolicy: 'auto' } })
     );
     assert.equal(caps.reason.code, GLError.NO_FD_PASSING);
     assert.match(caps.reason.message, /file descriptors/);
-    assert.match(caps.reason.hint, /Bun/, 'and names the runtime that does this');
+    assert.match(caps.reason.hint, /x11@\^4\.1\.0/, 'and names the upgrade that fixes it');
     assert.doesNotMatch(
       caps.reason.message,
       /not a local socket/,
