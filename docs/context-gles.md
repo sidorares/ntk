@@ -147,7 +147,7 @@ not the message:
 | `GL_NO_DRIVER` | the platform libraries are missing — `libgbm`/`libEGL`/`libGLESv2` on Linux, libXplugin/OpenGL.framework on macOS — or the platform has no direct path | install Mesa / install XQuartz; elsewhere direct rendering does not exist |
 | `GL_NO_DEVICE` | no readable `/dev/dri/renderD*` (Linux) | map the device into the container, or join the `render` group |
 | `GL_REMOTE_DISPLAY` | a TCP or forwarded display | direct rendering is local-only; use indirect over a network |
-| `GL_NO_FD_PASSING` | local display, but this runtime cannot pass a descriptor (`dri3` flavor only) | run under Node — Bun does not implement the internal x11 uses |
+| `GL_NO_FD_PASSING` | local display, but this connection cannot pass a descriptor (`dri3` flavor only) | under Bun, `npm install x11@^4.1.0` — Node and Bun both pass descriptors, Deno neither |
 | `GL_NO_DRI3` | the server has no DRI3/Present | Xvfb, Xephyr and XQuartz have none (XQuartz has [its own path](#macos)) |
 | `GL_NO_APPLEDRI` | macOS, and the server has no usable Apple-DRI | is the display an XQuartz server? |
 | `GL_NO_WINDOWSERVER` | macOS, but no WindowServer session — SSH | run from the logged-in GUI session |
@@ -165,17 +165,21 @@ be created.
 ### Runtimes
 
 The `dri3` flavor needs a runtime that can send a file descriptor over a
-unix socket, because that is how DRI3 hands the server a buffer. `x11` does
-it through Node's internal `process.binding('pipe_wrap')`, so:
+unix socket, because that is how DRI3 hands the server a buffer. `x11` has a
+transport for each: Node's internal `process.binding('pipe_wrap')`, and
+`bun:ffi` calling `sendmsg(2)` under Bun, which arrived in `x11` 4.1.0 and is
+on by default. So:
 
 | runtime | direct (`dri3`) | direct (`appledri`) | indirect |
 | --- | --- | --- | --- |
 | Node | yes | yes | yes |
-| Bun | **no** — `process.binding('pipe_wrap')` is not implemented | yes — no descriptor ever crosses the socket | yes |
+| Bun | yes — `bun:ffi` `sendmsg(2)`, from `x11` 4.1.0 | yes — no descriptor ever crosses the socket | yes |
 
-Under Bun on Linux the capability probe reports `GL_NO_FD_PASSING` and
-`'auto'` falls back to indirect GLX, which needs no descriptor passing at
-all. Nothing else about the display has to change.
+ntk depends on `x11` `^4.1.0`, so a fresh install has that transport. An
+older `x11` resolved into the tree some other way still reports
+`GL_NO_FD_PASSING` under Bun, and so does a runtime with neither transport —
+Deno, today. `'auto'` then falls back to indirect GLX, which needs no
+descriptor passing at all, and nothing else about the display has to change.
 
 ## The API is not the GLX one
 
