@@ -521,6 +521,29 @@ describe("getContext('opengl') dispatch", () => {
     });
   });
 
+  // getContext is the other door a spec can come in through — the direct
+  // contexts read DEPTH_SIZE off the config object they are handed, so a
+  // hand-written `{ DEPTH_SIZE: 24, SAMPLES: 4 }` reaches them without
+  // passing chooseGLConfig at all (issue #341)
+  test('a config asking for samples is answered on the context, not dropped', () => {
+    withEnv(undefined, () => {
+      setDriAddon({ ...darwinAddon, apple: { ...darwinAddon.apple, Context: appleContextStub } });
+      const window = fakeAppleWindow();
+      const said = [];
+      const warn = console.warn;
+      console.warn = (...args) => said.push(args.join(' '));
+      let gl;
+      try {
+        gl = Drawable.renderingContextFactory['opengl'](window, { DEPTH_SIZE: 24, SAMPLES: 4 });
+      } finally {
+        console.warn = warn;
+      }
+      assert.equal(gl.samples, 0, 'what the context has, whatever the config asked for');
+      assert.equal(said.length, 1);
+      assert.match(said[0], /SAMPLES=4/);
+    });
+  });
+
   test("'cgl' by name on the dri3 flavor points back the same way", () => {
     withEnv(undefined, () => {
       setDriAddon(workingAddon);

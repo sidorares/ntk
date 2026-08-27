@@ -108,6 +108,13 @@ describe('GLX config discovery', () => {
     );
   });
 
+  test('the config reports the samples it has, not the samples that were asked for', async () => {
+    // chooseGLXConfig's answer is the direct backend's too (issue #341): a
+    // caller that has to antialias for itself reads one field on either
+    const config = await app.chooseGLXConfig();
+    assert.equal(config.samples, 0, 'the emulator publishes one fbconfig, and it has no sample buffers');
+  });
+
   test('an unknown attribute name is reported, not silently ignored', async () => {
     await assert.rejects(() => app.chooseGLXConfig({ DEPTH_SIZEE: 24 }), /unknown GLX attribute/);
   });

@@ -202,10 +202,14 @@ the one available — useful when the code wants no silent substitution.
 Direct contexts also carry `gl.flavor` (`'dri3'` or `'appledri'`) for the
 rare code that cares which pipeline is under it.
 
-The ES 2 surface is whatever `x11-dri` exposes, which is the core of ES 2
-(shaders, programs, uniforms, buffers, attributes, draws, `readPixels`) and
-**not yet textures, framebuffer objects, blending or scissoring**. Adding an
-entry point is a small wrapper in that package.
+The ES 2 surface is whatever `x11-dri` exposes: the core of ES 2 — shaders,
+programs, uniforms, buffers, attributes, draws, textures, framebuffer
+objects, renderbuffers, blending, scissoring, `readPixels` — plus the ES 3
+entry points a driver has (VAOs, instancing, 3D textures), which
+`gl.getFeatures()` reports. Still absent, and the reason
+[Multisampling](#multisampling) has nothing to resolve by hand:
+`renderbufferStorageMultisample` and `blitFramebuffer`. Adding an entry point
+is a small wrapper in that package.
 
 ### Context lifetime
 
@@ -334,15 +338,58 @@ be written twice:
 ```js
 const config = await app.chooseGLConfig({ DEPTH_SIZE: 24 });
 // { backend: 'direct', visual, depth, class, doubleBuffer, depthSize,
-//   screen, fbconfig: null, device, config: {} }
+//   samples, screen, fbconfig: null, device, config: {} }
 ```
 
 On the direct backend it needs no round trip — there are no fbconfigs, only a
 window whose depth the GPU's buffers can be read as. `DEPTH_SIZE` becomes the
 EGL depth-buffer size; `ALPHA_SIZE` picks a 32-bit ARGB visual (whose alpha a
-compositor blends) instead of the root's 24-bit one. Everything else in the
-spec is ignored there, and honoured by
+compositor blends) instead of the root's 24-bit one. `SAMPLES` and
+`SAMPLE_BUFFERS` are answered rather than honoured — see
+[Multisampling](#multisampling) below. Everything else in the spec is ignored
+there, and honoured by
 [`chooseGLXConfig`](context-opengl.md#choosing-a-visual) on the indirect one.
+
+`samples` is on the answer from either backend, and is the one field to
+branch on: the colour samples per pixel the config really has, `0` for none.
+(`chooseGLXConfig` reports `null` in the one case where it cannot know —
+a spec that pins `visual`, where no fbconfig is looked at.)
+
+## Multisampling
+
+**The direct backend cannot give a window a multisampled buffer today**, on
+either flavor, and `chooseGLConfig` says so instead of dropping the request:
+the config it returns has `samples: 0`, and a spec that asked for more warns
+once per connection.
+
+```js
+const config = await app.chooseGLConfig({ SAMPLES: 4 });
+if (config.samples < 4) {
+  // draw at 2x into an FBO and downsample, or accept aliased edges
+}
+```
+
+The reason is one layer below ntk. A sample count belongs to the pixel format
+the `x11-dri` addon builds — `EGL_SAMPLES` on the EGLConfig behind the GBM
+surface (`dri3`), `kCGLPFASamples` on the CGL pixel format (`appledri`) — and
+the addon takes a depth size and no sample count, so there is nothing here to
+ask with. Its GL table has neither `renderbufferStorageMultisample` nor
+`blitFramebuffer` either, so ntk cannot resolve a multisampled framebuffer by
+hand in place of the driver. When the addon grows the option, `samples`
+becomes what it reports and the same spec starts meaning what it says
+(`DIRECT_SAMPLES` in `lib/gl.js` is the single place that changes).
+
+What works today:
+
+- **Indirect GLX honours it.** `SAMPLES`/`SAMPLE_BUFFERS` are fbconfig
+  attributes there, matched as minimums, so a server with multisample
+  fbconfigs gives real MSAA — and a server without one now *fails* the call
+  rather than quietly returning a visual with no sample buffers.
+- **Supersample in your own draw code.** Render to an FBO at 2x and
+  downsample. One bilinear tap resolves a 2x supersample and no more, so past
+  2x this needs a mip chain or a multi-tap filter to keep gaining.
+- **`gl.samples`** carries the same number on the context — `'opengl'`,
+  `'gles'` and `'cgl'` alike — for draw code that has no config in hand.
 
 ## Testing
 

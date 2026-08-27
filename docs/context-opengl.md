@@ -42,7 +42,7 @@ gl.SwapBuffers();
 `app.chooseGLXConfig(spec)` resolves with
 
 ```js
-{ visual, depth, class, doubleBuffer, depthSize, fbconfig, screen, config }
+{ visual, depth, class, doubleBuffer, depthSize, samples, fbconfig, screen, config }
 ```
 
 `visual` and `depth` go to `createWindow` (which also creates a matching
@@ -58,7 +58,17 @@ id and skip the search).
 
 The search asks the server: `GetFBConfigs` first, falling back to the GLX 1.2
 `GetVisualConfigs` — no `glxinfo` shell-out, so it works headlessly and in CI.
-It rejects with a message naming the constraints when nothing matches.
+It rejects with a message naming the constraints when nothing matches. Both
+paths filter on every attribute the server reports, multisampling included:
+a `SAMPLES: 4` this display has no config for is a rejection, never a config
+without sample buffers handed back as though the request had been met.
+
+`samples` on the result is the colour samples per pixel that config has — 0
+for none, and `null` only when the spec pinned `visual`, where no fbconfig
+was consulted to know. `gl.samples` carries the same number on the context.
+The direct backend answers the same question with the same field, where the
+answer is always 0 for now: see
+[Multisampling](context-gles.md#multisampling).
 
 `getContext('opengl')` without a config picks one itself, preferring a config
 for the visual the window already has. That keeps the short form working, but
@@ -81,6 +91,7 @@ await gl.ready; // resolves with the context, rejects if setup failed
 gl.contextTag; // the tag MakeCurrent returned (0 until ready)
 gl.contextId; // the GLX context XID
 gl.config; // the config in use
+gl.samples; // its samples per pixel (0 until the config is resolved)
 ```
 
 A failed setup rejects `gl.ready`, records `gl.error`, drops the queued
