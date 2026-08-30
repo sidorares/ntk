@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.8.1](https://github.com/sidorares/ntk/compare/v8.8.0...v8.8.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **gl:** Bun passes descriptors now, so stop reporting that it cannot ([#346](https://github.com/sidorares/ntk/issues/346)) ([8f9d396](https://github.com/sidorares/ntk/commit/8f9d396660db943d7515bcae7239f9c430ace178))
+
 ## [8.8.0](https://github.com/sidorares/ntk/compare/v8.7.0...v8.8.0) (2026-08-27)
 
 
