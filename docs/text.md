@@ -234,6 +234,13 @@ clip, and takes the server-side fast path under a rectangular clip. Glyph
 origins round to whole pixels on the bitmap path — a grid renderer
 positions on integers anyway, so nothing moves.
 
+They round the same wherever the run is drawn: a run moved by whole pixels,
+by a translate or its own `x`/`y`, moves every glyph by exactly those
+pixels. That is what lets a renderer copy pixels it already drew, a scroll
+blit, and still match a repaint byte for byte (issue #350). To get it, the
+run's origin is snapped to 1/256 px before its glyphs round, which moves a
+glyph only where its pen lies within 1/512 px of a rounding boundary.
+
 It also honours the [shadow](context-2d.md#shadows) state: the runs of one
 call become one blurred coverage surface, painted under the glyphs. That is
 what gives a `TextLayout` a shadow, and it is cached on the identity of the
