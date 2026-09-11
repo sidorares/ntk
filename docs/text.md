@@ -245,7 +245,9 @@ It also honours the [shadow](context-2d.md#shadows) state: the runs of one
 call become one blurred coverage surface, painted under the glyphs. That is
 what gives a `TextLayout` a shadow, and it is cached on the identity of the
 runs rather than on a string — so a paragraph redrawn from the same layout
-is a cache hit, while runs rebuilt every frame are not.
+is a cache hit, while runs rebuilt every frame are not. The shadow moves as
+the glyphs do: drawn whole pixels away, it lands exactly that many pixels
+away, from the same cache entry.
 
 The advance is what makes a grid cheap: the server moves its pen by each
 glyph's stored rounded advance, and position bytes are emitted only where

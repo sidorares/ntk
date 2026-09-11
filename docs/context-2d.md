@@ -853,6 +853,15 @@ target, is a lookup and a composite. A caller that hand-builds fresh runs
 every frame (a terminal grid, say) has nothing stable to key on and pays for
 its coverage each time.
 
+**A text shadow moves with its text.** Drawn whole pixels away, by a
+translate or its own `x`/`y`, the shadow of a `fillText` or a `TextLayout`
+lands exactly that many pixels away, from the same cache entry. So a
+renderer that copies pixels it already drew, a scroll blit, still matches a
+repaint byte for byte, as it does for the glyphs (issue #350). The anchor
+rounds the way a glyph origin does: snapped to 1/256 px, with its whole
+pixels split off before the offset is added. That lands a shadow differently
+from plain rounding only where its anchor is within 1/512 px of a half pixel.
+
 A shadow belongs to a drawing *call*, here as in a browser: a paragraph
 whose spans change colour is drawn as several glyph composites, and each
 casts its own shadow, exactly as consecutive `fillText`s would.
