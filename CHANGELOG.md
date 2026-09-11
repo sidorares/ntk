@@ -1,5 +1,14 @@
 # Changelog
 
+## [8.8.1](https://github.com/sidorares/ntk/compare/v8.8.0...v8.8.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **2d:** anchor text shadows the same wherever the text is drawn ([#352](https://github.com/sidorares/ntk/issues/352)) ([00a8495](https://github.com/sidorares/ntk/commit/00a849571d8557efd3a789daeca9bcefa2503080))
+* **gl:** Bun passes descriptors now, so stop reporting that it cannot ([#346](https://github.com/sidorares/ntk/issues/346)) ([8f9d396](https://github.com/sidorares/ntk/commit/8f9d396660db943d7515bcae7239f9c430ace178))
+* **text:** round glyph origins the same wherever a run is drawn ([#351](https://github.com/sidorares/ntk/issues/351)) ([5737ba6](https://github.com/sidorares/ntk/commit/5737ba626dd5cc4dd79c4b48e30e78ca75a06aa6))
+
 ## [8.8.0](https://github.com/sidorares/ntk/compare/v8.7.0...v8.8.0) (2026-08-27)
 
 
