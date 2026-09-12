@@ -271,3 +271,86 @@ test('a resize is picked up by makeCurrent and drawn at the new size', async (t)
   gl.destroy();
   wnd.destroy();
 });
+
+test('the window has a stencil buffer, proved by a stencil test that fails', async (t) => {
+  if (skip) return t.skip(skip);
+  const width = 64;
+  const height = 64;
+  // the default framebuffer's stencil attachment and the query for its size
+  // (desktop GL 3.0+, which is what the addon's core profile speaks here)
+  const GL_STENCIL = 0x1802;
+  const GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE = 0x8217;
+
+  const config = await app.chooseGLConfig({ DEPTH_SIZE: 24 });
+  assert.equal(config.stencilSize, 8, 'a stencil buffer by default, as the Cocoa backend has');
+  const wnd = app.createWindow({
+    width,
+    height,
+    visual: config.visual,
+    depth: config.depth,
+    backingStore: false
+  });
+  await mapAndWait(wnd);
+  const gl = wnd.getContext('opengl', config);
+  await withTimeout(gl.ready, 5000, 'Apple-DRI surface attach');
+  assert.equal(gl.stencilSize, 8);
+
+  const program = buildProgram(gl);
+  gl.useProgram(program);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  const position = gl.getAttribLocation(program, 'position');
+  gl.enableVertexAttribArray(position);
+  gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+  const uColor = gl.getUniformLocation(program, 'uColor');
+  const band = (x0, x1) => {
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([x0, -1, x1, -1, x0, 1, x1, 1]), gl.STREAM_DRAW);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  };
+
+  gl.makeCurrent();
+  gl.viewport(0, 0, width, height);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const bits = gl.getFramebufferAttachmentParameter(
+    gl.FRAMEBUFFER,
+    GL_STENCIL,
+    GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE
+  );
+  assert.ok(bits >= 8, `the window's framebuffer reports ${bits} stencil bits`);
+
+  // A framebuffer with no stencil buffer passes every stencil test, so
+  // "write 1, then draw where it is 1" draws the same with or without one.
+  // Only a real buffer can make a test fail: NOTEQUAL 0 over a stencil just
+  // cleared to 0 must draw nothing at all.
+  gl.clearColor(0, 0, 1, 1);
+  gl.clearStencil(0);
+  gl.stencilMask(0xff);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+  gl.enable(gl.STENCIL_TEST);
+  gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
+  gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+  gl.uniform3f(uColor, 0, 1, 0);
+  band(-1, 1);
+  const centre = pixelAt(gl, width / 2, height / 2);
+  assert.ok(near(centre, [0, 0, 255]), `a NOTEQUAL 0 draw over a cleared stencil must draw nothing, got ${centre}`);
+
+  // and the half that uses it: 1s written into the left half only, with
+  // colour writes off, then red wherever the stencil holds 1
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+  gl.colorMask(false, false, false, false);
+  gl.stencilFunc(gl.ALWAYS, 1, 0xff);
+  gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
+  band(-1, 0);
+  gl.colorMask(true, true, true, true);
+  gl.stencilFunc(gl.EQUAL, 1, 0xff);
+  gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+  gl.uniform3f(uColor, 1, 0, 0);
+  band(-1, 1);
+  gl.disable(gl.STENCIL_TEST);
+  const left = pixelAt(gl, 8, height / 2);
+  const right = pixelAt(gl, width - 8, height / 2);
+  assert.ok(near(left, [255, 0, 0]), `drawn where the stencil holds 1, got ${left}`);
+  assert.ok(near(right, [0, 0, 255]), `and nowhere else, got ${right}`);
+
+  gl.destroy();
+  wnd.destroy();
+});

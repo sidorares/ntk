@@ -329,6 +329,8 @@ What differs from the `dri3` flavor, beyond the wire:
   composited by the WindowServer *above* the X framebuffer, so X-side reads
   of a GL window — `GetImage`, screenshots of the X screen — show stale
   contents by design.
+- **A stencil buffer by default** — 8 bits, as the Cocoa backend's GL
+  surfaces have, where the `dri3` flavor has none. See [Stencil](#stencil).
 - Depth-32/ARGB windows are untested on this flavor (XQuartz typically
   publishes no 32-bit visual, so `chooseGLConfig({ ALPHA_SIZE: 8 })` fails
   there with `GL_CONTEXT_FAILED`).
@@ -342,13 +344,15 @@ be written twice:
 ```js
 const config = await app.chooseGLConfig({ DEPTH_SIZE: 24 });
 // { backend: 'direct', visual, depth, class, doubleBuffer, depthSize,
-//   samples, screen, fbconfig: null, device, config: {} }
+//   stencilSize, samples, screen, fbconfig: null, device, config: {} }
 ```
 
 On the direct backend it needs no round trip — there are no fbconfigs, only a
 window whose depth the GPU's buffers can be read as. `DEPTH_SIZE` becomes the
-EGL depth-buffer size; `ALPHA_SIZE` picks a 32-bit ARGB visual (whose alpha a
-compositor blends) instead of the root's 24-bit one. `SAMPLES` and
+depth-buffer size of the flavor's context (EGL on `dri3`, CGL on `appledri`)
+and `STENCIL_SIZE` its stencil size where the flavor can ask for one — see
+[Stencil](#stencil) below; `ALPHA_SIZE` picks a 32-bit ARGB visual (whose
+alpha a compositor blends) instead of the root's 24-bit one. `SAMPLES` and
 `SAMPLE_BUFFERS` are answered rather than honoured — see
 [Multisampling](#multisampling) below. Everything else in the spec is ignored
 there, and honoured by
@@ -356,8 +360,9 @@ there, and honoured by
 
 `samples` is on the answer from either backend, and is the one field to
 branch on: the colour samples per pixel the config really has, `0` for none.
-(`chooseGLXConfig` reports `null` in the one case where it cannot know —
-a spec that pins `visual`, where no fbconfig is looked at.)
+`stencilSize` sits beside it and answers the same way for stencil bits.
+(`chooseGLXConfig` reports `null` for both in the one case where it cannot
+know — a spec that pins `visual`, where no fbconfig is looked at.)
 
 ## Multisampling
 
@@ -395,14 +400,59 @@ What works today:
 - **`gl.samples`** carries the same number on the context — `'opengl'`,
   `'gles'` and `'cgl'` alike — for draw code that has no config in hand.
 
+## Stencil
+
+**A direct window on macOS has an 8-bit stencil buffer unless the config asks
+otherwise; on Linux it has none.** `STENCIL_SIZE` in the spec (or
+`stencilSize` on a config) asks for a size where the flavor can pass one on,
+and `stencilSize` on the answer — and `gl.stencilSize` on the context — says
+what the window has:
+
+| backend | the spec names no size | `STENCIL_SIZE: n` |
+| --- | --- | --- |
+| `appledri` | 8 | at least `n` — `kCGLPFAStencilSize` on the CGL pixel format; 0 asks for none |
+| `dri3` | 0 | still 0, and a warning once per connection |
+| indirect | whatever the chosen fbconfig has | an fbconfig with at least `n` |
+
+The macOS default is what the Cocoa backend's GL surfaces carry
+(DEPTH24_STENCIL8), so a GL window has the same buffers on either macOS path,
+at next to no cost. The CGL context used to be created with a depth size
+only, and so had no stencil buffer at all.
+
+Check the number, not the request, because **a framebuffer with no stencil
+buffer passes every stencil test**. Stencil-based drawing — a
+stencil-then-cover polygon fill, a clip mask — does not fail there; it draws
+everywhere its cover geometry reaches. A probe that writes 1s and then draws
+where the stencil is 1 cannot tell the two apart, since that draws either
+way. One that can: draw with `gl.NOTEQUAL, 0` over a stencil just cleared to
+0 — a real buffer fails every fragment, so nothing is drawn.
+
+```js
+const config = await app.chooseGLConfig({ STENCIL_SIZE: 8 });
+const gl = wnd.getContext('opengl', config);
+if (gl.stencilSize < 8) {
+  // render into a framebuffer of your own with a DEPTH24_STENCIL8
+  // renderbuffer attached, then copy the result to the window
+}
+```
+
+The `dri3` flavor cannot ask for one because the stencil size belongs to the
+EGLConfig the `x11-dri` addon builds, and its `Gpu` takes a colour format and
+a depth size only; EGL sorts configs smallest stencil first, so there is no
+stencil buffer to count on. When the addon grows the option,
+`directStencilSize` in `lib/gl.js` is the single place that changes.
+
 ## Testing
 
 `test/gl-policy.test.js` covers the decisions — policy resolution, the client
 probe, capability gating, error codes, flavor dispatch — hermetically, with
-the addon stubbed, so it runs with no display and no GPU, and
-`test/appledri.test.js` checks the Apple-DRI wire encoding the same way. The
-live halves skip wherever their path is unavailable, which includes CI (Xvfb
-has neither DRI3 nor Apple-DRI): `test/gl-direct-live.test.js` renders a
-shader-drawn triangle over DRI3 and reads the window back with `GetImage`;
+the addon stubbed, so it runs with no display and no GPU;
+`test/gl-samples.test.js` and `test/gl-stencil.test.js` check what a spec's
+sample and stencil requests become on each backend the same way, and
+`test/appledri.test.js` checks the Apple-DRI wire encoding. The live halves
+skip wherever their path is unavailable, which includes CI (Xvfb has neither
+DRI3 nor Apple-DRI): `test/gl-direct-live.test.js` renders a shader-drawn
+triangle over DRI3 and reads the window back with `GetImage`;
 `test/gl-appledri-live.test.js` does the same against XQuartz and verifies
-with `gl.readPixels` (see [macOS](#macos) for why not `GetImage`).
+with `gl.readPixels` (see [macOS](#macos) for why not `GetImage`), stencil
+probe included.

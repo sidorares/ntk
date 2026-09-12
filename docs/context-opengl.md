@@ -42,7 +42,7 @@ gl.SwapBuffers();
 `app.chooseGLXConfig(spec)` resolves with
 
 ```js
-{ visual, depth, class, doubleBuffer, depthSize, samples, fbconfig, screen, config }
+{ visual, depth, class, doubleBuffer, depthSize, stencilSize, samples, fbconfig, screen, config }
 ```
 
 `visual` and `depth` go to `createWindow` (which also creates a matching
@@ -62,6 +62,10 @@ It rejects with a message naming the constraints when nothing matches. Both
 paths filter on every attribute the server reports, multisampling included:
 a `SAMPLES: 4` this display has no config for is a rejection, never a config
 without sample buffers handed back as though the request had been met.
+
+`stencilSize` on the result is the stencil bits that config has — a
+`STENCIL_SIZE` in the spec asks for at least that many — and, like `samples`
+below, it is `null` only when the spec pinned `visual`.
 
 `samples` on the result is the colour samples per pixel that config has — 0
 for none, and `null` only when the spec pinned `visual`, where no fbconfig
