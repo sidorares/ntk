@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-import { listFontsSync, matchSortedSync } from '../lib/fontconfig.js';
+import { listFontsSync, matchSortedSync, platformFamilies } from '../lib/fontconfig.js';
+import FontManager from '../lib/text/fontmanager.js';
 
 let hasFontconfig = true;
 try {
@@ -407,3 +408,103 @@ test('the docs anchor the error points at exists', () => {
   const docs = readFileSync(join(root, 'docs/fonts.md'), 'utf8');
   assert.match(docs, /^## Environments without fontconfig$/m);
 });
+
+// On a Mac, Homebrew's fontconfig answers `sans-serif` with Hiragino Sans, a
+// Japanese face whose Cyrillic and Greek are full-width: a map label "Мост"
+// came out as four em-wide cells, М о с т. The advances were right — CoreText
+// sets that face exactly the same way — the face was wrong. Browsers give
+// sans-serif Helvetica there, and so does ntk now; everywhere else the list
+// reaches fc-match untouched.
+
+test('on macOS, sans-serif names Helvetica ahead of itself', () => {
+  assert.equal(platformFamilies('sans-serif', 'darwin'), 'Helvetica,sans-serif');
+  assert.equal(platformFamilies('Inter, sans-serif', 'darwin'), 'Inter,Helvetica,sans-serif');
+  assert.equal(
+    platformFamilies('SANS-SERIF', 'darwin'),
+    'Helvetica,SANS-SERIF',
+    'a generic is a keyword, and keywords are case-insensitive'
+  );
+  assert.equal(
+    platformFamilies('Helvetica Neue, sans-serif', 'darwin'),
+    'Helvetica Neue,Helvetica,sans-serif'
+  );
+  assert.equal(
+    platformFamilies('Helvetica, sans-serif', 'darwin'),
+    'Helvetica, sans-serif',
+    'a list that already names it first needs nothing'
+  );
+});
+
+test('only that generic, and only on macOS', () => {
+  // serif and monospace land on PT Serif and Andale Mono there, which set
+  // Cyrillic and Greek at their own widths — nothing to correct
+  for (const family of ['serif', 'monospace', 'Inter', 'Menlo, monospace']) {
+    assert.equal(platformFamilies(family, 'darwin'), family);
+  }
+  for (const platform of ['linux', 'freebsd', 'win32']) {
+    assert.equal(platformFamilies('sans-serif', platform), 'sans-serif');
+    assert.equal(platformFamilies('Inter, sans-serif', platform), 'Inter, sans-serif');
+  }
+});
+
+// The pattern fc-match is actually handed, through the same code path a
+// first text layout takes — so the answer above is the one fontconfig sees,
+// and the prewarm and the sync lookup still agree on the cache key.
+test('the pattern fc-match receives is the platform list', () => {
+  const out = prewarmProbe(
+    "import { readFileSync } from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      'process.env.PATH = BIN.args;\n' +
+      'await prewarm(PATTERN);\n' +
+      'process.env.PATH = EMPTY; // the sync lookup must hit what the prewarm seeded\n' +
+      'const [best] = matchSortedSync(PATTERN);\n' +
+      "const patterns = readFileSync(join(BIN.args, 'fc-match.args'), 'utf8').trim().split('\\n');\n" +
+      'console.log(JSON.stringify({ patterns, path: best.path }));\n',
+    {
+      // records its last argument, which is the pattern
+      args:
+        '#!/bin/sh\n' +
+        'for a in "$@"; do last="$a"; done\n' +
+        'echo "$last" >> "$0.args"\n' +
+        'printf "/f/A.ttf\\tA\\tA\\t20-7e\\n"\n'
+    }
+  );
+  const family = process.platform === 'darwin' ? 'Helvetica,sans-serif' : 'sans-serif';
+  assert.deepEqual(out.patterns, [`${family}:weight=80`]);
+  assert.equal(out.path, '/f/A.ttf');
+});
+
+let hasHelvetica = false;
+if (hasFontconfig && process.platform === 'darwin') {
+  try {
+    const family = execFileSync('fc-match', ['--format', '%{family}', 'Helvetica'], { encoding: 'utf8' });
+    hasHelvetica = /^Helvetica(,|$)/.test(family);
+  } catch {
+    // no answer is no Helvetica
+  }
+}
+
+test(
+  'on macOS, sans-serif sets Cyrillic at its own widths, and CJK still falls back',
+  { skip: !hasHelvetica && 'needs macOS, fontconfig and Helvetica' },
+  () => {
+    const fonts = new FontManager();
+    const style = { family: 'sans-serif', size: 22, weight: 400, style: 'normal' };
+    const face = fonts.match('sans-serif', style);
+    assert.equal(face.familyName, 'Helvetica');
+
+    // Hiragino Sans set this word as four 22px cells, 88px; Helvetica covers
+    // Cyrillic itself, and the run is as wide as its own advances say
+    const shaped = fonts.shape('Мост', style);
+    assert.equal(shaped.runs.length, 1);
+    assert.equal(shaped.runs[0].font, face, 'no fallback needed');
+    const own = [...'Мост'].reduce((sum, ch) => sum + face.advanceOf(face.glyphIdFor(ch.codePointAt(0)), 22), 0);
+    assert.ok(Math.abs(shaped.width - own) <= 1, `${shaped.width}px against its own ${own}px`);
+    assert.ok(shaped.width < 4 * 22 * 0.75, `proportional, not em-wide cells: ${shaped.width}px`);
+
+    // a codepoint Helvetica lacks still goes down fontconfig's sans-serif list
+    const fallback = fonts.shape('字', style).runs[0].font;
+    assert.notEqual(fallback, face);
+    assert.ok(fallback.hasGlyph(0x5b57), `${fallback.familyName} covers 字`);
+  }
+);

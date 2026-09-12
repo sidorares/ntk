@@ -44,6 +44,17 @@ regular weight) is prewarmed with a non-blocking `fc-match` while
 spawn. Other patterns still pay one synchronous `fc-match` (~50ms) the
 first time they are used.
 
+On macOS, `sans-serif` resolves to Helvetica, as it does in Safari, Chrome
+and Firefox there, rather than to whatever fontconfig answers for it.
+Homebrew's fontconfig ranks every face with "Sans" in its name first for that
+generic, and on a Mac the first of them is Hiragino Sans — a Japanese face
+whose Cyrillic, Greek, `…` and `—` are full-width, so a word like "Мост" was
+set as four em-wide cells. The advances were the font's own; the face was the
+wrong one. ntk names Helvetica ahead of the generic in the pattern it hands
+`fc-match`, so a character Helvetica lacks still falls back through
+fontconfig's own `sans-serif` list — CJK to Hiragino, as before. Every other
+family, and every other platform, reaches `fc-match` as written.
+
 Text layout is synchronous, so it always pays that cost inline. Code that
 can await — a font picker matching as the user types, a preferences page —
 should ask the source instead, and not block the event loop at all:
@@ -314,8 +325,10 @@ hinting and computes exact analytic coverage, and a `StaticFontSource` never
 borrows a face from the host — so with a fixed set of fonts, text rasterizes
 to identical bytes on every machine. That is the precondition for
 image-snapshot testing an ntk app, and it is also the fix for
-family-resolution surprises: on a Mac with fontconfig installed,
-`fc-match sans-serif` answers Hiragino Sans — a CJK face.
+family-resolution surprises: whatever a machine's fontconfig makes of
+`sans-serif` — Homebrew's answers Hiragino Sans, a CJK face, which is why ntk
+names Helvetica first there ([above](#using-css-style-font-names)) — a static
+source never asks it.
 
 The guarantee holds across machines **at a pinned ntk version**, not across
 versions — the rasterizer has shifted text antialiasing before. Pin ntk
