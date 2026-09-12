@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.8.2](https://github.com/sidorares/ntk/compare/v8.8.1...v8.8.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **gl:** ask CGL for a stencil buffer — every stencil test passed on XQuartz ([#353](https://github.com/sidorares/ntk/issues/353)) ([4abff02](https://github.com/sidorares/ntk/commit/4abff02525c7638d99b5d2b0065847c72bb7d1ca))
+* **text:** resolve sans-serif to Helvetica on macOS, not a face with full-width Cyrillic ([#354](https://github.com/sidorares/ntk/issues/354)) ([8af0711](https://github.com/sidorares/ntk/commit/8af0711b8a50ec5763b37a4077153486887edc7b))
+
 ## [8.8.1](https://github.com/sidorares/ntk/compare/v8.8.0...v8.8.1) (2026-09-11)
 
 
