@@ -317,8 +317,34 @@ const shaped = app.fonts.shape('عالم hello', { family: 'sans-serif', size: 2
 ```
 
 `reorderRuns(runs)` (from `lib/text/shape.js`) gives visual order.
-`style.features` passes OpenType feature tags through to fontkit
-(e.g. `['smcp']`); `style.direction` forces the paragraph direction.
+`style.features` passes OpenType feature tags through to fontkit — an array
+of tags to turn on (`['smcp']`, `['tnum']`) or an object of tag → on/off
+(`{ tnum: true, liga: false }`); `style.letterSpacing` adds px after every
+glyph (below); `style.direction` forces the paragraph direction.
+
+#### Letter spacing and features
+
+`letterSpacing` is CSS's `letter-spacing`, in px: added after every glyph
+that has an advance — the last on a line included, as CoreText's kerning
+attribute and most toolkits add it — so a combining mark keeps sitting on
+its base. Negative values tighten. It is part of the glyph advances, so
+everything built on them follows: a layout's widths and line fill, its
+alignment, `caretPosition`/`indexAt` and the drawing. In an RTL run the gap
+opens on the reading side of each glyph.
+
+A spaced run turns the optional ligatures off (`liga`, `clig`, `dlig`,
+`hlig`) — an `fi` drawn as one glyph cannot open in the middle — unless the
+style's `features` names them. Required forms, such as Arabic joining, stay.
+
+```js
+app.fonts.layout('NOISE TYPE', { family: 'sans-serif', size: 11, letterSpacing: 1.26 });
+app.fonts.layout('487 Hz', { family: 'sans-serif', size: 30, features: ['tnum'] });
+```
+
+Both are per span as well as on the base style. The shaping memo keys a word
+by its features, language and spacing as well as its face and size, so a
+word shaped plain never answers for the same word with `tnum` or the other
+way round.
 
 ### `TextLayout`
 
@@ -333,7 +359,9 @@ const layout = app.fonts.layout(content, style, {
 });
 ```
 
-`content` is a string or styled spans:
+`content` is a string or styled spans — each span may override `family`,
+`size`, `weight`, `style`, `variations`, `features`, `language`,
+`letterSpacing` and `color`:
 
 ```js
 app.fonts.layout([
