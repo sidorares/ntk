@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.9.0](https://github.com/sidorares/ntk/compare/v8.8.2...v8.9.0) (2026-09-17)
+
+
+### Features
+
+* **text:** letterSpacing, and OpenType features that apply whatever the same word was shaped with before ([#357](https://github.com/sidorares/ntk/issues/357)) ([9cea658](https://github.com/sidorares/ntk/commit/9cea658fb8bd9e526a3d750fd4551286004239d5))
+
 ## [8.8.2](https://github.com/sidorares/ntk/compare/v8.8.1...v8.8.2) (2026-09-12)
 
 
