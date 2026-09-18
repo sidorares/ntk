@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.9.1](https://github.com/sidorares/ntk/compare/v8.9.0...v8.9.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* **gl:** retry a refused GBM window surface as linear — NVIDIA's EGL will not draw into a tiled one ([#359](https://github.com/sidorares/ntk/issues/359)) ([5a718e5](https://github.com/sidorares/ntk/commit/5a718e505e60e887a980bff5d0df955ac53cfc5a))
+
 ## [8.9.0](https://github.com/sidorares/ntk/compare/v8.8.2...v8.9.0) (2026-09-17)
 
 
