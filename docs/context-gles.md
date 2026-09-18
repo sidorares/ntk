@@ -124,10 +124,36 @@ Object form knobs, over `DEFAULT_GL_POLICY`:
 | `mode` | `'indirect'` | as above |
 | `devicePath` | `null` | which render node to draw on; `null` picks the first usable one |
 | `maxInFlight` | `2` | presents outstanding before a frame waits for a buffer |
-| `linearFallback` | `true` | retry a refused buffer once with a linear layout, which is what makes rendering on one GPU and displaying on another work |
+| `linearFallback` | `true` | retry a refused buffer once with a linear layout — see [Buffer layout](#buffer-layout) |
 
 The three knobs below `mode` describe dma-buf machinery the `appledri`
 flavor does not have — it ignores them silently.
+
+## Buffer layout
+
+The buffers a frame is drawn into are GBM's own, and by default they carry
+whichever tiled layout the GPU prefers — the fast one, and the one two
+different pieces of software may disagree about. Two of them can refuse it,
+at opposite ends of the same buffer:
+
+- **EGL will not draw into it.** `eglCreateWindowSurface` over a render-only
+  GBM surface answers `EGL_BAD_MATCH` on NVIDIA's driver, which wants a
+  layout it can also scan out or one that is plainly linear. Nothing has
+  been rendered yet; the context simply cannot be built.
+- **The X server will not read it.** The import lands on a server whose
+  display GPU is a different device, and the tiled layout means nothing to
+  it — `DRI3.PixmapFromBuffer` fails and there is nothing to show.
+
+`linearFallback` (on by default) answers both with one retry: the generation
+of buffers is made again as `GBM_USE.RENDERING | GBM_USE.LINEAR`, a layout
+with no secrets in it, at the cost of some memory bandwidth. A generation
+that went linear stays linear — whatever refused the tiled buffer has not
+changed by the next resize — and a `GL_CONTEXT_FAILED` or
+`GL_IMPORT_FAILED` naming both layouts means the retry was refused too.
+
+Turning it off (`glPolicy: { linearFallback: false }`) is for finding out
+that a machine is falling back rather than living with the bandwidth: the
+refusal is then the error it was, with the layout it tried named in it.
 
 ## What is available, and why not
 
