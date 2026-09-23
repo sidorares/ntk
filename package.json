@@ -25,7 +25,15 @@
   "main": "./lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./xembed": "./lib/xembed.js"
+    "./xembed": "./lib/xembed.js",
+    "./color": "./lib/color.js",
+    "./imagedata": "./lib/imagedata.js",
+    "./path": "./lib/path.js",
+    "./gl": "./lib/gl.js",
+    "./shadow-math": "./lib/shadowmath.js",
+    "./image": "./lib/image.js",
+    "./svg": "./lib/widgets/svgview.js",
+    "./font": "./lib/text/font.js"
   },
   "files": [
     "lib"

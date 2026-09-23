@@ -120,6 +120,28 @@ Server-side resources support `using` / `await using` (Node 24+):
 } // pixmap freed, connection closed
 ```
 
+## Importing less
+
+`ntk` is the whole package: the X11 client, the font engine, the SVG parser
+and the image decoders all load with it. A program that needs one piece —
+a renderer drawing through something other than X11 that wants the colour
+parser, say — can import just that piece, and loads only what it needs:
+
+| Import              | What                                                    | Loads with it               |
+| ------------------- | ------------------------------------------------------- | --------------------------- |
+| `ntk/color`         | `cssColor`, `cssColorStraight`, `premultiply`           | `parse-color`               |
+| `ntk/imagedata`     | `ImageData`, `pixelLayout`, `toStraightRgba`, …         | —                           |
+| `ntk/path`          | `Path2D`, `parseSvgPath`                                | —                           |
+| `ntk/gl`            | `GLError`, `GL_MODES`, `DEFAULT_GL_POLICY`, …           | —                           |
+| `ntk/shadow-math`   | `shadowSigma`, `shadowReach`, `blurScale`, …            | —                           |
+| `ntk/image`         | `Image`, `decodeImage`, `loadImage`                     | `jpeg-js`, `pngjs`          |
+| `ntk/svg`           | `SvgView` (default export)                              | `htmlparser2`, `domutils`   |
+| `ntk/font`          | `Font` (default export)                                 | `fontkit`                   |
+| `ntk/xembed`        | the XEmbed protocol ([docs/xembed.md](docs/xembed.md))  | `x11`                       |
+
+Each is the same module the root re-exports, so importing a name both ways
+gives the same function or class: nothing is loaded, or instantiated, twice.
+
 ## 3d graphics
 
 Two backends, chosen by `glPolicy`
