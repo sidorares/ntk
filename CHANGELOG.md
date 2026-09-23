@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.10.0](https://github.com/sidorares/ntk/compare/v8.9.1...v8.10.0) (2026-09-23)
+
+
+### Features
+
+* subpath exports for the pieces a non-X11 renderer uses ([#362](https://github.com/sidorares/ntk/issues/362)) ([c6fdfe2](https://github.com/sidorares/ntk/commit/c6fdfe229da5d78acd9128da299158c2a935220a))
+
 ## [8.9.1](https://github.com/sidorares/ntk/compare/v8.9.0...v8.9.1) (2026-09-18)
 
 
