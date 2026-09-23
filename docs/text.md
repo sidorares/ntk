@@ -520,6 +520,31 @@ Conventions:
   boundary maps to the start of the wrapped line. (A final `\n` does not
   create a trailing empty line — the layout has none.)
 
+#### Coverage
+
+```js
+const { width, height, data } = layout.coverage({ pad: 4 });
+```
+
+How much of each pixel the glyphs cover, one byte a pixel, **without
+drawing them anywhere** — for text that is drawn where a 2d context is not:
+a GL surface's label atlas, a signed distance field made from it
+(react-x11#673). The raster is the layout box in whole pixels with `pad`
+pixels round it, `width` × `height` bytes, row-major, and the layout's
+origin — the `(x, y)` of `draw(ctx, x, y)` — is at `(pad, pad)`.
+
+Every glyph's outline is placed where the shaped runs put it, **unrounded**,
+and the whole layout is filled once with the nonzero rule, so glyphs that
+overlap cover a pixel once. That is the outlines' own coverage: no glyph
+cache, no snapping to the pixel grid, nothing uploaded and nothing read
+back. It is not pixel-identical to `draw()`, which puts cached bitmaps on
+whole pixels at the sizes the bitmap path serves — which is the point, for
+a raster that will be scaled.
+
+react-x11's other text engines answer the same member (DirectWrite through
+`@windowkit/win32`); a caller feature-detects it and keeps a readback where
+an engine does not.
+
 ### 2d context
 
 - `ctx.font` — CSS shorthand; `ctx.textAlign`, `ctx.textBaseline`
