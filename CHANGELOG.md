@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.11.0](https://github.com/sidorares/ntk/compare/v8.10.0...v8.11.0) (2026-09-23)
+
+
+### Features
+
+* **text:** TextLayout.coverage — a layout's coverage without drawing it ([#364](https://github.com/sidorares/ntk/issues/364)) ([c443378](https://github.com/sidorares/ntk/commit/c443378c0957eab1a8285ef83b2e9ff8c21c45fa))
+
 ## [8.10.0](https://github.com/sidorares/ntk/compare/v8.9.1...v8.10.0) (2026-09-23)
 
 
