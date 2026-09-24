@@ -279,6 +279,9 @@ test('a completion that never comes falls back to the fence', async () => {
   assert.equal(wnd.frameClock, 'fence', 'the watchdog gave up on the display');
   assert.ok(state.frames > 1, `and frames resumed: ${state.frames}`);
   assert.ok(calls.fences.length > 0, 'on the fence clock');
+  // the blits are still presents, so the fence keeps them one at a time,
+  // however long the frame timer has been running (see the tests below)
+  assert.equal(calls.fences.length, 1, 'one frame in flight');
 
   // ... and hands the clock back the moment a completion arrives
   for (const fence of calls.fences.splice(0)) fence(null, {});
@@ -342,6 +345,56 @@ test('a made-up vblank is left for the fence, and the blit goes with it', async 
     assert.equal(calls.copies, 1 + state.frames - frames);
     wnd.destroy();
   }
+});
+
+test('a window that left Present for CopyArea lets the server owe it two frames', async () => {
+  // What issue #369 is about: XQuartz lands here, and its fence reply waits
+  // for the frame to reach the macOS window server. CopyArea runs in request
+  // order, so a second frame drawn behind one still unanswered cannot change
+  // what that one copies.
+  const { wnd, calls } = await presentWindow({ frameInterval: 0 });
+  const state = animate(wnd);
+  await tick();
+  for (let msc = FAKE_MSC; msc <= FAKE_MSC + 16; msc++) {
+    fakeComplete(wnd, msc);
+    await tick();
+  }
+  assert.equal(wnd.frameClock, 'fence');
+
+  for (let i = 0; i < 4; i++) await tick();
+  assert.equal(calls.fences.length, 2, 'two frames out, neither answered');
+  const frames = state.frames;
+  for (let i = 0; i < 4; i++) await tick();
+  assert.equal(state.frames, frames, 'and no third before a reply');
+
+  calls.fences.shift()(null, {});
+  for (let i = 0; i < 2; i++) await tick();
+  assert.equal(state.frames, frames + 1, 'the reply to the first runs the third');
+  wnd.destroy();
+});
+
+test('blits that are presents keep one frame in flight on the fence clock', async () => {
+  // A present owns the backing store until its copy executes, and the fence
+  // reply says only that the server has read it (#223). A second frame drawn
+  // behind it would widen the window in which half a frame reaches the screen,
+  // so this is one whatever maxFramesInFlight asks for.
+  const { wnd, calls } = await presentWindow({
+    frameClock: 'fence',
+    frameInterval: 0,
+    maxFramesInFlight: 3
+  });
+  const state = animate(wnd);
+  for (let i = 0; i < 4; i++) await tick();
+  assert.equal(state.frames, 1, 'the second frame waits for the first reply');
+  assert.equal(calls.presents.length, 1);
+  assert.equal(calls.fences.length, 1);
+  assert.equal(wnd.frameInFlight(), true, 'and a blit drawn now would wait too');
+
+  calls.fences.shift()(null, {});
+  for (let i = 0; i < 2; i++) await tick();
+  assert.equal(state.frames, 2);
+  assert.equal(calls.presents.length, 2);
+  wnd.destroy();
 });
 
 test('the verdict is read off the counter, not off a number of frames', async () => {

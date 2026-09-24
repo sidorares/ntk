@@ -160,9 +160,15 @@ test('coalesceEvents: false restores immediate per-event delivery', async () => 
   wnd.destroy();
 });
 
+// The fence gate, one frame deep: `maxFramesInFlight: 1`, a frame per round
+// trip, which is how every window paced before two frames in flight became
+// the default (issue #369). The gate is the same code at any depth; these
+// pin it at the depth where it shuts behind every frame. The default is
+// tested under "two frames in flight" below.
+
 test('requestAnimationFrame frames wait for the server fence', async () => {
   const { app, fences } = makeMockApp();
-  const wnd = new Window(app, { frameInterval: 0 });
+  const wnd = new Window(app, { frameInterval: 0, maxFramesInFlight: 1 });
   let frames = 0;
   const loop = () => {
     frames++;
@@ -194,7 +200,7 @@ test('requestAnimationFrame frames wait for the server fence', async () => {
 
 test('presents defer while a fence is in flight, blit on ack', async () => {
   const { app, fences, calls } = makeMockApp();
-  const wnd = new Window(app, { frameInterval: 0 });
+  const wnd = new Window(app, { frameInterval: 0, maxFramesInFlight: 1 });
   wnd._enableBackingStore();
 
   wnd._markDirty();
@@ -239,7 +245,7 @@ test('frameInterval paces flushes when the fence is disabled', async () => {
 // its reply lands.
 test('frameInFlight tracks the fence across a frame', async () => {
   const { app, fences } = makeMockApp();
-  const wnd = new Window(app, { frameInterval: 0 });
+  const wnd = new Window(app, { frameInterval: 0, maxFramesInFlight: 1 });
   assert.equal(wnd.frameInFlight(), false, 'nothing drawn yet, nothing to wait for');
 
   wnd.requestAnimationFrame(() => {});
@@ -254,7 +260,7 @@ test('frameInFlight tracks the fence across a frame', async () => {
 
 test('a discrete handler that draws sees the gate open, then closed', async () => {
   const { app, fences, calls } = makeMockApp();
-  const wnd = new Window(app, { frameInterval: 0 });
+  const wnd = new Window(app, { frameInterval: 0, maxFramesInFlight: 1 });
   wnd._enableBackingStore();
   const gate = [];
   wnd.on('mousedown', () => {
@@ -323,7 +329,7 @@ test('frameInFlight stays false when frameSync is off', async () => {
 
 test('interactive resize drives one paced draw per frame', async () => {
   const { app, fences, calls } = makeMockApp();
-  const wnd = new Window(app, { frameInterval: 0, width: 100, height: 100 });
+  const wnd = new Window(app, { frameInterval: 0, maxFramesInFlight: 1, width: 100, height: 100 });
   wnd._enableBackingStore();
   let draws = 0;
   wnd.on('draw', () => {
@@ -350,6 +356,209 @@ test('interactive resize drives one paced draw per frame', async () => {
   await tick();
   assert.equal(draws, 2, 'one catch-up redraw at the final size');
   assert.equal(wnd.width, 180);
+  wnd.destroy();
+});
+
+// --- two frames in flight (issue #369) ------------------------------------
+//
+// With one frame in flight a frame costs the client's work plus the server's
+// answer, back to back, and on XQuartz that answer waits for the frame to
+// reach the macOS window server — most of a frame's time spent with neither
+// side busy. By default the server may owe a window two frames: the next one
+// is drawn while the last is being answered, and the one after that waits
+// for the reply to the one before last. These windows blit with CopyArea
+// (the mock has no Present), which is where two are allowed.
+
+test('by default a second frame runs while the first is unanswered, and a third waits', async () => {
+  const { app, fences } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0 });
+  assert.equal(wnd.maxFramesInFlight, 2);
+  let frames = 0;
+  const loop = () => {
+    frames++;
+    wnd.requestAnimationFrame(loop);
+  };
+  wnd.requestAnimationFrame(loop);
+
+  await tick();
+  assert.equal(frames, 1);
+  await tick();
+  assert.equal(frames, 2, 'the second frame did not wait for the first reply');
+  assert.equal(fences.length, 2, 'each with a fence of its own');
+
+  await tick();
+  await tick();
+  assert.equal(frames, 2, 'the third waits: two is the limit');
+
+  fences.shift()(null); // the reply to the first
+  await tick();
+  await tick();
+  assert.equal(frames, 3, 'and runs on the reply to the one before last');
+  assert.equal(fences.length, 2, 'the server owes two again');
+  wnd.destroy();
+});
+
+test('blits go out until two frames are unanswered, then wait for a reply', async () => {
+  const { app, fences, calls } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0 });
+  wnd._enableBackingStore();
+
+  wnd._markDirty();
+  await tick();
+  wnd._markDirty();
+  await tick();
+  assert.equal(calls.CopyArea, 2, 'the second blit went out behind the first');
+  assert.equal(fences.length, 2);
+
+  wnd._markDirty();
+  await tick();
+  await tick();
+  assert.equal(calls.CopyArea, 2, 'the third is held back');
+
+  fences.shift()(null);
+  assert.equal(calls.CopyArea, 3, 'and sent on the reply to the first');
+  wnd.destroy();
+});
+
+test('frameInFlight shuts when the limit is reached, not at the first frame', async () => {
+  // It answers "would a blit drawn now wait?", and with room for a second
+  // frame it would not — so a toolkit painting a click's response in the
+  // handler does, with a frame already out.
+  const { app, fences } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0 });
+  wnd.requestAnimationFrame(() => {});
+  await tick();
+  assert.equal(fences.length, 1);
+  assert.equal(wnd.frameInFlight(), false, 'one frame out, room for another');
+
+  wnd.requestAnimationFrame(() => {});
+  await tick();
+  assert.equal(fences.length, 2);
+  assert.equal(wnd.frameInFlight(), true, 'two out: the next waits');
+
+  fences.shift()(null);
+  assert.equal(wnd.frameInFlight(), false, 'one answered, room again');
+  wnd.destroy();
+});
+
+test('a burst of discrete draws puts two on the wire and folds the rest into one', async () => {
+  const { app, fences, calls } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0 });
+  wnd._enableBackingStore();
+  const gate = [];
+  wnd.on('mousedown', () => {
+    gate.push(wnd.frameInFlight());
+    wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
+  });
+
+  for (let i = 0; i < 4; i++) wnd.emit('event', { type: 4, x: 1, y: 1, keycode: 4 });
+  assert.deepEqual(gate, [false, false, true, true], 'open for two, shut behind them');
+  assert.equal(calls.CopyArea, 2, 'two presses blitted');
+
+  fences.shift()(null);
+  assert.equal(calls.CopyArea, 3, 'the rest caught up in one blit');
+  wnd.destroy();
+});
+
+test('interactive resize draws the next state while the last is being answered', async () => {
+  const { app, fences } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0, width: 100, height: 100 });
+  wnd._enableBackingStore();
+  let draws = 0;
+  wnd.on('draw', () => {
+    draws++;
+    wnd._markDirty();
+  });
+
+  wnd.emit('event', configure(120, 120));
+  await tick();
+  await tick();
+  assert.equal(draws, 1);
+
+  wnd.emit('event', configure(140, 140));
+  await tick();
+  await tick();
+  assert.equal(draws, 2, 'drawn at once, with the first unanswered');
+
+  wnd.emit('event', configure(160, 160));
+  wnd.emit('event', configure(180, 180));
+  await tick();
+  await tick();
+  assert.equal(draws, 2, 'held back behind two');
+
+  fences.shift()(null);
+  await tick();
+  await tick();
+  assert.equal(draws, 3, 'one catch-up redraw at the final size');
+  wnd.destroy();
+});
+
+test('maxFramesInFlight: 3 lets the server owe three', async () => {
+  const { app, fences } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0, maxFramesInFlight: 3 });
+  let frames = 0;
+  const loop = () => {
+    frames++;
+    wnd.requestAnimationFrame(loop);
+  };
+  wnd.requestAnimationFrame(loop);
+  for (let i = 0; i < 6; i++) await tick();
+  assert.equal(frames, 3);
+  assert.equal(fences.length, 3);
+
+  fences.shift()(null);
+  await tick();
+  await tick();
+  assert.equal(frames, 4);
+  wnd.destroy();
+});
+
+test('lowering maxFramesInFlight holds frames until the server is back under it', async () => {
+  const { app, fences } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 0 });
+  let frames = 0;
+  const loop = () => {
+    frames++;
+    wnd.requestAnimationFrame(loop);
+  };
+  wnd.requestAnimationFrame(loop);
+  for (let i = 0; i < 4; i++) await tick();
+  assert.equal(frames, 2);
+
+  wnd.maxFramesInFlight = 1;
+  fences.shift()(null);
+  await tick();
+  await tick();
+  assert.equal(frames, 2, 'one still owed is the new limit');
+
+  fences.shift()(null);
+  await tick();
+  await tick();
+  assert.equal(frames, 3, 'the server caught up');
+  assert.equal(fences.length, 1, 'and from here a frame per round trip');
+  wnd.destroy();
+});
+
+test('maxFramesInFlight takes a whole number of frames, one or more', () => {
+  const { app } = makeMockApp();
+  for (const bad of [0, -1, 1.5, Number.NaN, Infinity, '2']) {
+    assert.throws(
+      () => new Window(app, { maxFramesInFlight: bad }),
+      (err) => err instanceof RangeError && /maxFramesInFlight/.test(err.message),
+      `${String(bad)} is refused`
+    );
+  }
+  // zero is the one a reader might take for "no limit", as frameInterval: 0
+  // is "no interval" — so the refusal says where no limit actually is
+  assert.throws(() => new Window(app, { maxFramesInFlight: 0 }), /frameSync: false/);
+
+  const wnd = new Window(app, {});
+  assert.throws(() => {
+    wnd.maxFramesInFlight = 0;
+  }, RangeError);
+  assert.equal(wnd.maxFramesInFlight, 2, 'a refused assignment changes nothing');
+  wnd.maxFramesInFlight = 1;
+  assert.equal(wnd.maxFramesInFlight, 1);
   wnd.destroy();
 });
 
@@ -581,6 +790,26 @@ test('a burst of discrete blits is paced to one per frameInterval', async () => 
     `paced: ${calls.CopyArea} blits in ${elapsed}ms at a 20ms interval`
   );
   assert.ok(calls.CopyArea < 10, `fewer blits than events (got ${calls.CopyArea})`);
+});
+
+test('a blit the interval held back still waits while two frames are owed', async () => {
+  // The deferral timer is a second way out for a held-back blit, next to the
+  // reply that ends a frame, and it has to respect the same limit.
+  const { wnd, calls, fences, nextCopy } = backedWindow({ frameInterval: 20 });
+  wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
+  await tick();
+  assert.equal(calls.CopyArea, 1);
+  const second = nextCopy();
+  wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
+  await second; // on its timer, the first still unanswered
+  assert.equal(fences.length, 2);
+
+  wnd._markDirty({ x: 0, y: 0, w: 10, h: 10 });
+  await sleep(50); // its timer has fired by now
+  assert.equal(calls.CopyArea, 2, 'held back by the two frames owed, not only by the interval');
+  fences.shift()(null);
+  assert.equal(calls.CopyArea, 3, 'and sent on the reply to the first');
+  wnd._teardownFrame();
 });
 
 test('the last blit of a burst still lands', async () => {

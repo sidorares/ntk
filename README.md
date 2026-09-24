@@ -106,7 +106,8 @@ wnd.requestAnimationFrame(frame);
 ```
 
 See [docs/window.md](docs/window.md) for the knobs (`frameInterval`,
-`frameSync`, `coalesceEvents`) and the raw uncoalesced event stream.
+`frameSync`, `maxFramesInFlight`, `coalesceEvents`) and the raw uncoalesced
+event stream.
 
 ## Resource management
 

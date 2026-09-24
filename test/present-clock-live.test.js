@@ -153,7 +153,10 @@ test("a window takes its server's vertical blanks for what they are", async (t) 
         wnd.requestAnimationFrame(() => {
           ctx.fillStyle = 'rgb(200, 60, 200)';
           ctx.fillRect(0, 0, size, size);
-          // runs once the frame that blitted this has ended
+          // runs once the frame that blitted this has gone out: on a
+          // display's clock once it has ended, on the fence possibly while
+          // it is still unanswered (two frames in flight) — which is enough,
+          // since the GetImage below queues behind that frame's CopyArea
           wnd.requestAnimationFrame(resolve);
         })
       ),

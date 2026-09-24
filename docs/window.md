@@ -61,6 +61,12 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   [Frames, coalescing and slow connections](#frames-coalescing-and-slow-connections))
 - `frameSync: false` — don't pace frames on the server at all: no round-trip
   fence, and no waiting for the display either
+- `maxFramesInFlight: n` — how many frames the server may owe the window at
+  once on the fence clock before the next one waits for a reply. Defaults to
+  `2`; `1` is a frame per round trip. A window whose blits go through Present
+  keeps one whatever this says (see
+  [Frames in flight](#frames-in-flight)). Also writable later as
+  `wnd.maxFramesInFlight`
 - `present: false` — blit with `CopyArea` instead of the Present extension,
   and keep the frame clock off the display
   (see [Blitting with Present](#blitting-with-present)). `present: true` sets
@@ -370,11 +376,13 @@ stale intermediate states — most visibly over ssh-forwarded / networked
 displays. ntk therefore delivers noisy events and repaints in **paced
 frames**, gated by three independent mechanisms:
 
-- **the end of the last frame** — either the display reporting that it showed
-  it, or a server round-trip confirming it was consumed. Which one is
-  [below](#what-ends-a-frame). At most one frame is ever outstanding: on a
-  fast local connection this costs nothing, on a slow link frames
-  automatically degrade to one per round-trip — the latest state is always
+- **the end of the frames already sent** — either the display reporting that
+  it showed one, or a server round-trip confirming it was consumed. Which one
+  is [below](#what-ends-a-frame). The frames outstanding are bounded: one on
+  the display's clock, two on the round-trip clock, so that the next frame
+  can be drawn while the server works through the last (see
+  [Frames in flight](#frames-in-flight)). On a slow link frames
+  automatically degrade to two per round-trip — the latest state is always
   the next thing drawn, and no backlog builds up. Disable with
   `frameSync: false`.
 - **a timer** — at most one paced frame per `frameInterval` ms, which defaults
@@ -449,7 +457,9 @@ arriving: a present the server never executes would otherwise leave the window
 permanently stale, so one that goes unanswered for two seconds hands the clock
 back to the fence, and the next completion to arrive takes it again.
 `wnd.frameClock` reads `'present'` or `'fence'` accordingly, and is assignable
-(`'auto'`, `'present'` or `'fence'`) if you want to pin it.
+(`'auto'`, `'present'` or `'fence'`) if you want to pin it. Where the fence
+ends frames, two may be unanswered at once — see
+[Frames in flight](#frames-in-flight).
 
 `frameInterval` still applies as a cap when you set one explicitly, which is
 how you ask for less than the display offers:
@@ -493,6 +503,58 @@ timer. `frameClock: 'present'` keeps the made-up clock, which is what a
 benchmark wants of Xvfb's when it stands in for a display. So does a server
 started with `-fakescreenfps` at some rate other than 60: it is not
 recognised, and paces to the rate it was told to fake.
+
+#### Frames in flight
+
+On the round-trip clock the server may owe a window **two frames**. The next
+frame is drawn while the server is still answering the last one, and the one
+after that waits for the reply to the one before last. With one, every frame
+waited for the reply to its predecessor, so a frame cost the client's work
+and the server's answer back to back, with neither side working while the
+other did.
+
+Where the answer is slow for reasons of the server's own, most of that frame
+was waiting. XQuartz replies to a fence only once the frame has reached the
+macOS window server: 13 ms at the median while a card is dragged, where an
+idle round trip takes about a tenth of a millisecond. Dragging a card under a
+120 Hz pointer on XQuartz 2.8.6 (M1 Pro, 120 Hz panel, so `frameInterval` is
+8.33 ms), one frame drawn per pointer step, five runs of 3 s each with
+`scripts/bench-frames-in-flight.mjs`:
+
+| frames in flight | fps | frame interval p50 / p95 |
+| --- | --- | --- |
+| one | 75–78 | 12.8–13.3 / 16.0–17.3 ms |
+| two | 107–118 | 8.4–9.0 / 9.4–12.6 ms |
+
+The spread is the part you see. At one frame in flight it is what made a drag
+on XQuartz feel rougher than a native app on the same panel.
+
+A slow link gets the same overlap, and more of it. Through a proxy adding
+latency in front of Xvfb, the same drag went from 69–71 to 99–100 fps at a
+10 ms round trip, and from 22–23 to 44–47 fps at 40 ms: a frame per round
+trip became two, and no reply took longer for it, because nothing queues on a
+link with bandwidth to spare. Capped at 100 KB/s the 40 ms link still
+doubled, from 17 to 34 fps. What does queue is a link too narrow for the
+frames it carries. At 30 KB/s and a 10 ms round trip, where a frame takes
+five times the round trip just to send, the drag went from 15 to 19 fps, and
+a reply came back after 105 ms at the median instead of 64: the second frame
+waits behind the first on the wire.
+
+`maxFramesInFlight` sets the number. `1` puts back a frame per round trip, for
+a window that would rather have that latency; a larger number lets a very
+slow link keep more of its round trip busy. Two is the default because past
+it the wait is already overlapped, and every further frame is one more that
+can queue behind a busy server or a full link.
+
+A window whose blits go through Present keeps **one**, whatever
+`maxFramesInFlight` says — that is `frameClock: 'fence'` on a window that
+presents, or the fallback after its completions stopped. A present owns the
+backing store until its copy runs at a vertical blank, and a fence reply
+means only that the server has read the present, so a second frame drawn
+behind it could put half of itself on the screen. A `CopyArea` runs in
+request order, and so does drawing straight into a window with no backing
+store; those are the windows that run two. On the display's clock the gate
+is the present outstanding, and there is only ever one of those.
 
 #### What the display's clock costs
 
@@ -549,10 +611,13 @@ handler's own requests rather than on the next paced frame — a click's
 `:active` flip is one paint of a few hundred microseconds, and waiting a
 frame interval for it buys nothing. `wnd.frameInFlight()` is the gate to
 make that decision with: `false` means no blit is queued and drawing now
-costs nothing extra, `true` means one already is — because the last frame is
-unanswered (its fence unreplied, or its present not yet on the display) or
-because the minimum inter-blit interval is still running — and a paint now
-would only coalesce into it. Every gate is reported, since which one bites
+costs nothing extra, `true` means one already is — because the frames already
+sent are unanswered (as many fences unreplied as
+[`maxFramesInFlight`](#frames-in-flight) allows, or a present not yet on the
+display) or because the minimum inter-blit interval is still running — and a
+paint now would only coalesce into it. It reads `false` with one frame out
+when a second may follow it: a blit drawn then goes out at once, which is the
+question it answers. Every gate is reported, since which one bites
 depends on the connection: the fence on a slow one, the inter-blit interval
 on a fast local server, where the fence for one wheel notch is answered
 before the next notch is even read. Gating on it saves the
@@ -591,7 +656,8 @@ Escape hatches, from mildest to rawest:
 `wnd.frameLatency` reports how long the last frame took to be answered, in
 milliseconds (`null` until the first one) — useful for adapting rendering
 quality or animation rates. On the fence clock that is a round-trip, a live
-estimate of connection + server latency; on the vblank clock it is the time
+estimate of connection + server latency, including any wait behind the frame
+sent before it; on the vblank clock it is the time
 from the frame's requests going out to the server reporting it on the
 display, which *includes* the wait for the next vertical blank and so reads
 around one refresh period even on an idle local connection. Note also that
@@ -662,8 +728,9 @@ wnd.cancelAnimationFrame(id);
 The callback runs on the window's next paced frame (`now` is a
 `performance.now()` timestamp). A re-registering animation loop renders one
 frame per vertical blank on a window that presents, at ~`1000/frameInterval`
-fps otherwise, and self-throttles to one frame per round-trip on slow
-connections — write the loop once, it behaves everywhere.
+fps otherwise, and self-throttles to two frames per round-trip on slow
+connections (`maxFramesInFlight`) — write the loop once, it behaves
+everywhere.
 
 A loop whose callback draws nothing at all still runs: there is no present
 for the display to report back, so those frames fall back to the timer, at
@@ -693,6 +760,10 @@ wnd.requestAnimationFrame(step); // now runs at the display's rate
   (`null` before the first frame; see above for what it measures on each clock)
 - `wnd.frameInterval` — minimum ms between paced frames, and between blits;
   a cap on top of the display's rate under the vblank clock (writable)
+- `wnd.maxFramesInFlight` — how many frames the server may owe the window at
+  once on the fence clock, `2` unless set; one where blits go through
+  Present, whatever it says (writable, see
+  [Frames in flight](#frames-in-flight))
 - `wnd.frameClock` — which clock is ending this window's frames, `'present'`
   or `'fence'`; assignable as `'auto'` / `'present'` / `'fence'`
 - `wnd.refreshInterval` — measured display refresh period in ms; `null` on the
@@ -726,8 +797,9 @@ All return `this` unless noted.
 - `requestAnimationFrame(cb)` — returns an id, does not return `this`;
   `cancelAnimationFrame(id)` (see above)
 - `frameInFlight()` — returns a boolean, not `this`: whether a blit this
-  window owes is still waiting to go out, because the last frame's fence is
-  unanswered or a present is deferred behind the inter-blit interval. The gate
+  window owes is still waiting to go out, because the frames already sent are
+  unanswered (as many as `maxFramesInFlight` allows, or a present not yet on
+  the display) or a present is deferred behind the inter-blit interval. The gate
   for painting a discrete input's response from its own handler instead of on
   the next paced frame (see
   [above](#frames-coalescing-and-slow-connections))
