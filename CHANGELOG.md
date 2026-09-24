@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.11.1](https://github.com/sidorares/ntk/compare/v8.11.0...v8.11.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **window:** leave Present on a server that makes its vblanks up ([#367](https://github.com/sidorares/ntk/issues/367)) ([c9cf492](https://github.com/sidorares/ntk/commit/c9cf4922b9223d2034bd4c23374ada70dba89ac2))
+
 ## [8.11.0](https://github.com/sidorares/ntk/compare/v8.10.0...v8.11.0) (2026-09-23)
 
 
