@@ -408,7 +408,11 @@ through it. Only the first step has a choice of where it happens.
   geometric complexity: per-request overhead plus 40 bytes per trapezoid.
 - **Locally** — the geometry is rasterized into 8-bit coverage here
   (`lib/rasterize.js`) and uploaded with one `PutImage`. Cost grows with
-  area: one byte per pixel of the drawing's bounding box.
+  area: one byte per pixel of the drawing's bounding box — or, under a clip,
+  of the part of it inside the clip's extents, the only part uploaded and
+  composited. The coverage is still rasterized over the whole box, so a
+  drawing that different clips split across passes gets the same bytes in
+  every one of them.
 
 The choice is per drawing, made by `routeRaster()` from the bounding-box area
 and the flattened edge count. Defaults, measured against XQuartz with shapes
