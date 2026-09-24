@@ -170,3 +170,86 @@ test('a gradient style falls back per rect and paints the gradient', async () =>
   assert.deepEqual(at(11, 11), RED);
   assert.deepEqual(at(8, 8), WHITE);
 });
+
+// Under a clip that is not a rectangle — a rounded card — rectangles that do
+// not overlap are three requests however many there are: their coverage into
+// the scratch mask, the clip applied once, one composite (issue #374). The
+// loop it replaces was a composite through the clip per rectangle. The
+// pixels are the loop's, so the reference is the same rectangles drawn one
+// fillRect at a time under the same clip.
+{
+  // a chart's shapes: per-column spans and a grid of cells, fractional and
+  // half off the surface — disjoint, which is what the batch is for
+  const DISJOINT = [];
+  for (let x = -3; x < 40; x++) {
+    DISJOINT.push([x, 10 + ((x * 7) % 23) + 0.5, 1, 4.75 + (x % 5)]);
+  }
+  for (let row = 0; row < 6; row++) {
+    for (let col = 0; col < 9; col++) {
+      if ((row * 9 + col) % 3) DISJOINT.push([40 + col * 3, 20 + row * 7.5, 3, 7.25]);
+    }
+  }
+  DISJOINT.push([30, 65, 40, 10]); // below the grid, half off the surface
+  // …and the same with two of them overlapping, which the loop blends twice
+  // where the overlap meets the clip's antialiased edge
+  const OVERLAPPING = [...DISJOINT, [4, 6, 12, 12], [8, 8, 6, 20]];
+
+  function roundedClip(ctx) {
+    ctx.beginPath();
+    ctx.roundRect(6, 8, 50, 44, 12);
+    ctx.clip();
+  }
+
+  async function drawn(rects, style, { batch, op = 'source-over', alpha = 1 }) {
+    const ctx = freshCtx();
+    ctx.save();
+    roundedClip(ctx);
+    ctx.fillStyle = style;
+    ctx.globalAlpha = alpha;
+    ctx.globalCompositeOperation = op;
+    const R = ctx.Render;
+    let composites = 0;
+    const composite = R.Composite;
+    R.Composite = function (...args) {
+      composites += 1;
+      return composite.apply(this, args);
+    };
+    try {
+      if (batch) ctx.fillRects(rects);
+      else for (const r of rects) ctx.fillRect(...r);
+    } finally {
+      R.Composite = composite;
+    }
+    ctx.restore();
+    const img = await ctx.getImageData(0, 0, W, H);
+    return { img, composites };
+  }
+
+  test('rectangles that do not overlap, under a rounded clip, are three requests and the loop’s pixels', async () => {
+    for (const [style, alpha] of [
+      ['#1f7a4d', 1],
+      ['rgba(31, 122, 77, 0.5)', 1],
+      ['#1f7a4d', 0.4],
+    ]) {
+      const loop = await drawn(DISJOINT, style, { batch: false, alpha });
+      const batch = await drawn(DISJOINT, style, { batch: true, alpha });
+      assert.ok(loop.composites >= DISJOINT.length / 2, 'the loop composites per rectangle');
+      assert.equal(batch.composites, 2, `${style} at ${alpha}: the clip once, the colour once`);
+      assert.deepEqual(batch.img.data, loop.img.data, `${style} at ${alpha}`);
+    }
+  });
+
+  test('overlapping rectangles under a rounded clip keep the loop', async () => {
+    const loop = await drawn(OVERLAPPING, '#1f7a4d', { batch: false });
+    const batch = await drawn(OVERLAPPING, '#1f7a4d', { batch: true });
+    assert.equal(batch.composites, loop.composites);
+    assert.deepEqual(batch.img.data, loop.img.data);
+  });
+
+  test('copy under a rounded clip keeps the loop, and the gaps between rectangles', async () => {
+    const loop = await drawn(DISJOINT, '#1f7a4d', { batch: false, op: 'copy' });
+    const batch = await drawn(DISJOINT, '#1f7a4d', { batch: true, op: 'copy' });
+    assert.equal(batch.composites, loop.composites);
+    assert.deepEqual(batch.img.data, loop.img.data);
+  });
+}
