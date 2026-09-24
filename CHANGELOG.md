@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.0](https://github.com/sidorares/ntk/compare/v8.11.1...v8.12.0) (2026-09-24)
+
+
+### Features
+
+* **window:** let the fence clock keep two frames in flight ([#370](https://github.com/sidorares/ntk/issues/370)) ([45a2d49](https://github.com/sidorares/ntk/commit/45a2d49ab7b3d546c633cd947e605fce8087d005))
+
 ## [8.11.1](https://github.com/sidorares/ntk/compare/v8.11.0...v8.11.1) (2026-09-24)
 
 
