@@ -131,7 +131,11 @@ if (!QUIET) {
   );
 }
 let vblankPeriod = null;
-const vblank = await measure('vblank clock', {});
+// By name rather than by default: Xvfb makes its vertical blanks up, and a
+// window left to itself recognises that a quarter of a second in and moves to
+// the fence (docs/window.md "When no display is behind Present"). Here the
+// made-up vblank is the stand-in for a display, so it is kept on purpose.
+const vblank = await measure('vblank clock', { frameClock: 'present' });
 const fence = await measure('fence clock', { frameClock: 'fence' });
 
 if (!QUIET && vblank?.length && fence?.length) {
