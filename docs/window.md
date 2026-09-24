@@ -68,7 +68,9 @@ Creation options beyond geometry/`title`/`parent`/`onXxx` handlers:
   ownership claim (see
   [Painting an adopted window](#painting-an-adopted-window))
 - `frameClock: 'fence'` — keep the round-trip clock on a window that presents
-  (see [What ends a frame](#what-ends-a-frame))
+  (see [What ends a frame](#what-ends-a-frame)); `frameClock: 'present'` keeps
+  Present's clock even on a server whose vertical blanks are made up (see
+  [When no display is behind Present](#when-no-display-is-behind-present))
 - `frameInterval: ms` — minimum time between paced frames, and the minimum
   time between blits. Defaults to the display's own period where the
   connection could find it out — `app.refreshRate`, see [app.md](app.md) — and
@@ -324,7 +326,9 @@ are for, and ntk implements the basic form only.
 
 Opt-in, and inert unless both Present and XFixes are available — blits fall
 back to `CopyArea`, which stays correct at all times, so the two paths can
-even alternate.
+even alternate. A server whose Present has no display behind it (XQuartz,
+Xvfb) is left for `CopyArea` too, a quarter of a second in — see
+[When no display is behind Present](#when-no-display-is-behind-present).
 
 Presenting also changes what ends a frame: the server reports each present
 back when it has executed it, and that report becomes this window's frame
@@ -395,10 +399,11 @@ frames**, gated by three independent mechanisms:
 ### What ends a frame
 
 A window that presents — which is every double-buffered window unless it
-opted out — takes its frame clock from the display. Every frame goes out as
-a `PresentPixmap`, and the server sends back a `CompleteNotify` when it has
-*executed* that copy, at a vertical blank —
-so that event, rather than a timer or a socket round-trip, is what starts the
+opted out — takes its frame clock from the display, where the server has one
+behind Present ([not all do](#when-no-display-is-behind-present)). Every
+frame goes out as a `PresentPixmap`, and the server sends back a
+`CompleteNotify` when it has *executed* that copy, at a vertical blank — so
+that event, rather than a timer or a socket round-trip, is what starts the
 next frame:
 
 ```js
@@ -437,13 +442,14 @@ Everything else follows from the display being honest about what it showed:
 
 The fence — a cheap request with a reply (`GetInputFocus`), whose in-order
 answer confirms the server consumed the frame — is what ends a frame
-everywhere else: no Present extension, `frameClock: 'fence'`, or a blit that
-fell back to `CopyArea`. It is also the fallback when completions stop
+everywhere else: no Present extension, `frameClock: 'fence'`, a server with
+[no display behind Present](#when-no-display-is-behind-present), or a blit
+that fell back to `CopyArea`. It is also the fallback when completions stop
 arriving: a present the server never executes would otherwise leave the window
 permanently stale, so one that goes unanswered for two seconds hands the clock
 back to the fence, and the next completion to arrive takes it again.
 `wnd.frameClock` reads `'present'` or `'fence'` accordingly, and is assignable
-(`'auto'` / `'fence'`) if you want to pin it.
+(`'auto'`, `'present'` or `'fence'`) if you want to pin it.
 
 `frameInterval` still applies as a cap when you set one explicitly, which is
 how you ask for less than the display offers:
@@ -452,6 +458,41 @@ how you ask for less than the display offers:
 const wnd = app.createWindow({ frameInterval: 33 }); // ~30 fps on any display
 wnd.frameInterval = 0; // back to the display's rate
 ```
+
+#### When no display is behind Present
+
+Present waits for vertical blanks, and a server whose driver has none to
+offer makes them up: XQuartz, Xvfb, Xephyr, Xnest, the VNC servers, Xorg on
+`vesa` or `fbdev`. There the `msc` is the server's own clock divided into
+60 Hz ticks, and a present completes when a timer set for the next tick
+fires. That clock paces nothing on the screen — XQuartz's windows reach it
+through the macOS compositor, on the compositor's clock — and it is slow. A
+present that arrives past the middle of a tick is aimed at the tick after
+next, so a frame that takes more than half a period to turn round waits for
+two.
+
+A window recognises such a server from its own completions, whose `msc` is
+exactly `ust` rounded to the nearest tick — something no display's counter
+keeps to for long — and a quarter of a second in it leaves Present
+altogether: the fence ends its frames and `CopyArea` does its blits. The
+blit goes with the clock because the copy waits for the same timer. On the
+fence alone a window draws faster but still changes at most 60 times a
+second, and a copy can read a frame half drawn, since a fence reply means the
+server has read the present, not run it.
+
+Measured on XQuartz 2.8.6 (M1 Pro, 120 Hz panel), an animation loop ran at
+46–60 fps on Present's clock drawing next to nothing, and at 30 fps with
+9 ms of work a frame. Leaving it, the same loop runs at 90–97 and 51 fps. The
+fence is still rate-limited by `frameInterval`, the panel's 120 Hz there
+(`app.refreshRate`, see [app.md](app.md)) and the default 16 ms where the
+connection cannot find the rate out.
+
+After the switch `wnd.frameClock` reads `'fence'`, and `refreshInterval` and
+`droppedFrames` are back to `null` and `0`, because what they measured was a
+timer. `frameClock: 'present'` keeps the made-up clock, which is what a
+benchmark wants of Xvfb's when it stands in for a display. So does a server
+started with `-fakescreenfps` at some rate other than 60: it is not
+recognised, and paces to the rate it was told to fake.
 
 #### What the display's clock costs
 
@@ -653,7 +694,7 @@ wnd.requestAnimationFrame(step); // now runs at the display's rate
 - `wnd.frameInterval` — minimum ms between paced frames, and between blits;
   a cap on top of the display's rate under the vblank clock (writable)
 - `wnd.frameClock` — which clock is ending this window's frames, `'present'`
-  or `'fence'`; assignable as `'auto'` / `'fence'`
+  or `'fence'`; assignable as `'auto'` / `'present'` / `'fence'`
 - `wnd.refreshInterval` — measured display refresh period in ms; `null` on the
   fence clock, and until two frames have landed one vertical blank apart —
   so a window capped below the display's rate never measures it

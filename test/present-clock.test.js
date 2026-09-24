@@ -98,6 +98,27 @@ function complete(wnd, { msc = 1, ust = 1_000_000, mode = 0, kind = 0, serial } 
   });
 }
 
+/** An msc from XQuartz, which makes its vblanks up: its ust is this times 16666. */
+const FAKE_MSC = 270_971_370;
+
+/**
+ * A completion from Present's fake vblank, as xserver's present_fake.c sends
+ * it for a screen whose driver gives the extension no vertical blank: the
+ * msc is the server's clock rounded to 60Hz ticks, and the ust is when the
+ * timer set for that tick fired, `late` µs after it.
+ */
+function fakeComplete(wnd, msc, { interval = 16666, late = 400 } = {}) {
+  complete(wnd, { msc, ust: msc * interval + late });
+}
+
+/** Release every fence the window is waiting on, and let the next frames run. */
+async function answerFences(calls, rounds = 3) {
+  for (let i = 0; i < rounds; i++) {
+    for (const fence of calls.fences.splice(0)) fence(null, {});
+    await sleep(25);
+  }
+}
+
 /** A repainting animation loop, of the shape an app actually writes. */
 function animate(wnd, state = { frames: 0 }) {
   const step = () => {
@@ -282,6 +303,167 @@ test('a window the compositor is throttling is not treated as stalled', async ()
   await sleep(300);
   assert.equal(wnd.frameClock, 'present', 'still the display clock, just a slow one');
   assert.equal(calls.fences.length, 0, 'and no fence went out to hurry it along');
+  wnd.destroy();
+});
+
+test('a made-up vblank is left for the fence, and the blit goes with it', async () => {
+  // XQuartz, Xvfb and every server whose driver gives Present no vertical
+  // blank compute the msc from their clock (issue #366). That clock paces
+  // nothing real, and it rounds a present that arrives past the middle of a
+  // tick to that tick and aims it at the next, so a frame that takes more
+  // than half a period to turn round waits two.
+  for (const interval of [16666, 16667]) {
+    // 16666 is 1000000 / 60, since xorg-server 21.1; 1.20 wrote 16667
+    const { wnd, calls } = await presentWindow();
+    const state = animate(wnd);
+    await tick();
+
+    let msc = FAKE_MSC;
+    for (; msc < FAKE_MSC + 16; msc++) {
+      fakeComplete(wnd, msc, { interval });
+      await tick();
+    }
+    assert.equal(wnd.frameClock, 'present', 'a few ticks on the line prove little');
+    assert.ok(wnd.refreshInterval > 0, 'and until then they are measured like vblanks');
+
+    fakeComplete(wnd, msc, { interval }); // a quarter of a second of the counter
+    await tick();
+    assert.equal(wnd.frameClock, 'fence', `${interval}: the fence ends frames now`);
+    assert.equal(wnd.refreshInterval, null, 'what was measured was a timer, not a display');
+    assert.equal(wnd.droppedFrames, 0);
+    const presents = calls.presents.length;
+    assert.equal(calls.copies, 1, 'the next frame blitted with CopyArea');
+    assert.equal(calls.fences.length, 1, 'and the fence ended it');
+
+    const frames = state.frames;
+    await answerFences(calls);
+    assert.ok(state.frames > frames, `and frames kept coming: ${state.frames}`);
+    assert.equal(calls.presents.length, presents, 'with no present after the verdict');
+    assert.equal(calls.copies, 1 + state.frames - frames);
+    wnd.destroy();
+  }
+});
+
+test('the verdict is read off the counter, not off a number of frames', async () => {
+  // The case the issue measured: a frame that takes more than half a tick
+  // to turn round is aimed at the tick after next, so every completion is
+  // two ticks after the last. Half as many completions cover the same span.
+  const { wnd } = await presentWindow();
+  animate(wnd);
+  await tick();
+  for (let i = 0; i < 8; i++) {
+    fakeComplete(wnd, FAKE_MSC + 2 * i);
+    await tick();
+  }
+  assert.equal(wnd.frameClock, 'present');
+  fakeComplete(wnd, FAKE_MSC + 16);
+  await tick();
+  assert.equal(wnd.frameClock, 'fence', 'nine completions, sixteen ticks');
+  wnd.destroy();
+});
+
+test('msc is ust rounded to the nearest tick, and nothing wider', async () => {
+  // present_fake.c: msc = (ust + interval / 2) / interval, in integers. A
+  // completion half a tick early is on the line; one half a tick late is
+  // the next tick's, so off it.
+  const onTheLine = await presentWindow();
+  animate(onTheLine.wnd);
+  await tick();
+  for (let i = 0; i <= 16; i++) {
+    fakeComplete(onTheLine.wnd, FAKE_MSC + i, { late: -8333 });
+    await tick();
+  }
+  assert.equal(onTheLine.wnd.frameClock, 'fence', 'half a tick early still rounds to it');
+  onTheLine.wnd.destroy();
+
+  const offTheLine = await presentWindow();
+  animate(offTheLine.wnd);
+  await tick();
+  for (let i = 0; i <= 16; i++) {
+    fakeComplete(offTheLine.wnd, FAKE_MSC + i, { late: 8333 });
+    await tick();
+  }
+  assert.equal(offTheLine.wnd.frameClock, 'present', 'half a tick late rounds up');
+  offTheLine.wnd.destroy();
+});
+
+test("a display's counter is a count, and one completion says so", async () => {
+  // A 60.000Hz output (CEA 1080p60) whose counter started five seconds after
+  // the server's clock, an hour ago: nowhere near ust / 16666, from the
+  // first completion on.
+  const { wnd, calls } = await presentWindow();
+  animate(wnd);
+  await tick();
+  const PERIOD = 1_000_000 / 60;
+  const start = Math.round((3600e6 - 5e6) / PERIOD);
+  for (let i = 0; i < 40; i++) {
+    const msc = start + i;
+    complete(wnd, { msc, ust: Math.round(5e6 + msc * PERIOD) });
+    await tick();
+  }
+  assert.equal(wnd.frameClock, 'present');
+  assert.equal(calls.copies, 0, 'every frame went out as a present');
+  assert.ok(Math.abs(wnd.refreshInterval - PERIOD / 1000) < 0.01, `${wnd.refreshInterval}`);
+  wnd.destroy();
+});
+
+test('a single completion off the line settles it for good', async () => {
+  // which kind of vblank a screen has does not change while a window lives
+  // on it, so the question is asked once
+  const { wnd } = await presentWindow();
+  animate(wnd);
+  await tick();
+  fakeComplete(wnd, FAKE_MSC); // on the line, by chance
+  await tick();
+  fakeComplete(wnd, FAKE_MSC + 1, { late: 9000 }); // and off it
+  await tick();
+  for (let i = 2; i <= 40; i++) {
+    fakeComplete(wnd, FAKE_MSC + i);
+    await tick();
+  }
+  assert.equal(wnd.frameClock, 'present', 'never asked again');
+  wnd.destroy();
+});
+
+test("frameClock: 'present' keeps Present's clock where the vblank is made up", async () => {
+  // what a benchmark wants of Xvfb, whose fake vblank stands in for a display
+  const { wnd, calls } = await presentWindow({ frameClock: 'present' });
+  const state = animate(wnd);
+  await tick();
+  for (let i = 0; i <= 20; i++) {
+    fakeComplete(wnd, FAKE_MSC + i);
+    await tick();
+  }
+  assert.equal(wnd.frameClock, 'present');
+  assert.equal(state.frames, 22, 'one frame per tick, as before');
+  assert.equal(calls.copies, 0, 'every one presented');
+  assert.equal(calls.fences.length, 0);
+  assert.ok(wnd.refreshInterval > 0, 'measuring the timer again after the verdict');
+  wnd.destroy();
+});
+
+test('assigning the clock after the verdict moves the window between the paths', async () => {
+  const { wnd, calls } = await presentWindow();
+  const state = animate(wnd);
+  await tick();
+  for (let i = 0; i <= 16; i++) {
+    fakeComplete(wnd, FAKE_MSC + i);
+    await tick();
+  }
+  assert.equal(wnd.frameClock, 'fence');
+
+  wnd.frameClock = 'present';
+  const presents = calls.presents.length;
+  await answerFences(calls, 1);
+  assert.equal(calls.presents.length, presents + 1, 'the next frame is a present again');
+  assert.equal(wnd.frameClock, 'present', 'and the display clocks it');
+  const frames = state.frames;
+  fakeComplete(wnd, FAKE_MSC + 20);
+  await tick();
+  assert.equal(state.frames, frames + 1, 'on its completion');
+
+  wnd.frameClock = 'auto';
+  assert.equal(wnd.frameClock, 'fence', "and 'auto' takes it off again");
   wnd.destroy();
 });
 
