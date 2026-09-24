@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.12.1](https://github.com/sidorares/ntk/compare/v8.12.0...v8.12.1) (2026-09-24)
+
+
+### Performance Improvements
+
+* **2d:** coverage under a clip is uploaded only where the clip reaches ([#373](https://github.com/sidorares/ntk/issues/373)) ([993c3a1](https://github.com/sidorares/ntk/commit/993c3a1e67f48a2b17e9089f1d269431b03f62f1))
+* **2d:** fillRects under a non-rectangular clip is three requests, not one per rectangle ([#375](https://github.com/sidorares/ntk/issues/375)) ([d8c7498](https://github.com/sidorares/ntk/commit/d8c749843059584e1981242294ca72c4ced1f504))
+
 ## [8.12.0](https://github.com/sidorares/ntk/compare/v8.11.1...v8.12.0) (2026-09-24)
 
 
