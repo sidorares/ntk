@@ -153,8 +153,14 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   transform and a rectangular (or absent) clip sends the whole list as a
   **single `Render.FillRectangles` request**, which is what makes
   many-small-rectangles frames (terminal cell backgrounds, sparkline bars,
-  heat maps, row striping) cheap. Gradient/pattern/`Picture` styles,
-  transforms and non-rectangular clips fall back to the per-rectangle loop.
+  heat maps, row striping) cheap. Under a **non-rectangular clip** — a
+  rounded card — rectangles that do not overlap are still three requests
+  however many there are: their coverage into a scratch mask, the clip
+  applied to it once, one composite. Gradient/pattern/`Picture` styles,
+  transforms, and overlapping rectangles or `copy` under a non-rectangular
+  clip fall back to the per-rectangle loop: where two overlap on the clip's
+  antialiased edge the loop blends that pixel twice, and `copy` would clear
+  the gaps between the rectangles.
   Batching *paths* the same way — many subpaths in one `fill()`/`stroke()` —
   is a different trade, because a path pays for one mask over all of them;
   see [Many pieces in one path](#many-pieces-in-one-path-what-the-mask-costs)
