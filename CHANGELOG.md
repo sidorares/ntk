@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.4](https://github.com/sidorares/ntk/compare/v8.12.3...v8.12.4) (2026-09-25)
+
+
+### Performance Improvements
+
+* **fonts:** a prewarm answers the first layout, and a family's faces warm together ([#381](https://github.com/sidorares/ntk/issues/381)) ([3558a2e](https://github.com/sidorares/ntk/commit/3558a2efeface4563a6fb66d2561a0d2ad532aa3))
+
 ## [8.12.3](https://github.com/sidorares/ntk/compare/v8.12.2...v8.12.3) (2026-09-25)
 
 
