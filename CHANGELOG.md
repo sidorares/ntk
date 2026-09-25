@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.3](https://github.com/sidorares/ntk/compare/v8.12.2...v8.12.3) (2026-09-25)
+
+
+### Performance Improvements
+
+* **text:** a layout reads the face once, and skips bidi for text nothing reverses ([#379](https://github.com/sidorares/ntk/issues/379)) ([bd371b8](https://github.com/sidorares/ntk/commit/bd371b8054d72728fd25eb044334ea7c76d3ddd4))
+
 ## [8.12.2](https://github.com/sidorares/ntk/compare/v8.12.1...v8.12.2) (2026-09-25)
 
 
