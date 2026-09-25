@@ -153,11 +153,15 @@ function prewarmProbe(body, stubs = {}) {
   return JSON.parse(run.stdout);
 }
 
-// prints one match and counts its invocations next to itself, so a probe can
-// assert a spawn did not happen rather than merely not crash. $0 stands in
-// for dirname: the probe's PATH holds only stub directories, no coreutils.
+// prints one match and logs the pattern it was asked for next to itself, a
+// line an invocation, so a probe can assert a spawn did not happen rather than
+// merely not crash. $0 stands in for dirname: the probe's PATH holds only stub
+// directories, no coreutils.
 const counting = (path) =>
-  '#!/bin/sh\n' + 'echo x >> "$0.spawns"\n' + `printf "${path}\\tStub\\tStub Family\\t20-7e\\n"\n`;
+  '#!/bin/sh\n' +
+  'for last; do :; done\n' +
+  'echo "$last" >> "$0.spawns"\n' +
+  `printf "${path}\\tStub\\tStub Family\\t20-7e\\n"\n`;
 
 test('prewarm seeds the cache the sync path reads', () => {
   const out = prewarmProbe(
@@ -171,28 +175,71 @@ test('prewarm seeds the cache the sync path reads', () => {
   assert.equal(out.path, '/warmed/A.ttf');
 });
 
-test('a sync call racing the prewarm wins; the late async result is discarded', () => {
+test('a sync call takes the answer of a prewarm in flight rather than spawning again', () => {
+  // The first text layout runs inside a render, which holds the event loop:
+  // a prewarm answered only through the loop landed after it, and the
+  // layout spawned fc-match a second time. Its answer is on disk too now.
   const out = prewarmProbe(
-    'process.env.PATH = BIN.slow;\n' +
+    "import { readFileSync } from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      'process.env.PATH = BIN.slow;\n' +
       'const warmed = prewarm(PATTERN); // spawns now, answers in ~300ms\n' +
-      'process.env.PATH = BIN.fast;\n' +
+      'process.env.PATH = EMPTY; // a spawn of the sync call\'s own would throw ENOENT\n' +
       'const [duringRace] = matchSortedSync(PATTERN);\n' +
       'await warmed;\n' +
       'const [after] = matchSortedSync(PATTERN);\n' +
-      'console.log(JSON.stringify({ duringRace: duringRace.path, after: after.path }));\n',
+      "const spawns = readFileSync(join(BIN.slow, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
+      'console.log(JSON.stringify({ duringRace: duringRace.path, after: after.path, spawns: spawns.length }));\n',
     {
-      // sleep by absolute path — the stub's PATH has no coreutils. Best
-      // effort: even an unslept child's exit callback cannot run before the
-      // probe's synchronous block finishes, so the assertion holds either way
+      // sleep by absolute path — the stub's PATH has no coreutils
       slow:
         '#!/bin/sh\n' +
+        'echo x >> "$0.spawns"\n' +
         '{ /bin/sleep 0.3 || /usr/bin/sleep 0.3; } 2>/dev/null\n' +
-        'printf "/async/LATE.ttf\\tLate\\tLate Family\\t20-7e\\n"\n',
-      fast: '#!/bin/sh\nprintf "/sync/WINNER.ttf\\tWinner\\tWinner Family\\t20-7e\\n"\n'
+        'printf "/async/SHARED.ttf\\tShared\\tShared Family\\t20-7e\\n"\n'
     }
   );
-  assert.equal(out.duringRace, '/sync/WINNER.ttf');
-  assert.equal(out.after, '/sync/WINNER.ttf', 'the async result must not evict the sync one');
+  assert.equal(out.duringRace, '/async/SHARED.ttf');
+  assert.equal(out.after, '/async/SHARED.ttf');
+  // the prewarm alone: the family's other faces, which the miss started,
+  // ran with no fc-match on the PATH, and a spawn of the sync call's own
+  // would have thrown
+  assert.equal(out.spawns, 1);
+});
+
+test('a prewarm that fails leaves the sync call to ask fc-match itself', () => {
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.unhappy;\n' +
+      'const warmed = prewarm(PATTERN);\n' +
+      'process.env.PATH = BIN.happy;\n' +
+      'const [best] = matchSortedSync(PATTERN);\n' +
+      'await warmed;\n' +
+      'console.log(JSON.stringify({ path: best.path }));\n',
+    {
+      unhappy: '#!/bin/sh\necho "No fonts installed on the system" >&2\nexit 1\n',
+      happy: '#!/bin/sh\nprintf "/sync/HAPPY.ttf\\tHappy\\tHappy Family\\t20-7e\\n"\n'
+    }
+  );
+  assert.equal(out.path, '/sync/HAPPY.ttf');
+});
+
+test('a miss prewarms the other faces of its family', () => {
+  // bold first, the way a document reaches its first heading: regular,
+  // italic and bold italic start beside it and answer the asks after it
+  const out = prewarmProbe(
+    "import { readFileSync } from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      'process.env.PATH = BIN.count;\n' +
+      "const face = (weight, style) => ({ family: 'serif', weight, style });\n" +
+      "matchSortedSync(face(700, 'normal'));\n" +
+      'process.env.PATH = EMPTY; // any spawn after this point would throw ENOENT\n' +
+      "const paths = [face(400, 'normal'), face(400, 'italic'), face(700, 'italic')].map((f) => matchSortedSync(f)[0].path);\n" +
+      "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
+      'console.log(JSON.stringify({ paths, spawns: spawns.length }));\n',
+    { count: counting('/faces/A.ttf') }
+  );
+  assert.deepEqual(out.paths, ['/faces/A.ttf', '/faces/A.ttf', '/faces/A.ttf']);
+  assert.equal(out.spawns, 4, 'one spawn a face');
 });
 
 test('prewarm for an already-cached pattern spawns nothing', () => {
@@ -202,11 +249,12 @@ test('prewarm for an already-cached pattern spawns nothing', () => {
       'process.env.PATH = BIN.count;\n' +
       'matchSortedSync(PATTERN);\n' +
       'await prewarm(PATTERN);\n' +
-      "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n').length;\n" +
-      'console.log(JSON.stringify({ spawns }));\n',
+      "const asked = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
+      'console.log(JSON.stringify({ asked }));\n',
     { count: counting('/counted/A.ttf') }
   );
-  assert.equal(out.spawns, 1, 'only the sync call may spawn');
+  // the miss started the family's other faces too; none is asked for twice
+  assert.equal(new Set(out.asked).size, out.asked.length, `asked ${out.asked}`);
 });
 
 test('a missing fc-match leaves prewarm silent and the sync diagnosis intact', () => {
@@ -223,6 +271,19 @@ test('a missing fc-match leaves prewarm silent and the sync diagnosis intact', (
   );
   assert.equal(out.code, 'ERR_NTK_NO_FONTS');
   assert.equal(out.cause, 'ENOENT', 'the sync throw still carries its own spawn failure');
+});
+
+test('constructing FontconfigFontSource prewarms the default family’s bold and italic too', () => {
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.warm;\n' +
+      'new FontconfigFontSource();\n' +
+      'process.env.PATH = EMPTY; // any spawn after this point would throw ENOENT\n' +
+      "const face = (weight, style) => ({ family: 'sans-serif', weight, style });\n" +
+      "const paths = [face(700, 'normal'), face(400, 'italic'), face(700, 'italic')].map((f) => matchSortedSync(f)[0].path);\n" +
+      'console.log(JSON.stringify({ paths }));\n',
+    { warm: counting('/constructed/B.ttf') }
+  );
+  assert.deepEqual(out.paths, ['/constructed/B.ttf', '/constructed/B.ttf', '/constructed/B.ttf']);
 });
 
 test('constructing FontconfigFontSource starts the prewarm', () => {
