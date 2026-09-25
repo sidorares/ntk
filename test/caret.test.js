@@ -225,3 +225,29 @@ test('rtl base direction: trailing spaces extend the caret leftwards', () => {
   assert.ok(c3.x < c2.x, `trailing space advances leftwards: ${c3.x} !< ${c2.x}`);
   assert.equal(layout.indexAt(c3.x - 0.4, 1), 3);
 });
+
+test('caretPosition: a glyph first made without its characters still maps to them', () => {
+  // fontkit keeps one Glyph object per id and gives it the characters of
+  // whichever call made it first. Something that asks for a glyph by id
+  // before any text with it in is shaped — its extents, or a composite's
+  // outline, whose components fontkit makes with none — left every later
+  // shaping of that letter carrying no characters: the caret, the selection
+  // and the hit test after it on the line landed a character over.
+  const fm = manager();
+  const face = fm.layout('x', style).lines[0].runs[0].run.font;
+  const fontkit = require('fontkit');
+  const e = fontkit.openSync(join(fontDir, 'KaTeX_Main-Regular.ttf')).glyphForCodePoint(0x65).id;
+  face.glyphExtents(e, 16);
+  const layout = fm.layout('need', style);
+  const glyphs = layout.lines[0].runs.flatMap((r) => r.run.glyphs);
+  assert.deepEqual(
+    glyphs.map((g) => g.codePoints),
+    [[0x6e], [0x65], [0x65], [0x64]]
+  );
+  let x = layout.lines[0].x + layout.lines[0].runs[0].x;
+  for (let i = 0; i < 4; i++) {
+    assert.ok(Math.abs(layout.caretPosition(i).x - x) < 1e-6, `caret ${i}`);
+    x += glyphs[i].ax;
+  }
+  assert.equal(layout.indexAt(x - glyphs[3].ax / 4, 0), 4, 'a click at the last letter');
+});
