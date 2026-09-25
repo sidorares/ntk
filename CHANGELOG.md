@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.5](https://github.com/sidorares/ntk/compare/v8.12.4...v8.12.5) (2026-09-25)
+
+
+### Performance Improvements
+
+* **text:** a relayout's shaping memo hit is two lookups, nothing built ([#383](https://github.com/sidorares/ntk/issues/383)) ([2c30b8f](https://github.com/sidorares/ntk/commit/2c30b8f235229fa586fb07986c05b988423f51c0))
+
 ## [8.12.4](https://github.com/sidorares/ntk/compare/v8.12.3...v8.12.4) (2026-09-25)
 
 
