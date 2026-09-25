@@ -38,11 +38,15 @@ ctx.fillText('Hello', 10, 50);
 Requires `fc-match` on the system and font files for it to find. A Linux
 desktop has both; a slim container, a single-file build and stock macOS do
 not — see [Environments without fontconfig](#environments-without-fontconfig).
-Matches are cached, and the match for the default pattern (`sans-serif`,
-regular weight) is prewarmed with a non-blocking `fc-match` while
-`createClient` connects, so the first text layout does not stall on the
-spawn. Other patterns still pay one synchronous `fc-match` (~50ms) the
-first time they are used.
+Matches are cached, and the default family (`sans-serif`) is prewarmed in
+the four faces text is set in — regular, bold, italic, bold italic — with
+non-blocking `fc-match` runs started while `createClient` connects, so the
+first text layout does not stall on them. The answers are written to files
+as well as reported to the event loop, so a layout that asks before the
+loop has run — the first frame's, which holds it — takes a prewarm's answer
+rather than spawning `fc-match` again. The first time any other family is
+used, its four faces start together the same way; a pattern outside those
+still pays one synchronous `fc-match` (~50ms) the first time it is used.
 
 On macOS, `sans-serif` resolves to Helvetica, as it does in Safari, Chrome
 and Firefox there, rather than to whatever fontconfig answers for it.
