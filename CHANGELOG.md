@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.2](https://github.com/sidorares/ntk/compare/v8.12.1...v8.12.2) (2026-09-25)
+
+
+### Bug Fixes
+
+* **text:** a line past 16-bit coordinates draws instead of throwing ([#377](https://github.com/sidorares/ntk/issues/377)) ([66db827](https://github.com/sidorares/ntk/commit/66db827ccf018a96895a64e0af8a1588ca184025))
+
 ## [8.12.1](https://github.com/sidorares/ntk/compare/v8.12.0...v8.12.1) (2026-09-24)
 
 
