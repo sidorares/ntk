@@ -542,27 +542,42 @@ test('shaping cache reuses results across layouts', needsFonts, () => {
   const fonts = new FontManager();
   const style = { family: 'sans-serif', size: 16 };
   new TextLayout(fonts, 'repeat me repeat me', style, { maxWidth: 500 });
-  const cacheSize = fonts._shapeCache.size;
+  const shaped = fonts._shapeCount;
   new TextLayout(fonts, 'repeat me repeat me', style, { maxWidth: 300 });
-  assert.equal(fonts._shapeCache.size, cacheSize, 'relayout added no new shaping work');
+  assert.equal(fonts._shapeCount, shaped, 'relayout added no new shaping work');
 });
 
-test('shaping cache evicts its stale half on overflow, not everything', () => {
+test('shaping cache keeps what the last generation asked for, and drops the rest', () => {
   const fonts = fixedFonts();
   const style = { font: fonts.match('sans-serif'), family: 'sans-serif', size: 16 };
   const keep = fonts._shapeCached('keep', style);
   const drop = fonts._shapeCached('drop', style);
-  // fill to the bound with distinct entries, then refresh 'keep' so it sits
-  // at the recently-used end when the sweep runs
   let i = 0;
-  while (fonts._shapeCache.size <= 4000) fonts._shapeCached(`w${i++}`, style);
-  assert.equal(fonts._shapeCached('keep', style), keep, 'hit before overflow');
-  const before = fonts._shapeCache.size;
-  fonts._shapeCached('straw', style); // one past the bound: triggers the sweep
-  assert.ok(fonts._shapeCache.size < before, 'the sweep ran');
-  assert.ok(fonts._shapeCache.size > before / 4, 'and kept the recent half');
-  assert.equal(fonts._shapeCached('keep', style), keep, 'recently-used entry survived');
-  assert.notEqual(fonts._shapeCached('drop', style), drop, 'stale entries were evicted');
+  const turn = () => {
+    // fill the generation; the next word starts a new one
+    while (fonts._shapeCount < 4000) fonts._shapeCached(`w${i++}`, style);
+    fonts._shapeCached(`w${i++}`, style);
+    assert.equal(fonts._shapeCount, 1, 'the generation turned');
+  };
+  turn();
+  assert.equal(fonts._shapeCached('keep', style), keep, 'the generation before still answers');
+  turn(); // 'drop' was asked for in neither of the two now kept
+  assert.equal(fonts._shapeCached('keep', style), keep, 'asked for in the last generation: kept');
+  assert.notEqual(fonts._shapeCached('drop', style), drop, 'asked for in neither: dropped');
+});
+
+test('a hit is the entry itself, and a new style object with the same fields shares it', () => {
+  const fonts = fixedFonts();
+  const font = fonts.match('sans-serif');
+  const first = fonts._shapeCached('shared', { font, family: 'sans-serif', size: 16 });
+  const count = fonts._shapeCount;
+  assert.equal(fonts._shapeCached('shared', { font, family: 'sans-serif', size: 16 }), first);
+  assert.equal(fonts._shapeCount, count, 'no second entry');
+  assert.notEqual(
+    fonts._shapeCached('shared', { font, family: 'sans-serif', size: 17 }),
+    first,
+    'another size is another entry'
+  );
 });
 
 test('fillText-path shaping reuses the memo and keeps the paragraph level', () => {
