@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.6](https://github.com/sidorares/ntk/compare/v8.12.5...v8.12.6) (2026-09-25)
+
+
+### Bug Fixes
+
+* **text:** a shaped glyph carries the characters it was shaped from ([#385](https://github.com/sidorares/ntk/issues/385)) ([3aefd38](https://github.com/sidorares/ntk/commit/3aefd38bf289fb651c44be1f46045378c5460020))
+
 ## [8.12.5](https://github.com/sidorares/ntk/compare/v8.12.4...v8.12.5) (2026-09-25)
 
 
