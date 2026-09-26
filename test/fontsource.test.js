@@ -101,6 +101,34 @@ test('a plain-object source with data candidates satisfies the contract', () => 
   assert.ok(calls >= 2);
 });
 
+test('a fallback asks the source for the pattern its match asked for', () => {
+  // A source caches its lists by pattern, and a prewarm fetches the ones a
+  // match will ask for. The fallback asked with the span's raw weight —
+  // undefined for regular text, 'bold' for a bold span — which was another
+  // pattern, and cost the first character needing a fallback an fc-match
+  // of its own.
+  const data = bytes('KaTeX_Main-Regular.ttf');
+  const seen = [];
+  const fm = new FontManager({
+    source: {
+      matchSorted(pattern) {
+        seen.push(pattern);
+        return [{ key: 'only', data }];
+      }
+    }
+  });
+  const ask = (match, fallback) => {
+    seen.length = 0;
+    fm.match(...match);
+    fm.fallbackFor(0x2135, ...fallback);
+    assert.equal(seen.length, 2);
+    assert.deepEqual(seen[1], seen[0], JSON.stringify(fallback));
+  };
+  ask(['plain'], ['plain', {}]);
+  ask(['plain two', { weight: 400 }], ['plain two', { weight: undefined, style: undefined }]);
+  ask(['"Quoted", other', { weight: 700, style: 'italic' }], ['"Quoted", other', { weight: 'bold', style: 'italic' }]);
+});
+
 test('setDefaultFontSource affects managers without an explicit source', () => {
   const original = defaultFontSource();
   try {

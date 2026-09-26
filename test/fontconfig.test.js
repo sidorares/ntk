@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-import { listFontsSync, matchSortedSync, platformFamilies } from '../lib/fontconfig.js';
+import { fcMatchFile, listFontsSync, matchSortedSync, platformFamilies } from '../lib/fontconfig.js';
 import FontManager from '../lib/text/fontmanager.js';
 
 let hasFontconfig = true;
@@ -569,3 +569,34 @@ test(
     assert.ok(fallback.hasGlyph(0x5b57), `${fallback.familyName} covers 字`);
   }
 );
+
+// Spawned by its bare name, fc-match was found by the system's PATH search,
+// which on macOS spawns in every directory ahead of the one that has it: 45
+// ms a spawn where the path itself takes 15, inside the first text layout.
+test('fc-match is spawned by its path, found once for each PATH', () => {
+  const env = process.env;
+  const saved = env.PATH;
+  const empty = mkdtempSync(join(tmpdir(), 'ntk-fcpath-empty-'));
+  const decoy = mkdtempSync(join(tmpdir(), 'ntk-fcpath-decoy-'));
+  const bin = mkdtempSync(join(tmpdir(), 'ntk-fcpath-bin-'));
+  // what is not a program to run is passed over: a directory by the name,
+  // and a file nobody may execute
+  mkdirSync(join(decoy, 'fc-match'));
+  const later = mkdtempSync(join(tmpdir(), 'ntk-fcpath-later-'));
+  writeFileSync(join(later, 'fc-match'), '#!/bin/sh\n');
+  chmodSync(join(later, 'fc-match'), 0o644);
+  writeFileSync(join(bin, 'fc-match'), '#!/bin/sh\n');
+  chmodSync(join(bin, 'fc-match'), 0o755);
+  try {
+    env.PATH = [empty, decoy, later, bin].join(':');
+    assert.equal(fcMatchFile(), join(bin, 'fc-match'));
+    // and looked up again when PATH changes
+    env.PATH = empty;
+    assert.equal(fcMatchFile(), 'fc-match', 'not found: the bare name, which reports as before');
+    env.PATH = bin;
+    assert.equal(fcMatchFile(), join(bin, 'fc-match'));
+  } finally {
+    env.PATH = saved;
+  }
+});
+
