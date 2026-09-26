@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.12.10](https://github.com/sidorares/ntk/compare/v8.12.9...v8.12.10) (2026-09-26)
+
+
+### Bug Fixes
+
+* **text:** a no-break space a line ends on keeps its room ([#397](https://github.com/sidorares/ntk/issues/397)) ([ec7766e](https://github.com/sidorares/ntk/commit/ec7766e48608bede98ab8043704ba4df75908706))
+* **text:** letter spacing opens on each glyph's right in an rtl run too ([#396](https://github.com/sidorares/ntk/issues/396)) ([1770c8f](https://github.com/sidorares/ntk/commit/1770c8f458b724d3749c5792ac34a23c4a2a1e2c))
+
 ## [8.12.9](https://github.com/sidorares/ntk/compare/v8.12.8...v8.12.9) (2026-09-26)
 
 
