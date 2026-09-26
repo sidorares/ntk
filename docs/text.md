@@ -85,6 +85,16 @@ XRender glyph ids are client-assigned, and ntk exploits that:
   draws through the same memo, so repainting a label shapes it once, not
   once per frame. The memo is LRU-bounded (4000 entries): on overflow the
   least-recently-used half is dropped, so what is on screen stays shaped.
+- A paragraph's layout up to the line fill is kept as well: its spans with
+  their faces resolved, its bidi levels, and its text cut into shaped UAX#14
+  tokens. None of that depends on the width, so a layout of the same
+  paragraph at another width — every step of a window resize — starts at
+  the line fill. A paragraph is found by its text and direction, and by
+  every field of its spans and base style, compared against copies of the
+  ones it was made from (`lib/text/paragraphs.js`); two generations of 512K
+  characters are kept, and `fonts.load()` drops them, since a kept span
+  holds the face its family matched before. Resizing a 600 KB HTML
+  document laid out at 42 ms a frame instead of 86.
 
 For scale: a 60-character line of 16px Latin text is ~70 bytes of
 `CompositeGlyphs` after warm-up. The one-time glyph upload for a full
