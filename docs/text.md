@@ -94,7 +94,11 @@ XRender glyph ids are client-assigned, and ntk exploits that:
   ones it was made from (`lib/text/paragraphs.js`); two generations of 512K
   characters are kept, and `fonts.load()` drops them, since a kept span
   holds the face its family matched before. Resizing a 600 KB HTML
-  document laid out at 42 ms a frame instead of 86.
+  document laid out at 42 ms a frame instead of 86. Text under 64
+  characters is never kept: a label is cheap to prepare and seldom laid out
+  at a second width, and keeping it cost a UI's labels a quarter of their
+  layout time. What is kept costs about 60 bytes of heap a character — 36
+  MB for that 600 KB document, nothing for a UI's labels.
 
 For scale: a 60-character line of 16px Latin text is ~70 bytes of
 `CompositeGlyphs` after warm-up. The one-time glyph upload for a full
