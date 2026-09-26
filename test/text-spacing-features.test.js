@@ -142,21 +142,34 @@ test('letter spacing turns the optional ligatures off, unless they are asked for
   assert.ok(glyphs({ letterSpacing: 1, features: ['liga'] }) < 6, 'in either form');
 });
 
-test('in an rtl run the spacing opens on the reading side of each glyph', needsFonts, (t) => {
-  const fonts = new FontManager();
-  const style = { family: 'sans-serif', size: 20 };
-  const text = 'אבג';
-  const plain = new TextLayout(fonts, text, style);
-  const run = plain.lines[0]?.runs[0]?.run;
-  if (!run || run.direction !== 'rtl' || run.glyphs.some((g) => g.id === 0)) {
-    t.skip('no Hebrew coverage');
-    return;
-  }
-  const spaced = new TextLayout(fonts, text, { ...style, letterSpacing: 4 }).lines[0].runs[0].run;
-  spaced.glyphs.forEach((g, i) => {
-    assert.equal(g.ax, run.glyphs[i].ax + 4);
-    assert.equal(g.dx, run.glyphs[i].dx + 4, 'drawn at the far end of its widened advance');
-  });
+test('the gap is on the right of every glyph, whichever way its run reads', () => {
+  // One gap between every two neighbours on a line, as CoreText and browsers
+  // set it. Opened on the reading side of an rtl run's glyphs, it came out
+  // twice where the direction changed one way and not at all where it
+  // changed back — WPT's css/CSS2/bidi-text/bidi-005b, #394.
+  const fonts = fontsWith(readFileSync(join(katexFonts, 'KaTeX_Main-Regular.ttf')));
+  const style = { family: 'Test', size: 20 };
+  // `bc` under an override is an rtl run, drawn `cb`, between two ltr letters
+  const text = 'a\u202Ebc\u202Cd';
+  const drawn = (layout) => {
+    const xs = [];
+    for (const r of layout.lines[0].runs) {
+      let pen = r.x;
+      for (const g of r.run.glyphs) {
+        if (g.ax > 0) xs.push(pen + g.dx);
+        pen += g.ax;
+      }
+    }
+    return xs;
+  };
+  const plain = drawn(new TextLayout(fonts, text, style));
+  const spaced = drawn(new TextLayout(fonts, text, { ...style, letterSpacing: 10 }));
+  assert.equal(spaced.length, 4, 'four letters');
+  assert.deepEqual(
+    spaced.map((x, k) => Math.round(x - plain[k])),
+    [0, 10, 20, 30],
+    'each a gap further along than the letter before it'
+  );
 });
 
 test('a spaced line’s trailing whitespace still does not count against its width', () => {
