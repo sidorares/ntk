@@ -46,7 +46,13 @@ as well as reported to the event loop, so a layout that asks before the
 loop has run — the first frame's, which holds it — takes a prewarm's answer
 rather than spawning `fc-match` again. The first time any other family is
 used, its four faces start together the same way; a pattern outside those
-still pays one synchronous `fc-match` (~50ms) the first time it is used.
+still pays one synchronous `fc-match` the first time it is used. A glyph
+fallback asks for the pattern of the face it falls back from, so the list
+that face's match or prewarm fetched answers it. And `fc-match` is spawned
+by the path it was found at rather than by its name: spawned by name on
+macOS, the system's search for it spawns in every `PATH` directory ahead of
+the one holding it, which took a spawn from 15 ms to 45 on a typical
+developer's `PATH`.
 
 On macOS, `sans-serif` resolves to Helvetica, as it does in Safari, Chrome
 and Firefox there, rather than to whatever fontconfig answers for it.
