@@ -398,8 +398,9 @@ shadow the same way `fillText` does. Geometry and hit testing
 
 Line breaking is UAX#14 (`linebreak` package); `\n` forces breaks; a word
 wider than `maxWidth` force-breaks at the widest grapheme prefix that fits;
-trailing whitespace at line ends is stripped (and doesn't count against
-`maxWidth` during fitting, CSS-style).
+the spaces and tabs a line ends on are stripped (and don't count against
+`maxWidth` during fitting, CSS-style). A no-break space is not stripped:
+CSS measures it at the end of a line as anywhere else.
 
 #### Line boxes and leading
 

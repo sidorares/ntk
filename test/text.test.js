@@ -205,6 +205,20 @@ test('TextLayout strips trailing whitespace at line ends', needsFonts, () => {
   assert.ok(Math.abs(wrapped.lines[0].width - single.lines[0].width) < 0.01);
 });
 
+test('a no-break space a line ends on keeps its room; spaces and tabs hang', () => {
+  // CSS hangs the spaces and tabs left at a line's end. U+00A0 is not one of
+  // them — `&nbsp;` at the end of a cell or a span is there to take room —
+  // and it was stripped with them, #395.
+  const fonts = fixedFonts();
+  const style = { family: 'Test', size: 20 };
+  const width = (text) => new TextLayout(fonts, text, style).lines[0].width;
+  const nbsp = width('x\u00a0x') - 2 * width('x');
+  assert.ok(nbsp > 0, 'the face has a no-break space');
+  assert.ok(Math.abs(width('x\u00a0') - (width('x') + nbsp)) < 0.01, 'measured where it ends a line');
+  assert.equal(width('x '), width('x'), 'where a space hangs');
+  assert.equal(width('x\t'), width('x'), 'and a tab');
+});
+
 test('TextLayout force-breaks tokens wider than the container', needsFonts, () => {
   const fonts = new FontManager();
   const layout = new TextLayout(
