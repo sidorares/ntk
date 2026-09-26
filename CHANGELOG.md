@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.9](https://github.com/sidorares/ntk/compare/v8.12.8...v8.12.9) (2026-09-26)
+
+
+### Bug Fixes
+
+* **drawImage:** a scaled image is its own colour out to its edge ([#392](https://github.com/sidorares/ntk/issues/392)) ([c3522ac](https://github.com/sidorares/ntk/commit/c3522ace508edac28a79b58aa1b715a29be24459))
+
 ## [8.12.8](https://github.com/sidorares/ntk/compare/v8.12.7...v8.12.8) (2026-09-26)
 
 
