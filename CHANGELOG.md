@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.7](https://github.com/sidorares/ntk/compare/v8.12.6...v8.12.7) (2026-09-26)
+
+
+### Performance Improvements
+
+* **text:** a paragraph laid out at another width keeps its tokens ([#387](https://github.com/sidorares/ntk/issues/387)) ([9771e76](https://github.com/sidorares/ntk/commit/9771e7602e878fa588aabd8a4884f39926468021))
+
 ## [8.12.6](https://github.com/sidorares/ntk/compare/v8.12.5...v8.12.6) (2026-09-25)
 
 
