@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import FontManager from '../lib/text/fontmanager.js';
 import { StaticFontSource } from '../lib/text/fontsource.js';
 import { TextLayout } from '../lib/text/layout.js';
-import { ParagraphCache } from '../lib/text/paragraphs.js';
+import { PARAGRAPH_MIN_CHARS, ParagraphCache } from '../lib/text/paragraphs.js';
 
 const require = createRequire(import.meta.url);
 const katexFonts = join(dirname(require.resolve('katex/package.json')), 'dist', 'fonts');
@@ -66,6 +66,8 @@ OPTIONS.push({ maxWidth: 160, direction: 'rtl' });
 OPTIONS.push({ maxWidth: 160, direction: 'auto' });
 
 const BASE = { family: 'sans-serif', size: 15, color: '#111' };
+// what makes a paragraph long enough to keep (`PARAGRAPH_MIN_CHARS`)
+const LONG = ', and then enough words after them to make a paragraph worth keeping';
 
 /** Everything a layout says, with a face named rather than compared by object. */
 function summary(layout, text) {
@@ -136,7 +138,7 @@ test('a layout from a kept paragraph is the layout a fresh one makes', () => {
   }
 });
 
-test('the width-independent work is done once a paragraph', () => {
+test('the width-independent work is done once a paragraph, and every time for short text', () => {
   const fonts = manager();
   const prepare = TextLayout.prototype._prepare;
   let prepared = 0;
@@ -151,12 +153,15 @@ test('the width-independent work is done once a paragraph', () => {
   } finally {
     TextLayout.prototype._prepare = prepare;
   }
-  assert.equal(prepared, Object.keys(PARAGRAPHS).length);
+  const long = Object.values(PARAGRAPHS).filter((c) => textOf(c).length >= PARAGRAPH_MIN_CHARS).length;
+  const short = Object.keys(PARAGRAPHS).length - long;
+  assert.ok(long >= 4 && short >= 4, 'both kinds are asked for');
+  assert.equal(prepared, long + short * 5, 'a long paragraph once, a short one at every width');
 });
 
 test('a span that differs anywhere is another paragraph, and its runs say so', () => {
   const fonts = manager();
-  const link = (fields) => [{ text: 'Read ' }, { text: 'the docs', ...fields }, { text: ' first.' }];
+  const link = (fields) => [{ text: 'Read ' }, { text: 'the docs', ...fields }, { text: ' first' + LONG }];
   const target = (layout) => layout.lines.flatMap((l) => l.runs).find((r) => r.span.text === 'the docs').span;
   fonts.layout(link({ href: 'a' }), BASE, { maxWidth: 300 });
   const variants = [
@@ -181,10 +186,10 @@ test('what a caller does to its spans afterwards changes nothing it laid out', (
   // be the one the next lookup compared against — and a bold paragraph would
   // answer for the regular one the caller now asks about.
   const fonts = manager();
-  const spans = [{ text: 'Before ' }, { text: 'the change', weight: 700 }];
+  const spans = [{ text: 'Before ' }, { text: 'the change', weight: 700 }, { text: LONG }];
   const bold = fonts.layout(spans, BASE, { maxWidth: 300 });
   spans[1].weight = 400;
-  const regular = fonts.layout([{ text: 'Before ' }, { text: 'the change', weight: 400 }], BASE, {
+  const regular = fonts.layout([{ text: 'Before ' }, { text: 'the change', weight: 400 }, { text: LONG }], BASE, {
     maxWidth: 300
   });
   // a span is a run per word it holds, so the set of weights is what compares
@@ -196,17 +201,18 @@ test('what a caller does to its spans afterwards changes nothing it laid out', (
   // find another's
   spans[1].text = 'another thing';
   const again = fonts.layout(spans, BASE, { maxWidth: 300 });
-  assert.equal(again.lines.flatMap((l) => l.runs.map((r) => r.run.text)).join(''), 'Before another thing');
+  assert.equal(again.lines.flatMap((l) => l.runs.map((r) => r.run.text)).join(''), 'Before another thing' + LONG);
 });
 
 test('loading a face drops the kept paragraphs, whose spans hold the faces matched before', () => {
   const fonts = manager();
-  fonts.layout('Some text', BASE, { maxWidth: 200 });
+  const text = 'Some text' + LONG;
+  fonts.layout(text, BASE, { maxWidth: 200 });
   // booleans, not the paragraph: a failed comparison would print its
   // tokens, and through them every face they were shaped with
-  assert.ok(fonts._paragraphs.find('Some text', undefined, 'Some text', BASE) !== undefined, 'kept');
+  assert.ok(fonts._paragraphs.find(text, undefined, text, BASE) !== undefined, 'kept');
   fonts.load(fontBytes('KaTeX_Main-Bold.ttf'), { family: 'Late' });
-  assert.ok(fonts._paragraphs.find('Some text', undefined, 'Some text', BASE) === undefined, 'dropped by the load');
+  assert.ok(fonts._paragraphs.find(text, undefined, text, BASE) === undefined, 'dropped by the load');
 });
 
 test('two generations of characters are kept, and what neither used is dropped', () => {
