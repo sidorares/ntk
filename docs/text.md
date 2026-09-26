@@ -343,8 +343,10 @@ that has an advance — the last on a line included, as CoreText's kerning
 attribute and most toolkits add it — so a combining mark keeps sitting on
 its base. Negative values tighten. It is part of the glyph advances, so
 everything built on them follows: a layout's widths and line fill, its
-alignment, `caretPosition`/`indexAt` and the drawing. In an RTL run the gap
-opens on the reading side of each glyph.
+alignment, `caretPosition`/`indexAt` and the drawing. The gap is on each
+glyph's right in an RTL run as in an LTR one, as CoreText and browsers set
+it, so a line that changes direction keeps one gap between every two
+neighbours.
 
 A spaced run turns the optional ligatures off (`liga`, `clig`, `dlig`,
 `hlig`) — an `fi` drawn as one glyph cannot open in the middle — unless the
