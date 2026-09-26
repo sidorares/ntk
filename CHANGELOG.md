@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.12.8](https://github.com/sidorares/ntk/compare/v8.12.7...v8.12.8) (2026-09-26)
+
+
+### Performance Improvements
+
+* **fonts:** fc-match is spawned by its path, and a fallback asks for its face's pattern ([#390](https://github.com/sidorares/ntk/issues/390)) ([f5d78df](https://github.com/sidorares/ntk/commit/f5d78df5451b076872f9e532441c6f1e410db08b))
+* **text:** short text does not go through the paragraph cache ([#389](https://github.com/sidorares/ntk/issues/389)) ([2378c2a](https://github.com/sidorares/ntk/commit/2378c2a973c29d1e9002d9dac703a6872906f61c))
+
 ## [8.12.7](https://github.com/sidorares/ntk/compare/v8.12.6...v8.12.7) (2026-09-26)
 
 
