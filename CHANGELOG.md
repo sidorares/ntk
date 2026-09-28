@@ -1,5 +1,19 @@
 # Changelog
 
+## [8.13.1](https://github.com/sidorares/ntk/compare/v8.13.0...v8.13.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **2d:** geometry far past the surface is cut to it before it goes to the server ([#412](https://github.com/sidorares/ntk/issues/412)) ([8d9bd17](https://github.com/sidorares/ntk/commit/8d9bd179db4b5a2717b33f485f1720130b13e41c))
+* **app:** the compositor watch makes no window and asks nothing of a closed connection ([#413](https://github.com/sidorares/ntk/issues/413)) ([52b2fad](https://github.com/sidorares/ntk/commit/52b2fada2709027bbec8094c21031f993ae2712f))
+
+
+### Performance Improvements
+
+* **text:** a layout draws only the lines the surface can show ([#415](https://github.com/sidorares/ntk/issues/415)) ([c62915a](https://github.com/sidorares/ntk/commit/c62915ade72e83b632c1995fe27193d11e7d896a))
+* **text:** spans that share a style share its font and its shaping key ([#416](https://github.com/sidorares/ntk/issues/416)) ([7add4ee](https://github.com/sidorares/ntk/commit/7add4eef5d2fcd100b912e1812d7d3c6fe1ace41))
+
 ## [8.13.0](https://github.com/sidorares/ntk/compare/v8.12.13...v8.13.0) (2026-09-28)
 
 
