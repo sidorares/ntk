@@ -48,7 +48,11 @@ rather than spawning `fc-match` again, and a face no text is set in is
 never read at all. Even a face that is set in is read only as far as its
 first line: an answer is the whole fallback chain with each face's coverage,
 634 KB for `sans-serif` on a Linux desktop, and the rest of it is read when
-a character first falls back. The first time any other family is
+a character first falls back. Beside the chains, a prewarm asks fontconfig
+for the one face it would pick for the face a layout will ask for first,
+which it answers in about half the time (15 ms against 30 here). That makes
+a family warmed while its component renders ready by its first layout. The
+first time any other family is
 used, its four faces start together the same way — but that first use still
 waits for them, so a caller that knows a family is coming can start it
 earlier with `app.fonts.prewarm(family)`: a code editor's monospace, asked
