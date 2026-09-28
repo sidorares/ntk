@@ -420,6 +420,11 @@ wnd.getContext('2d');
 // wnd.frameClock === 'present' once the extension has answered
 ```
 
+A window a direct GL context draws into has no backing store and presents
+nothing of its own, but its swap chain presents every frame the same way and
+hears each one complete, so the same event ends its frames
+([context-gles.md](context-gles.md)).
+
 Frames then run at the output's own rate, phase-locked to it, whatever that
 rate is — 60 fps on a 60 Hz panel and 165 on a 165 Hz one, with nothing to
 configure and no rate written down anywhere. A fixed `frameInterval` cannot

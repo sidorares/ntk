@@ -289,8 +289,14 @@ is a small wrapper in that package.
 
 - Presents are sent with `targetMsc: 0` and no `Option.Copy`, so the server
   shows them at the next vblank and may flip rather than copy. Frame *pacing*
-  is still the window's frame clock ([window.md](window.md)); the swap chain
-  only bounds how many frames can be in flight.
+  is the window's frame clock ([window.md](window.md#what-ends-a-frame)), and
+  the swap chain's presents are what it runs on: the completion of each
+  frame's present starts the next, so a `requestAnimationFrame` loop runs at
+  the output's rate, one frame a vblank, as a 2D window's does. Until they
+  were, a GL window's frames ended on the fence and the frame timer, which
+  fires late and drifts against the vblanks — a map panned by an animation
+  drew 50 frames a second on a 60 Hz panel. The swap chain also bounds how
+  many frames can be in flight.
 - The `appledri` flavor keeps the same contract with different machinery
   underneath: there is no swap chain and the server applies no backpressure,
   so each `SwapBuffers()` closes the `canRender()` gate itself for one
