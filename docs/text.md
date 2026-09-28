@@ -372,6 +372,7 @@ const layout = app.fonts.layout(content, style, {
   direction: 'auto',  // base paragraph direction
   maxLines: 2,        // cap the line count (default: unlimited)
   overflow: 'clip',   // clip | ellipsis — what the cap looks like
+  wrap: true,         // false: a line to each forced break, cut at maxWidth by an ellipsis
   overflowWrap: 'break-word' // break-word | normal — a word wider than the line
 });
 ```
@@ -388,6 +389,13 @@ for a fallback there rather than a phrase run past the edge. A line that
 runs past the container starts at its start edge whatever `align` says, as
 CSS Text 3 has it, so a right-aligned long word is not pushed out of the
 container's left side.
+
+`wrap: false` lays the text out a line to each forced break however wide
+it is — CSS's `white-space: nowrap` or `pre` — and with
+`overflow: 'ellipsis'` cuts each line wider than `maxWidth` there, inside a
+word if need be, and ends it with the ellipsis, as CSS's `text-overflow`
+does. `maxLines: 1` wraps first, and its ellipsis comes after the last word
+that fitted, a word short of the container's end.
 
 `content` is a string or styled spans — each span may override `family`,
 `size`, `weight`, `style`, `variations`, `features`, `language`,
