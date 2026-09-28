@@ -116,6 +116,28 @@ test('a face no glyph can be made from covers nothing, and is passed by', () => 
   assert.ok(layout.width > 0);
 });
 
+test("a face the source answers first is read past when no glyph can be made from it", () => {
+  // fontconfig's source answers a face's match from the head of its answer
+  // (`matchFirst`) and reads the chain only when it has to: a head nothing
+  // can be drawn from is when it has to
+  const source = new StaticFontSource();
+  source.add(bytes('KaTeX_Main-Regular.ttf'), { family: 'Test Main' });
+  source.add(withoutOutlines('KaTeX_AMS-Regular.ttf'), { family: 'Test Bitmaps' });
+  source.add(bytes('KaTeX_AMS-Regular.ttf'), { family: 'Test AMS' });
+  const sorted = source.matchSorted.bind(source);
+  let chains = 0;
+  source.matchSorted = (pattern) => (chains++, sorted(pattern));
+  source.matchFirst = (pattern) => sorted(pattern)[0];
+  const fm = new FontManager({ source });
+
+  assert.equal(fm.match('Test Main').postscriptName, 'KaTeX_Main-Regular');
+  assert.equal(chains, 0, 'a head that can be drawn is the answer, and no chain is read');
+  const named = fm.match('Test Bitmaps');
+  assert.equal(named.drawable, true, 'the best face that can be drawn, not the head');
+  assert.equal(chains, 1);
+  assert.ok(fm.layout('\u2136 x', { family: 'Test Bitmaps', size: 16 }).width > 0);
+});
+
 test('layout runs end-to-end without fontconfig', () => {
   const fm = new FontManager({ source: staticSource() });
   const layout = fm.layout('Hello world wrap here', { family: 'sans-serif', size: 16 }, { maxWidth: 60 });

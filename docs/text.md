@@ -45,7 +45,12 @@ layout.draw(ctx, 16, 60);
    fallback chain (using fontconfig's own coverage data, so candidate files
    are only opened to confirm) and picks the best font that covers the
    character. The primary font always wins when it covers a char, keeping
-   fallback runs minimal.
+   fallback runs minimal. A face fontkit can make no glyph from covers
+   nothing (`Font.drawable`): a bitmap-only colour emoji font (`CBDT`/`CBLC`,
+   as Noto Color Emoji and EmojiOne ship on most Linux desktops) is passed
+   by for the next face that has the character, and where none has it the
+   character draws as the missing glyph. It used to be chosen, and the
+   shaper threw on its null glyph.
 4. **Shape** — [fontkit](https://www.npmjs.com/package/fontkit) applies
    OpenType GSUB/GPOS: kerning, ligatures, contextual forms for complex
    scripts (Arabic joining etc.). RTL runs come back in visual order.

@@ -485,6 +485,10 @@ this is only about instantiating an axis.
 - `Font`: `familyName`, `postscriptName`, `unitsPerEm`, `hasGlyph(cp)`,
   `glyphIdFor(cp)` → `number | null` (unshaped cmap lookup, `null` where
   the face lacks the codepoint — see [text.md](text.md#glyph-runs)),
+  `drawable` (whether a glyph can be made from the face at all: `glyf`,
+  `CFF `/`CFF2`, `sbix` or `COLR`/`CPAL`. A face that is not, such as a
+  bitmap-only colour emoji font, answers `hasGlyph` false for everything,
+  and `match()` hands out the best candidate that is),
   `metrics(size)`, `shape(text, size, opts)`, `advanceOf(glyphId, size)`,
   `rasterize(glyphId, size)`
 - `Font`, variable faces: `variationAxes` (`{}` when static),
