@@ -164,3 +164,44 @@ test('a shadowed rectangle far larger than the surface casts its shadow onto it'
     assert.ok(!isWhite(at(img, 65, 60)), 'the shadow, right of the white box');
   }
 });
+
+test('geometry a little past the surface goes as it came, and what misses it not at all', async () => {
+  // The cut is for what the wire cannot carry. A zoomed graph has hundreds
+  // of edges a few hundred pixels past the window every frame, and cutting
+  // each one cost more than the server's own clipping of it.
+  app.rasterizer = null;
+  try {
+    const ctx = freshCtx();
+    const sent = [];
+    const Triangles = ctx.Render.Triangles;
+    ctx.Render.Triangles = function (...args) {
+      sent.push(args[args.length - 1]);
+      return Triangles.apply(this, args);
+    };
+    try {
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      // a leg wholly left of the surface, then one across it
+      ctx.moveTo(-400, 10);
+      ctx.lineTo(-300, H / 2);
+      ctx.lineTo(W + 400, H / 2);
+      ctx.stroke();
+    } finally {
+      ctx.Render.Triangles = Triangles;
+    }
+    const tris = sent.flat();
+    const xs = tris.filter((_, i) => i % 2 === 0);
+    assert.ok(xs.length, 'the stroke went out as triangles');
+    assert.ok(Math.min(...xs) < -250, `sent from x ${Math.min(...xs)}, not cut at the surface`);
+    // and a triangle that does not reach the surface is not sent at all
+    for (let i = 0; i < tris.length; i += 6) {
+      const txs = [tris[i], tris[i + 2], tris[i + 4]];
+      assert.ok(Math.max(...txs) >= -1, `a triangle wholly off the surface was sent: ${txs}`);
+    }
+    const image = await ctx.getImageData(0, 0, W, H);
+    assert.ok(isBlack(at(image, W / 2, H / 2)), 'and it is drawn');
+  } finally {
+    app.rasterizer = new ScanlineRasterizer();
+  }
+});
