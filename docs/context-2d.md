@@ -63,7 +63,9 @@ either a rectangle handed to the server around the drawing
 (`SetPictureClipRectangles`) or — where the drawing is a single composite of
 a box, as `fillRect` and `drawImage` are — the same rectangle intersected
 into that box, which costs no requests and no pixels at all. That is what
-makes a renderer's `save()`/`clip(damage)`/…/`restore()` frame cheap.
+makes a renderer's `save()`/`clip(damage)`/…/`restore()` frame cheap. A
+rectangle of no width or no height is one too — a box of no height clipping
+its content — and nothing is drawn through it.
 Non-rectangular clips build an a8 mask, and an XFIXES region is a third kind
 the server applies itself — see [Region clips](#region-clips). Where a mask
 is genuinely needed, the work it costs is bounded to the box the drawing
