@@ -8,7 +8,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate as tick, setTimeout as sleep } from 'node:timers/promises';
 
+import xserver from 'x11/lib/xserver/index.js';
+
 import App from '../lib/app.js';
+import { createClient, StaticFontSource } from '../lib/index.js';
 import Window from '../lib/window.js';
 
 let nextId = 0xe000;
@@ -286,4 +289,53 @@ test('App#compositing: no owner is no compositor, and Xwayland says so', async (
   await settle();
   assert.equal(wayland.app.compositing, true);
   assert.equal(wayland.app.xwayland, true);
+});
+
+test('App#compositing: a connection that closes while it waits is asked nothing more', async () => {
+  const steps = ['QueryExtension', 'InternAtom', 'GetSelectionOwner'];
+  for (const closedAfter of steps) {
+    const { app, watchers } = makeApp({ owner: 0x0a00001 });
+    const X = app.X;
+    const asked = [];
+    for (const name of steps) {
+      const request = X[name];
+      X[name] = function (...args) {
+        // node-x11's requests throw on a connection that is closing, and from
+        // a reply callback nothing is there to catch it
+        if (this._closing) throw new Error('client is in closing state');
+        asked.push(name);
+        // the app closes before this one is answered
+        if (name === closedAfter) this._closing = true;
+        return request.apply(this, args);
+      };
+    }
+    void app.compositing;
+    await settle();
+    assert.equal(asked.at(-1), closedAfter, `nothing is asked after ${closedAfter}`);
+    assert.equal(watchers.length, 0, 'and nothing is watched');
+    assert.equal(app.compositing, null, 'the answer stays unknown');
+  }
+});
+
+test('App#compositing makes no window to find out', async (t) => {
+  // node-x11's in-process server: nobody owns the selection, and it has no
+  // XFixes, so there is nothing to watch either
+  const server = xserver.createServer({ width: 100, height: 100 });
+  const [serverEnd, clientEnd] = xserver.createStreamPair();
+  server.addClientStream(serverEnd);
+  const app = await createClient({ stream: clientEnd, fontSource: new StaticFontSource() });
+  t.after(() => app.close());
+  const X = app.X;
+  const roundTrip = () => new Promise((resolve) => X.GetInputFocus(() => setImmediate(resolve)));
+
+  void app.compositing;
+  for (let i = 0; i < 4; i++) await roundTrip();
+  assert.equal(app.compositing, false, 'no compositor here');
+  const tree = await new Promise((resolve, reject) =>
+    X.QueryTree(app.display.screen[0].root, (err, answer) => (err ? reject(err) : resolve(answer)))
+  );
+  // A window on the root is one every window manager, `xwininfo -tree` and
+  // anything that lists an app's windows sees. Watching the selection used
+  // to make the clipboard's, in every app that ever presented a frame.
+  assert.deepEqual(tree.children, [], 'the answer made no window');
 });

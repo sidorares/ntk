@@ -178,7 +178,14 @@ with `console.warn` and does not cost the other watchers their event.
 
 Built on XFixes `SelectSelectionInput`. Every X server since about 2004 has
 the extension; on one that does not, `watch()` rejects saying so, rather than
-silently never firing.
+silently never firing. The registration is on the root window, as GDK's is,
+so watching makes no helper window: that is made for a `write()` or a
+`read()`, and only then. It matters because every app watches one selection
+of its own accord — `_NET_WM_CM_S0`, which is how `app.compositing` follows a
+compositor starting and stopping — and a helper window made for that would
+be an unmapped window on the root for every app that ever presented a frame,
+one `xwininfo -root -tree` lists and a search for the app's own windows
+finds.
 
 ## `app.clipboard.targets([options]) → Promise<string[]>`
 
