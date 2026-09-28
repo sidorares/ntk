@@ -823,8 +823,9 @@ All return `this` unless noted.
 - `map()` / `unmap()` — show / hide
 - `move(x, y)`, `resize(w, h)`, `moveResize(x, y, w, h)`
 - `setState({ visible, x, y, width, height })` — declarative variant; only
-  sends requests for properties that changed (intended for future
-  react-renderer use)
+  sends requests for properties that changed, except that a size goes out
+  with both axes when either changed: Muffin (Cinnamon) reads a width-only
+  request's height as its frame's and grows the window by its title bar
 - `setTitle(title)` — sets both the legacy latin-1 `WM_NAME` and the EWMH
   UTF-8 `_NET_WM_NAME`, so non-latin titles display correctly under modern
   window managers
