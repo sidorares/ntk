@@ -262,6 +262,60 @@ test("a source's prewarm has a family's faces before a layout asks for them", ()
   assert.equal(out.mono, 4, 'one spawn a face, all from the prewarm');
 });
 
+test("a source's prewarm has the faces it names before a layout asks for them", () => {
+  // outside the four a family is warmed in — a menu's medium — and started
+  // together, in one child
+  const out = prewarmProbe(
+    "import cp from 'node:child_process';\n" +
+      "import { readFileSync } from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      'const spawn = cp.spawn;\n' +
+      'let children = 0;\n' +
+      'cp.spawn = (...args) => (children++, spawn.apply(cp, args));\n' +
+      'process.env.PATH = BIN.count;\n' +
+      'const source = new FontconfigFontSource();\n' +
+      "source.prewarm('sans-serif', [{ weight: 500, style: 'normal' }, { weight: 600, style: 'normal' }]);\n" +
+      'process.env.PATH = EMPTY; // an ask that spawned would throw ENOENT\n' +
+      "const paths = [500, 600].map((weight) => matchSortedSync({ family: 'sans-serif', weight, style: 'normal' })[0].path);\n" +
+      "const matches = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
+      "console.log(JSON.stringify({ paths, children, medium: matches.filter((m) => /weight=(100|180)$/.test(m)).length }));\n",
+    { count: counting('/faces/N.ttf') }
+  );
+  assert.deepEqual(out.paths, ['/faces/N.ttf', '/faces/N.ttf']);
+  assert.equal(out.medium, 2, 'each named face matched once');
+  assert.equal(out.children, 2, "the source's own four, then the two named");
+});
+
+test("a family's faces are matched from one child of the process", () => {
+  // Node forks the whole process to spawn, at a cost that grows with its
+  // heap, so the four matches of a family share one shell. Three families:
+  // the source's own, one a caller warms, one a layout misses on.
+  const out = prewarmProbe(
+    "import cp from 'node:child_process';\n" +
+      "import { readFileSync } from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      'const spawn = cp.spawn;\n' +
+      'let children = 0;\n' +
+      'cp.spawn = (...args) => (children++, spawn.apply(cp, args));\n' +
+      'process.env.PATH = BIN.count;\n' +
+      "new FontconfigFontSource().prewarm('monospace');\n" +
+      "matchSortedSync({ family: 'serif', weight: 700, style: 'normal' });\n" +
+      'process.env.PATH = EMPTY; // an ask that spawned would throw ENOENT\n' +
+      "const face = (family, weight, style) => ({ family, weight, style });\n" +
+      'const paths = [];\n' +
+      "for (const family of ['sans-serif', 'monospace', 'serif'])\n" +
+      "  for (const [weight, style] of [[400, 'normal'], [700, 'normal'], [400, 'italic'], [700, 'italic']])\n" +
+      '    paths.push(matchSortedSync(face(family, weight, style))[0].path);\n' +
+      "const matches = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
+      'console.log(JSON.stringify({ paths: new Set(paths).size, answered: paths.length, children, matches: matches.length }));\n',
+    { count: counting('/faces/F.ttf') }
+  );
+  assert.equal(out.answered, 12);
+  assert.equal(out.paths, 1, 'every face answered from the stub');
+  assert.equal(out.matches, 12, 'one fc-match a face');
+  assert.equal(out.children, 3, 'one child a family');
+});
+
 test('prewarm for an already-cached pattern spawns nothing', () => {
   const out = prewarmProbe(
     "import { readFileSync } from 'node:fs';\n" +

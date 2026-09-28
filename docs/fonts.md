@@ -48,8 +48,16 @@ rather than spawning `fc-match` again. The first time any other family is
 used, its four faces start together the same way — but that first use still
 waits for them, so a caller that knows a family is coming can start it
 earlier with `app.fonts.prewarm(family)`: a code editor's monospace, asked
-for before its first render, is ready by its first layout. A pattern outside
-those still pays one synchronous `fc-match` the first time it is used. A glyph
+for before its first render, is ready by its first layout. The family is
+spelled the way a layout spells it, so `'"JetBrains Mono", monospace'` warms
+what text set in that list asks for. A face outside the four still pays one
+synchronous `fc-match` the first time it is used, unless it is named:
+`app.fonts.prewarm(family, [{ weight: 500 }])` starts that face alone — the
+medium a menu is set in. The matches a prewarm starts run side by side from
+one child process, because it is the spawn that costs the app: Node forks
+the whole process to start a child, at a cost that grows with its heap —
+four spawns took 33 ms of the main thread at 260 MB, and one shell starting
+the same four took 8. A glyph
 fallback asks for the pattern of the face it falls back from, so the list
 that face's match or prewarm fetched answers it. And `fc-match` is spawned
 by the path it was found at rather than by its name: spawned by name on
