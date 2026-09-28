@@ -507,6 +507,33 @@ benchmark wants of Xvfb's when it stands in for a display. So does a server
 started with `-fakescreenfps` at some rate other than 60: it is not
 recognised, and paces to the rate it was told to fake.
 
+#### Under a compositor
+
+Under a compositing manager a window leaves Present to the compositor: the
+fence ends its frames and its blits are CopyArea, the configuration a
+server with no display behind Present already gets. The compositor puts the
+screen together at the vertical blank itself, so a present synced to it
+buys no tearing a copy would cause, and its clock costs what issue #402
+measured on NVIDIA's driver under Cinnamon: a completion whose phase drifts
+across the whole period, so a frame chained on it misses its vblank 8–16%
+of the time with nothing drawn, and up to a frame of latency on every
+change. Across the sweep there, typing's key-to-paint went from 12 ms to 2,
+and a table's wheel and a scatter chart from 35–41 frames a second to 60,
+with the frames watcher's bad samples at 0 either way.
+
+"Under a compositor" is the EWMH's `_NET_WM_CM_S0` selection having an owner
+(`app.compositing`), followed for the life of the connection: a compositor
+started or stopped while the app runs moves every window to the clock that
+fits at its next frame, and a present still in flight is waited out first.
+Two exceptions keep Present:
+
+- **Xwayland** (`app.xwayland`), whose Present clock is the Wayland
+  compositor's frame callback — what stops an occluded window from rendering.
+- **`frameClock: 'present'`**, which asks for Present's clock by name.
+
+`NTK_FRAME_CLOCK=auto|present|fence` sets the default for every window that
+does not name one, for trying a machine both ways without touching the app.
+
 #### Frames in flight
 
 On the round-trip clock the server may owe a window **two frames**. The next
