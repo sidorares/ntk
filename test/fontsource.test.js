@@ -342,3 +342,34 @@ test('prewarm is handed to the source, and a source with nothing to look up igno
   // fonts in memory: nothing to warm, and nothing thrown
   new FontManager({ source: staticSource() }).prewarm('monospace');
 });
+
+test('prewarm asks for the patterns a layout will: the family and faces spelled as match spells them', () => {
+  const warmed = [];
+  const matched = [];
+  const source = {
+    matchSorted: (pattern) => {
+      matched.push(pattern);
+      throw new Error('stop at the ask');
+    },
+    prewarm: (family, faces) => warmed.push({ family, faces })
+  };
+  const fonts = new FontManager({ source });
+  fonts.prewarm(' "JetBrains Mono", monospace');
+  fonts.prewarm('sans-serif', [{ weight: 500 }, { weight: 'bold', style: 'italic' }]);
+  assert.throws(() => fonts.match(' "JetBrains Mono", monospace'), /stop at the ask/);
+  assert.throws(() => fonts.match('sans-serif', { weight: 500 }), /stop at the ask/);
+  assert.throws(() => fonts.match('sans-serif', { weight: 'bold', style: 'italic' }), /stop at the ask/);
+  assert.equal(warmed[0].family, matched[0].family);
+  assert.equal(warmed[0].faces, undefined, 'no faces named: the source warms its four');
+  const [, medium, boldItalic] = matched;
+  assert.deepEqual(warmed[1], {
+    family: medium.family,
+    faces: [
+      { weight: medium.weight, style: medium.style },
+      { weight: boldItalic.weight, style: boldItalic.style }
+    ]
+  });
+  // a family that names nothing warms nothing
+  fonts.prewarm(' , ');
+  assert.equal(warmed.length, 2);
+});
