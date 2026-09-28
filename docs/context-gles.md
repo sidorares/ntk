@@ -256,6 +256,16 @@ is a small wrapper in that package.
 - `gl.destroy()` releases the surface, its pixmaps and its event selection.
   The shared GPU context belongs to the connection and is released by
   `app.close()`.
+- `gl.onError = fn` is called once, with the coded error `gl.error` then
+  holds, when a context that was `ready` fails — a swap the driver refused
+  mid-life. A failure before `ready` resolved is its rejection, and only
+  that. Either way the context draws nothing more, so a caller with a
+  fallback shows it on whichever of the two it hears. Both flavors.
+- A resize is a new generation of buffers, made at the top of the next
+  frame by `gl.makeCurrent()`, and the old generation's surface is unbound
+  before it is destroyed. The order is load-bearing on NVIDIA's driver: a
+  surface destroyed while it is current left every later swap failing with
+  `EGL_BAD_SURFACE`.
 
 ### Frames and back pressure
 

@@ -110,3 +110,149 @@ describe('buffer layout', () => {
     assert.ok(/^## Buffer layout$/m.test(docs), 'docs/context-gles.md#buffer-layout');
   });
 });
+
+/**
+ * A GPU that keeps track of which surface is current, the way EGL does, and
+ * records every surface destroyed while it was: the driver hazard behind the
+ * rule. On NVIDIA the next surface made current after one such destroy swaps
+ * nothing but EGL_BAD_SURFACE.
+ */
+function currencyGpu() {
+  const log = [];
+  const gpu = {
+    log,
+    current: null,
+    destroyedWhileCurrent: [],
+    makeCurrent(surface) {
+      log.push(`current ${surface ? surface.name : 'none'}`);
+      gpu.current = surface;
+    },
+    createSurface(width, height) {
+      const surface = {
+        name: `${width}x${height}`,
+        width,
+        height,
+        destroy() {
+          log.push(`destroy ${surface.name}`);
+          if (gpu.current === surface) gpu.destroyedWhileCurrent.push(surface.name);
+        },
+        release() {},
+        swap: () => ({ key: 1, isNew: false })
+      };
+      log.push(`create ${surface.name}`);
+      return surface;
+    }
+  };
+  return gpu;
+}
+
+/** A chain on a window that belongs to an app, whose currency slots the
+ *  context writes as it binds — `bind` is what `RenderingContextGLES#_bind`
+ *  does with the surface it is handed. */
+function boundChain(gpu) {
+  const app = { _glCurrent: null, _glCurrentSurface: null };
+  const chain = new GLSwapchain({
+    window: { id: 3, app, X: { AllocID: () => 7, flush() {}, FreePixmap() {} } },
+    gpu,
+    dri: { GBM_USE },
+    DRI3: {},
+    Present: { EventMask: { CompleteNotify: 1, IdleNotify: 2 }, SelectInput() {} },
+    depth: 24,
+    policy: { ...DEFAULT_GL_POLICY, mode: 'auto' }
+  });
+  const context = {};
+  const bind = (width, height) => {
+    const surface = chain.surfaceFor(width, height);
+    gpu.makeCurrent(surface);
+    app._glCurrent = context;
+    app._glCurrentSurface = surface;
+    return surface;
+  };
+  return { app, chain, bind, context };
+}
+
+describe('a surface is never destroyed while it is current', () => {
+  test('a resize makes the new generation, then lets the current one go unbound', () => {
+    const gpu = currencyGpu();
+    const { app, bind } = boundChain(gpu);
+    bind(1, 1);
+    gpu.log.length = 0;
+    bind(878, 578);
+    assert.deepEqual(gpu.log, [
+      'create 878x578', // the new one first: a refused size leaves the old in place
+      'current none',
+      'destroy 1x1',
+      'current 878x578'
+    ]);
+    assert.deepEqual(gpu.destroyedWhileCurrent, []);
+    assert.equal(app._glCurrentSurface.name, '878x578');
+  });
+
+  test('a surface that is not current is let go without touching the currency', () => {
+    const gpu = currencyGpu();
+    const { app, chain, bind } = boundChain(gpu);
+    bind(100, 100);
+    // another window's surface is current now
+    const other = { name: 'other' };
+    gpu.makeCurrent(other);
+    app._glCurrentSurface = other;
+    const marker = {};
+    app._glCurrent = marker;
+    gpu.log.length = 0;
+    chain.surfaceFor(200, 200);
+    assert.deepEqual(gpu.log, ['create 200x200', 'destroy 100x100']);
+    assert.equal(app._glCurrent, marker, 'the other context stays current');
+    assert.equal(gpu.current, other);
+  });
+
+  test('destroying the chain unbinds its current surface first', () => {
+    const gpu = currencyGpu();
+    const { app, chain, bind } = boundChain(gpu);
+    bind(64, 64);
+    chain.destroy();
+    assert.deepEqual(gpu.destroyedWhileCurrent, []);
+    assert.equal(app._glCurrent, null, 'the next GL call binds afresh');
+    assert.equal(app._glCurrentSurface, null);
+  });
+});
+
+describe('a failure after validation', () => {
+  test('is reported through onError, once, where ready has no way left to say it', () => {
+    const gpu = currencyGpu();
+    const { chain, bind } = boundChain(gpu);
+    const surface = bind(32, 32);
+    const validated = [];
+    const errors = [];
+    chain.onValidated = (err) => validated.push(err);
+    chain.onError = (err) => errors.push(err);
+    chain.validate(); // a buffer that is not new validates the chain at once
+    assert.deepEqual(validated, [null]);
+    surface.swap = () => {
+      throw new Error('eglSwapBuffers failed (0x300d)');
+    };
+    assert.equal(chain.swap(), false);
+    assert.equal(chain.swap(), false);
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].code, GLError.CONTEXT_FAILED);
+    assert.match(errors[0].message, /0x300d/);
+    assert.deepEqual(validated, [null], 'ready settled once, and stays settled');
+    assert.equal(chain.canRender(), false);
+  });
+
+  test('before validation is ready’s rejection alone', () => {
+    const gpu = currencyGpu();
+    const { chain, bind } = boundChain(gpu);
+    const surface = bind(32, 32);
+    surface.swap = () => {
+      throw new Error('eglSwapBuffers failed (0x3001)');
+    };
+    const validated = [];
+    const errors = [];
+    chain.onValidated = (err) => validated.push(err);
+    chain.onError = (err) => errors.push(err);
+    chain.validate();
+    assert.equal(validated.length, 1);
+    assert.match(validated[0].message, /0x3001/);
+    assert.deepEqual(errors, []);
+  });
+});
