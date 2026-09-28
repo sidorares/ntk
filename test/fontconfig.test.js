@@ -141,7 +141,7 @@ function prewarmProbe(body, stubs = {}) {
   const script = join(dir, 'probe.mjs');
   writeFileSync(
     script,
-    `import { matchSorted, matchSortedSync, prewarm, prewarmPatterns } from ${JSON.stringify(join(root, 'lib/fontconfig.js'))};\n` +
+    `import { matchFirstSync, matchSorted, matchSortedSync, prewarm, prewarmPatterns } from ${JSON.stringify(join(root, 'lib/fontconfig.js'))};\n` +
       `import { FontconfigFontSource } from ${JSON.stringify(join(root, 'lib/text/fontsource.js'))};\n` +
       `const BIN = ${JSON.stringify(bins)};\n` +
       `const EMPTY = ${JSON.stringify(empty)};\n` +
@@ -356,6 +356,54 @@ test('a prewarm whose child died without an answer does not keep a layout waitin
   );
   assert.equal(out.path, '/sync/HAPPY.ttf');
   assert.ok(out.ms < 1000, `the sync call waited ${out.ms} ms`);
+});
+
+test("a face's match reads the head of a prewarm's answer, and the chain waits for a fallback", () => {
+  // an answer is the whole fallback chain with each face's coverage — 634 KB
+  // for sans-serif on a Linux desktop — and a layout setting text in the
+  // face needs its first line
+  const out = prewarmProbe(
+    "import fs from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      "const lines = ['/head/First.ttf\\tFirst\\tFirst Family\\t20-7e'];\n" +
+      "for (let i = 0; i < 20000; i++) lines.push(`/chain/F${i}.ttf\\tF${i}\\tF Family\\t20-7e 80-ff`);\n" +
+      "fs.writeFileSync(join(BIN.big, 'answer.txt'), lines.join('\\n') + '\\n');\n" +
+      'const whole = fs.readFileSync;\n' +
+      'const readSync = fs.readSync;\n' +
+      'let answers = 0;\n' +
+      'let headBytes = 0;\n' +
+      "fs.readFileSync = function (file, ...rest) { if (String(file).endsWith('.out')) answers++; return whole.call(this, file, ...rest); };\n" +
+      'fs.readSync = function (...args) { const n = readSync.apply(this, args); headBytes += n; return n; };\n' +
+      'process.env.PATH = BIN.big;\n' +
+      'await prewarmPatterns([PATTERN]);\n' +
+      'process.env.PATH = EMPTY; // an ask that spawned would throw ENOENT\n' +
+      'const first = matchFirstSync(PATTERN);\n' +
+      'const beforeChain = { answers, headBytes };\n' +
+      'const chain = matchSortedSync(PATTERN);\n' +
+      'console.log(JSON.stringify({ first: first.path, beforeChain, answers, chain: chain.length, chainFirst: chain[0].path }));\n',
+    { big: '#!/bin/sh\nexec /bin/cat "${0%/*}/answer.txt"\n' }
+  );
+  assert.equal(out.first, '/head/First.ttf');
+  assert.equal(out.beforeChain.answers, 0, 'the answer was not read whole');
+  assert.ok(out.beforeChain.headBytes < 64 * 1024, `read ${out.beforeChain.headBytes} bytes of its head`);
+  assert.equal(out.chain, 20001, 'the chain, when asked, is all of it');
+  assert.equal(out.chainFirst, out.first);
+  assert.equal(out.answers, 1);
+});
+
+test("a face's match skips the head's faces ntk cannot open", () => {
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.bitmap;\n' +
+      'await prewarmPatterns([PATTERN]);\n' +
+      'console.log(JSON.stringify({ first: matchFirstSync(PATTERN).path, chain: matchSortedSync(PATTERN)[0].path }));\n',
+    {
+      bitmap:
+        '#!/bin/sh\n' +
+        'printf "/misc/fixed.pcf\\tFixed\\tFixed\\t20-7e\\n/good/B.ttf\\tB\\tB Family\\t20-7e\\n"\n'
+    }
+  );
+  assert.equal(out.first, '/good/B.ttf');
+  assert.equal(out.chain, out.first);
 });
 
 test('prewarm for an already-cached pattern spawns nothing', () => {
