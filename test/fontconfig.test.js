@@ -125,6 +125,9 @@ test('fonts fc-match found but fontkit cannot parse are named as such', () => {
  * BIN.<name>. EMPTY is a directory with no fc-match at all (the child starts
  * there), and PATTERN is the pattern FontManager.match('sans-serif') asks
  * fontconfig for — the one the prewarm must seed for a first paint to hit it.
+ * `await settled()` waits until every child the probe started has exited: a
+ * prewarm's jobs run side by side, so an answer the probe did not ask for can
+ * still be on its way when the ones it asked for are in.
  */
 function prewarmProbe(body, stubs = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ntk-prewarm-'));
@@ -143,6 +146,19 @@ function prewarmProbe(body, stubs = {}) {
     script,
     `import { matchFirstSync, matchSorted, matchSortedSync, prewarm, prewarmPatterns } from ${JSON.stringify(join(root, 'lib/fontconfig.js'))};\n` +
       `import { FontconfigFontSource } from ${JSON.stringify(join(root, 'lib/text/fontsource.js'))};\n` +
+      "import probeCp from 'node:child_process';\n" +
+      'const probeSpawn = probeCp.spawn;\n' +
+      'const running = new Set();\n' +
+      'probeCp.spawn = (...args) => {\n' +
+      '  const child = probeSpawn.apply(probeCp, args);\n' +
+      '  running.add(child);\n' +
+      "  const gone = () => running.delete(child);\n" +
+      "  child.once('exit', gone).once('error', gone);\n" +
+      '  return child;\n' +
+      '};\n' +
+      'const settled = async () => {\n' +
+      '  while (running.size > 0) await new Promise((resolve) => setTimeout(resolve, 5));\n' +
+      '};\n' +
       `const BIN = ${JSON.stringify(bins)};\n` +
       `const EMPTY = ${JSON.stringify(empty)};\n` +
       "const PATTERN = { family: 'sans-serif', weight: 400, style: 'normal' };\n" +
@@ -158,10 +174,13 @@ function prewarmProbe(body, stubs = {}) {
 // merely not crash. $0 stands in for dirname: the probe's PATH holds only stub
 // directories, no coreutils.
 // A line is the kind of match and its pattern: `sorted` for the fallback
-// chain (fc-match -s), `best` for the one face fontconfig picks.
+// chain (fc-match -s), `best` for the one face fontconfig picks. A `best`
+// answers last, on purpose: nothing a probe asks waits for it, so a count
+// read before settled() missed it on a slow runner and nowhere else.
 const counting = (path) =>
   '#!/bin/sh\n' +
   'kind=best; for last; do [ "$last" = -s ] && kind=sorted; done\n' +
+  'if [ $kind = best ]; then { /bin/sleep 0.05 || /usr/bin/sleep 0.05; } 2>/dev/null; fi\n' +
   'echo "$kind $last" >> "$0.spawns"\n' +
   `printf "${path}\\tStub\\tStub Family\\t20-7e\\n"\n`;
 
@@ -196,6 +215,7 @@ test('a sync call takes the answer of a prewarm in flight rather than spawning a
       'const [duringRace] = matchSortedSync(PATTERN);\n' +
       'await warmed;\n' +
       'const [after] = matchSortedSync(PATTERN);\n' +
+      'await settled();\n' +
       "const spawns = readFileSync(join(BIN.slow, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
       'console.log(JSON.stringify({ duringRace: duringRace.path, after: after.path, spawns: spawns.length }));\n',
     {
@@ -242,6 +262,7 @@ test('a miss prewarms the other faces of its family', () => {
       "matchSortedSync(face(700, 'normal'));\n" +
       'process.env.PATH = EMPTY; // any spawn after this point would throw ENOENT\n' +
       "const paths = [face(400, 'normal'), face(400, 'italic'), face(700, 'italic')].map((f) => matchSortedSync(f)[0].path);\n" +
+      'await settled();\n' +
       "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
       'console.log(JSON.stringify({ paths, spawns }));\n',
     { count: counting('/faces/A.ttf') }
@@ -263,6 +284,7 @@ test("a source's prewarm has a family's faces before a layout asks for them", ()
       "const face = (weight, style) => ({ family: 'monospace', weight, style });\n" +
       "const faces = [face(400, 'normal'), face(700, 'normal'), face(400, 'italic'), face(700, 'italic')];\n" +
       'const paths = faces.map((f) => matchSortedSync(f)[0].path);\n' +
+      'await settled();\n' +
       "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
       "console.log(JSON.stringify({ paths, mono: spawns.filter((s) => s.includes('monospace')) }));\n",
     { count: counting('/faces/M.ttf') }
@@ -287,6 +309,7 @@ test("a source's prewarm has the faces it names before a layout asks for them", 
       "source.prewarm('sans-serif', [{ weight: 500, style: 'normal' }, { weight: 600, style: 'normal' }]);\n" +
       'process.env.PATH = EMPTY; // an ask that spawned would throw ENOENT\n' +
       "const paths = [500, 600].map((weight) => matchSortedSync({ family: 'sans-serif', weight, style: 'normal' })[0].path);\n" +
+      'await settled();\n' +
       "const matches = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
       "console.log(JSON.stringify({ paths, children, medium: matches.filter((m) => /weight=(100|180)$/.test(m)).length }));\n",
     { count: counting('/faces/N.ttf') }
@@ -316,6 +339,7 @@ test("a family's faces are matched from one child of the process", () => {
       "for (const family of ['sans-serif', 'monospace', 'serif'])\n" +
       "  for (const [weight, style] of [[400, 'normal'], [700, 'normal'], [400, 'italic'], [700, 'italic']])\n" +
       '    paths.push(matchSortedSync(face(family, weight, style))[0].path);\n' +
+      'await settled();\n' +
       "const matches = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
       'console.log(JSON.stringify({ paths: new Set(paths).size, answered: paths.length, children, matches }));\n',
     { count: counting('/faces/F.ttf') }
@@ -454,6 +478,7 @@ test('prewarm for an already-cached pattern spawns nothing', () => {
       'process.env.PATH = BIN.count;\n' +
       'matchSortedSync(PATTERN);\n' +
       'await prewarm(PATTERN);\n' +
+      'await settled();\n' +
       "const asked = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
       'console.log(JSON.stringify({ asked }));\n',
     { count: counting('/counted/A.ttf') }
@@ -554,6 +579,7 @@ test('matchSorted answers off the event loop and seeds the sync cache', () => {
       'const list = await matchSorted(PATTERN);\n' +
       'process.env.PATH = EMPTY; // any spawn after this point would throw ENOENT\n' +
       'const [best] = matchSortedSync(PATTERN);\n' +
+      'await settled();\n' +
       "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n').length;\n" +
       'console.log(JSON.stringify({ async: list[0].path, sync: best.path, spawns }));\n',
     { count: counting('/awaited/A.ttf') }
@@ -571,6 +597,7 @@ test('matchSorted joins an in-flight prewarm rather than spawning again', () => 
       'const warmed = prewarm(PATTERN); // spawns now, answers in ~300ms\n' +
       'const list = await matchSorted(PATTERN); // must wait on that child, not start one\n' +
       'await warmed;\n' +
+      'await settled();\n' +
       "const spawns = readFileSync(join(BIN.slow, 'fc-match.spawns'), 'utf8').trim().split('\\n').length;\n" +
       'console.log(JSON.stringify({ path: list[0].path, spawns }));\n',
     {
