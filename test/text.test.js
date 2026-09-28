@@ -766,3 +766,34 @@ test('TextLayout: a narrow maxWidth is not a min-content probe', needsFonts, () 
   assert.equal(new TextLayout(fonts, [span], style, {}).width, whole);
 });
 
+test('TextLayout: at a width no cluster fits, a word is not searched for a cut', () => {
+  // Width 0 is where a layout is asked for the narrowest it can be — react-x11
+  // measures a column's width floor there, once a word of every paragraph.
+  // Every word overflows whole, and the search for a cut used to find that
+  // out by segmenting the whole word and shaping a dozen prefixes of it, each
+  // a word the memo had never seen.
+  const fonts = fixedFonts();
+  const style = { family: 'Test', size: 16 };
+  const words = ['Pneumonoultramicroscopicsilicovolcanoconiosis', 'antidisestablishment', 'x'];
+  const text = words.join(' ');
+  const shaped = [];
+  const inner = fonts._shapeCached;
+  fonts._shapeCached = function (word, ...rest) {
+    shaped.push(word);
+    return inner.call(this, word, ...rest);
+  };
+  const layout = new TextLayout(fonts, text, style, { maxWidth: 0 });
+  fonts._shapeCached = inner;
+
+  assert.deepEqual(
+    layout.lines.map((line) => text.slice(line.start, line._contentEnd)),
+    words,
+    'a word a line, each whole'
+  );
+  const prefixes = shaped.filter((w) => !words.includes(w.trimEnd()));
+  assert.ok(
+    prefixes.length <= words.length,
+    `${prefixes.length} pieces shaped to find no cut: ${prefixes.join(', ')}`
+  );
+});
+
