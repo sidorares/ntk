@@ -67,6 +67,55 @@ test('per-codepoint fallback works through a StaticFontSource', () => {
   assert.equal(fm.fallbackFor(0x10ffff, 'sans-serif'), null);
 });
 
+/**
+ * A face whose cmap covers characters fontkit can make no glyph of: a
+ * KaTeX face with its `glyf` table renamed out of reach. That is what a
+ * bitmap-only colour emoji font (CBDT) is to fontkit — Noto Color Emoji and
+ * EmojiOne as most Linux desktops ship them, and the first face fontconfig
+ * answers for an emoji — and its shaper threw on the null glyph.
+ */
+function withoutOutlines(file) {
+  const b = Buffer.from(bytes(file));
+  const tables = b.readUInt16BE(4);
+  for (let i = 0; i < tables; i++) {
+    const at = 12 + i * 16;
+    if (b.toString('latin1', at, at + 4) === 'glyf') b.write('xglf', at, 'latin1');
+  }
+  return b;
+}
+
+test('a face no glyph can be made from covers nothing, and is passed by', () => {
+  const source = new StaticFontSource();
+  source.add(bytes('KaTeX_Main-Regular.ttf'), { family: 'Test Main' });
+  // ahead of the real one, so it is the first fallback a character reaches
+  source.add(withoutOutlines('KaTeX_AMS-Regular.ttf'), { family: 'Test Bitmaps' });
+  source.add(bytes('KaTeX_AMS-Regular.ttf'), { family: 'Test AMS' });
+  source.alias('sans-serif', 'Test Main');
+  const fm = new FontManager({ source });
+
+  const bitmaps = Font.fromData(withoutOutlines('KaTeX_AMS-Regular.ttf'));
+  assert.equal(bitmaps.drawable, false);
+  assert.equal(bitmaps.fk.hasGlyphForCodePoint(0x2136), true, 'its cmap says it has it');
+  assert.equal(bitmaps.hasGlyph(0x2136), false, 'and nothing can be drawn from it');
+  assert.equal(bitmaps.glyphIdFor(0x2136), null);
+
+  // a fallback passes it by for the face that has the glyph…
+  assert.equal(fm.fallbackFor(0x2136, 'sans-serif').postscriptName, 'KaTeX_AMS-Regular');
+  assert.equal(fm.fallbackFor(0x2136, 'sans-serif').drawable, true);
+  // …and so the text shapes, where it threw
+  const shaped = fm.shape('a \u2136 b', { family: 'sans-serif', size: 16 });
+  assert.deepEqual(
+    shaped.runs.map((r) => r.font.postscriptName),
+    ['KaTeX_Main-Regular', 'KaTeX_AMS-Regular', 'KaTeX_Main-Regular']
+  );
+
+  // named outright, it is not handed out as a base face either
+  const named = fm.match('Test Bitmaps');
+  assert.equal(named.drawable, true);
+  const layout = fm.layout('\u2136 x', { family: 'Test Bitmaps', size: 16 });
+  assert.ok(layout.width > 0);
+});
+
 test('layout runs end-to-end without fontconfig', () => {
   const fm = new FontManager({ source: staticSource() });
   const layout = fm.layout('Hello world wrap here', { family: 'sans-serif', size: 16 }, { maxWidth: 60 });
