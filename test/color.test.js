@@ -11,6 +11,7 @@ import { after, before, test } from 'node:test';
 
 import xserver from 'x11/lib/xserver/index.js';
 
+import { cssColorStraight } from '../lib/color.js';
 import { createClient, StaticFontSource } from '../lib/index.js';
 
 let app = null;
@@ -160,4 +161,31 @@ test('an unparseable colour throws instead of writing garbage', () => {
   assert.throws(() => {
     ctx.fillStyle = '#1234567';
   }, /Not a color/);
+});
+
+test('a colour parsed again is the same colour, and each caller gets its own', () => {
+  // Parsed once per spelling (lib/color.js): what has to hold is that the
+  // cache changes nothing a caller can see.
+  const first = cssColorStraight('rgba(255, 128, 0, 0.5)');
+  first[0] = 99; // a caller scaling what it was handed
+  const again = cssColorStraight('rgba(255, 128, 0, 0.5)');
+  assert.deepEqual(again, [1, 128 / 255, 0, 0.5]);
+  assert.notEqual(again, cssColorStraight('rgba(255, 128, 0, 0.5)'));
+  // and what is not a colour stays not a colour, asked twice
+  assert.equal(cssColorStraight('not-a-colour'), null);
+  assert.equal(cssColorStraight('not-a-colour'), null);
+  assert.equal(cssColorStraight('#1234567'), null);
+  assert.equal(cssColorStraight(42), null);
+});
+
+test('more spellings than the cache holds all still parse', () => {
+  const red = (i) => i % 256;
+  const green = (i) => (i >> 8) % 256;
+  const spellings = Array.from({ length: 2000 }, (_, i) => `rgb(${red(i)}, ${green(i)}, 7)`);
+  for (let round = 0; round < 2; round++) {
+    for (let i = 0; i < spellings.length; i++) {
+      const want = [red(i) / 255, green(i) / 255, 7 / 255, 1];
+      assert.deepEqual(cssColorStraight(spellings[i]), want);
+    }
+  }
 });
