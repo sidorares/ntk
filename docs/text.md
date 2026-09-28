@@ -391,7 +391,8 @@ container's left side.
 
 `content` is a string or styled spans — each span may override `family`,
 `size`, `weight`, `style`, `variations`, `features`, `language`,
-`letterSpacing` and `color`:
+`letterSpacing` and `color`, and may hold its text together with
+`nowrap`:
 
 ```js
 app.fonts.layout([
@@ -399,6 +400,15 @@ app.fonts.layout([
   { text: 'something happened' }
 ], { family: 'sans-serif', size: 16 }, { maxWidth: 300 });
 ```
+
+Spans that share a truthy `nowrap` have no break opportunity inside them or
+between them — not at a space, a hyphen or a slash, nor between two
+ideographs — as the text of an element with CSS's `white-space: nowrap` has
+none. `true` makes every such span one run of text; a renderer that has
+several `nowrap` elements in a paragraph gives each its own value, an
+object or a number, so that the break between two of them is still the
+paragraph's. The break after the last of a group is the text after it's to
+allow, as CSS gives it to the element they share.
 
 Results are inspectable before drawing: `layout.width`, `layout.height`,
 `layout.truncated`, `layout.lines[] = { x, y, height, baseline, width,
