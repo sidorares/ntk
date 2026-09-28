@@ -371,9 +371,23 @@ const layout = app.fonts.layout(content, style, {
   lineHeight: 1.35,   // multiplier over natural font line height
   direction: 'auto',  // base paragraph direction
   maxLines: 2,        // cap the line count (default: unlimited)
-  overflow: 'clip'    // clip | ellipsis — what the cap looks like
+  overflow: 'clip',   // clip | ellipsis — what the cap looks like
+  overflowWrap: 'break-word' // break-word | normal — a word wider than the line
 });
 ```
+
+A word wider than `maxWidth` is cut at a grapheme boundary by default, so
+nothing runs past the container. `overflowWrap: 'normal'` keeps it whole on
+a line of its own instead, past the line's end, as CSS's
+`overflow-wrap: normal` does — what an HTML renderer needs, where a long URL
+overflows its box unless the document asks for it to break. Text in a
+script written without spaces between its words — Thai, Lao, Khmer,
+Burmese, Javanese and their neighbours — is still cut where it does not
+fit: the breaker finds no words in it without a dictionary, and CSS asks
+for a fallback there rather than a phrase run past the edge. A line that
+runs past the container starts at its start edge whatever `align` says, as
+CSS Text 3 has it, so a right-aligned long word is not pushed out of the
+container's left side.
 
 `content` is a string or styled spans — each span may override `family`,
 `size`, `weight`, `style`, `variations`, `features`, `language`,

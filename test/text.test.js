@@ -233,6 +233,68 @@ test('TextLayout force-breaks tokens wider than the container', needsFonts, () =
   }
 });
 
+test("overflowWrap: 'normal' keeps a word wider than the line whole", needsFonts, () => {
+  // CSS's overflow-wrap: normal — a long URL runs past its box instead of
+  // being cut inside itself — on a line of its own, with the words around
+  // it wrapping as they would
+  const fonts = new FontManager();
+  const word = 'Pneumonoultramicroscopicsilicovolcanoconiosis';
+  const style = { family: 'sans-serif', size: 20 };
+  const alone = new TextLayout(fonts, word, style, {
+    maxWidth: 90,
+    overflowWrap: 'normal'
+  });
+  assert.equal(alone.lines.length, 1, 'one line');
+  assert.ok(alone.lines[0].width > 90, `past the line's end: ${alone.lines[0].width}`);
+  const around = new TextLayout(fonts, `a ${word} b`, style, {
+    maxWidth: 90,
+    overflowWrap: 'normal'
+  });
+  assert.equal(around.lines.length, 3, 'a line before it and one after');
+  const [before, middle, after] = around.lines;
+  assert.deepEqual(
+    [around._text.slice(before.start, before.end).trim(), around._text.slice(middle.start, middle.end).trim(), around._text.slice(after.start, after.end).trim()],
+    ['a', word, 'b']
+  );
+  // and the default still cuts it
+  const cut = new TextLayout(fonts, word, style, { maxWidth: 90 });
+  assert.ok(cut.lines.length > 1);
+  // as does 'normal', where the word is a phrase in a script written
+  // without spaces: the breaker found no words in it to break between
+  const thai = new TextLayout(fonts, 'ภาษาไทยเขียนติดกันโดยไม่เว้นวรรคระหว่างคำ', style, {
+    maxWidth: 90,
+    overflowWrap: 'normal'
+  });
+  assert.ok(thai.lines.length > 1, 'Thai falls back to cutting');
+  assert.ok(thai.lines.every((line) => line.width <= 90 + 0.5));
+});
+
+test('a line too long for its container starts at its start edge', needsFonts, () => {
+  // CSS Text 3, 7.1: whatever the alignment, a line that does not fit runs
+  // past its end edge, not its start — right-aligned, it was pushed out of
+  // the container's left side, where nothing would scroll to it
+  const fonts = new FontManager();
+  const word = 'Pneumonoultramicroscopicsilicovolcanoconiosis';
+  const style = { family: 'sans-serif', size: 20 };
+  for (const align of ['right', 'center', 'end']) {
+    const layout = new TextLayout(fonts, `${word} a`, style, {
+      maxWidth: 90,
+      overflowWrap: 'normal',
+      align
+    });
+    assert.equal(layout.lines[0].x, 0, `${align}: the long line at the left edge`);
+    assert.ok(layout.lines[1].x > 0, `${align}: the short one still aligned`);
+  }
+  // and in a right-to-left paragraph the start is the right edge
+  const rtl = new TextLayout(fonts, word, style, {
+    maxWidth: 90,
+    overflowWrap: 'normal',
+    align: 'left',
+    direction: 'rtl'
+  });
+  assert.equal(rtl.lines[0].x, 90 - rtl.lines[0].width);
+});
+
 // ---------- leading ----------
 
 test('leading is split evenly above and below the glyphs', () => {
