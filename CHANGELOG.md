@@ -1,5 +1,20 @@
 # Changelog
 
+## [8.13.0](https://github.com/sidorares/ntk/compare/v8.12.13...v8.13.0) (2026-09-28)
+
+
+### Features
+
+* **text:** overflowWrap 'normal' keeps a word too long for its line whole ([#406](https://github.com/sidorares/ntk/issues/406)) ([37f35fb](https://github.com/sidorares/ntk/commit/37f35fb650e6226e96aa3652098bda08fd8b3925))
+* **text:** spans that share nowrap have no break inside or between them ([#408](https://github.com/sidorares/ntk/issues/408)) ([2251050](https://github.com/sidorares/ntk/commit/2251050ae33d3f6b84960781d987e7bbb4ede47f))
+* **text:** wrap: false lays a line out whole and cuts it at the width ([#409](https://github.com/sidorares/ntk/issues/409)) ([498ce2b](https://github.com/sidorares/ntk/commit/498ce2bb94afb5e9dbc4c9a6c3b795105ff60014))
+* **window:** under a compositor, the fence ends frames and CopyArea blits them ([#410](https://github.com/sidorares/ntk/issues/410)) ([c24916c](https://github.com/sidorares/ntk/commit/c24916c79731da1e192a3ed0198bb338932b10c4))
+
+
+### Bug Fixes
+
+* **window:** setState sends a new size with both axes ([#411](https://github.com/sidorares/ntk/issues/411)) ([3bcec06](https://github.com/sidorares/ntk/commit/3bcec06d0bf7b0b1dbcc349b9c0ee10323563a40))
+
 ## [8.12.13](https://github.com/sidorares/ntk/compare/v8.12.12...v8.12.13) (2026-09-28)
 
 
