@@ -157,11 +157,19 @@ function prewarmProbe(body, stubs = {}) {
 // line an invocation, so a probe can assert a spawn did not happen rather than
 // merely not crash. $0 stands in for dirname: the probe's PATH holds only stub
 // directories, no coreutils.
+// A line is the kind of match and its pattern: `sorted` for the fallback
+// chain (fc-match -s), `best` for the one face fontconfig picks.
 const counting = (path) =>
   '#!/bin/sh\n' +
-  'for last; do :; done\n' +
-  'echo "$last" >> "$0.spawns"\n' +
+  'kind=best; for last; do [ "$last" = -s ] && kind=sorted; done\n' +
+  'echo "$kind $last" >> "$0.spawns"\n' +
   `printf "${path}\\tStub\\tStub Family\\t20-7e\\n"\n`;
+
+/** How many lines of a counting stub's log are of each kind. */
+const kinds = (lines) => ({
+  sorted: lines.filter((l) => l.startsWith('sorted ')).length,
+  best: lines.filter((l) => l.startsWith('best ')).length
+});
 
 test('prewarm seeds the cache the sync path reads', () => {
   const out = prewarmProbe(
@@ -235,11 +243,12 @@ test('a miss prewarms the other faces of its family', () => {
       'process.env.PATH = EMPTY; // any spawn after this point would throw ENOENT\n' +
       "const paths = [face(400, 'normal'), face(400, 'italic'), face(700, 'italic')].map((f) => matchSortedSync(f)[0].path);\n" +
       "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
-      'console.log(JSON.stringify({ paths, spawns: spawns.length }));\n',
+      'console.log(JSON.stringify({ paths, spawns }));\n',
     { count: counting('/faces/A.ttf') }
   );
   assert.deepEqual(out.paths, ['/faces/A.ttf', '/faces/A.ttf', '/faces/A.ttf']);
-  assert.equal(out.spawns, 4, 'one spawn a face');
+  assert.deepEqual(kinds(out.spawns), { sorted: 4, best: 1 }, 'a chain a face, and the best of the one asked for');
+  assert.ok(out.spawns.includes('best serif:weight=200'), `the asked face's best: ${out.spawns}`);
 });
 
 test("a source's prewarm has a family's faces before a layout asks for them", () => {
@@ -255,11 +264,12 @@ test("a source's prewarm has a family's faces before a layout asks for them", ()
       "const faces = [face(400, 'normal'), face(700, 'normal'), face(400, 'italic'), face(700, 'italic')];\n" +
       'const paths = faces.map((f) => matchSortedSync(f)[0].path);\n' +
       "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
-      "console.log(JSON.stringify({ paths, mono: spawns.filter((s) => s.includes('monospace')).length }));\n",
+      "console.log(JSON.stringify({ paths, mono: spawns.filter((s) => s.includes('monospace')) }));\n",
     { count: counting('/faces/M.ttf') }
   );
   assert.deepEqual(out.paths, ['/faces/M.ttf', '/faces/M.ttf', '/faces/M.ttf', '/faces/M.ttf']);
-  assert.equal(out.mono, 4, 'one spawn a face, all from the prewarm');
+  assert.deepEqual(kinds(out.mono), { sorted: 4, best: 1 }, 'a chain a face, all from the prewarm');
+  assert.ok(out.mono.includes('best monospace:weight=80'), 'warmed ahead, the regular gets its best');
 });
 
 test("a source's prewarm has the faces it names before a layout asks for them", () => {
@@ -307,12 +317,12 @@ test("a family's faces are matched from one child of the process", () => {
       "  for (const [weight, style] of [[400, 'normal'], [700, 'normal'], [400, 'italic'], [700, 'italic']])\n" +
       '    paths.push(matchSortedSync(face(family, weight, style))[0].path);\n' +
       "const matches = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
-      'console.log(JSON.stringify({ paths: new Set(paths).size, answered: paths.length, children, matches: matches.length }));\n',
+      'console.log(JSON.stringify({ paths: new Set(paths).size, answered: paths.length, children, matches }));\n',
     { count: counting('/faces/F.ttf') }
   );
   assert.equal(out.answered, 12);
   assert.equal(out.paths, 1, 'every face answered from the stub');
-  assert.equal(out.matches, 12, 'one fc-match a face');
+  assert.deepEqual(kinds(out.matches), { sorted: 12, best: 3 }, 'a chain a face, and a best a family');
   assert.equal(out.children, 3, 'one child a family');
 });
 
@@ -389,6 +399,37 @@ test("a face's match reads the head of a prewarm's answer, and the chain waits f
   assert.equal(out.chain, 20001, 'the chain, when asked, is all of it');
   assert.equal(out.chainFirst, out.first);
   assert.equal(out.answers, 1);
+});
+
+test('a layout takes the best face before its chain is in', () => {
+  // fontconfig answers "which face" in about half the time it answers the
+  // whole fallback chain, and a layout that asks for a family its component
+  // warmed while rendering waits on the prewarm
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.slowchain;\n' +
+      "new FontconfigFontSource().prewarm('monospace');\n" +
+      'process.env.PATH = EMPTY; // an ask that spawned would throw ENOENT\n' +
+      "const regular = { family: 'monospace', weight: 400, style: 'normal' };\n" +
+      'const t0 = performance.now();\n' +
+      'const first = matchFirstSync(regular);\n' +
+      'const firstMs = performance.now() - t0;\n' +
+      'const chain = matchSortedSync(regular);\n' +
+      'console.log(JSON.stringify({ first: first.path, firstMs, chain: chain.map((c) => c.path) }));\n',
+    {
+      // sleep by absolute path — the stub's PATH has no coreutils
+      slowchain:
+        '#!/bin/sh\n' +
+        'for a; do if [ "$a" = -s ]; then\n' +
+        '  { /bin/sleep 0.6 || /usr/bin/sleep 0.6; } 2>/dev/null\n' +
+        '  printf "/mono/M.ttf\\tM\\tM Family\\t20-7e\\n/fallback/F.ttf\\tF\\tF Family\\t20-7e 3000-30ff\\n"\n' +
+        '  exit 0\n' +
+        'fi; done\n' +
+        'printf "/mono/M.ttf\\tM\\tM Family\\t20-7e\\n"\n'
+    }
+  );
+  assert.equal(out.first, '/mono/M.ttf');
+  assert.ok(out.firstMs < 400, `the face came from the best job, in ${out.firstMs.toFixed(0)} ms`);
+  assert.deepEqual(out.chain, ['/mono/M.ttf', '/fallback/F.ttf'], 'and the chain is the chain');
 });
 
 test("a face's match skips the head's faces ntk cannot open", () => {
