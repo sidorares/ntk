@@ -269,6 +269,40 @@ test("overflowWrap: 'normal' keeps a word wider than the line whole", needsFonts
   assert.ok(thai.lines.every((line) => line.width <= 90 + 0.5));
 });
 
+test('spans that share nowrap have no break inside them or between them', needsFonts, () => {
+  // CSS's white-space: nowrap on an element: a hyphenated word in one does
+  // not break at its hyphens, and the break between two such elements, or
+  // after one, is the paragraph's
+  const fonts = new FontManager();
+  const style = { family: 'sans-serif', size: 16 };
+  const texts = (layout) => layout.lines.map((l) => layout._text.slice(l.start, l.end).trim());
+  const word = 'state-of-the-art';
+  const room = new TextLayout(fonts, word, style, {}).width + 2;
+  const spans = (nowrap) => [{ text: 'a ' }, { text: word, nowrap }, { text: ' design' }];
+  const free = texts(new TextLayout(fonts, spans(undefined), style, { maxWidth: room }));
+  assert.ok(
+    free.some((line) => line.endsWith('-')),
+    `a hyphen ends a line without it: ${JSON.stringify(free)}`
+  );
+  const held = texts(new TextLayout(fonts, spans(true), style, { maxWidth: room }));
+  assert.ok(held.includes(word), `the word whole: ${JSON.stringify(held)}`);
+  // two groups may break between them, at the space the first ends on
+  const a = {};
+  const b = {};
+  const two = (x, y) => [
+    { text: 'alpha-beta ', nowrap: x },
+    { text: 'gamma-delta', nowrap: y }
+  ];
+  const width = new TextLayout(fonts, 'gamma-delta', style, {}).width + 2;
+  const apart = texts(new TextLayout(fonts, two(a, b), style, { maxWidth: width }));
+  assert.deepEqual(apart, ['alpha-beta', 'gamma-delta']);
+  // one group is one run of text, whatever the room
+  const one = texts(
+    new TextLayout(fonts, two(a, a), style, { maxWidth: width, overflowWrap: 'normal' })
+  );
+  assert.deepEqual(one, ['alpha-beta gamma-delta']);
+});
+
 test('a line too long for its container starts at its start edge', needsFonts, () => {
   // CSS Text 3, 7.1: whatever the alignment, a line that does not fit runs
   // past its end edge, not its start — right-aligned, it was pushed out of
