@@ -389,6 +389,26 @@ read, is shaped whole. Checked on 2,113 faces and a corpus of Latin, Greek,
 Cyrillic, Hebrew, Arabic and Devanagari, with and without combining marks,
 every run matched fontkit's own layout.
 
+#### A mark whose anchor the face leaves out
+
+A mark attachment subtable holds an anchor for each base and mark class,
+and the OpenType spec lets one be NULL: that subtable attaches no mark of
+that class to that glyph. fontkit read the NULL and threw from inside the
+layout, `Cannot read properties of null (reading 'xCoordinate')`. Faces
+ship NULLs, among them Noto Sans Bold, DejaVu Sans Mono (a Lithuanian Į̃
+reaches one), Amiri, Noto Naskh Arabic and FreeSerif. A NULL is now taken
+as HarfBuzz takes it: the subtable did not apply, and the lookup's next
+subtable gets its turn (`lib/text/anchors.js`). Checked on twelve such
+faces, with every base-and-mark pair that reaches a NULL: 6,729 pairs, of
+which 4,687 come out of fontkit's substitution as the same glyphs as
+HarfBuzz's. In every one of those, the mark sits where HarfBuzz puts it.
+
+Taking a NULL that way means wrapping a call fontkit makes for every glyph
+at every lookup, which costs 2% of shaping a word the first time. So a face
+pays it only from the first NULL its text reaches: until then only the
+attachment of a mark is watched, and the run that meets the NULL is shaped
+again.
+
 ### `TextLayout`
 
 ```js
