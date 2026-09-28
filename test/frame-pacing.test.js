@@ -245,11 +245,11 @@ test('frameInterval is a period from one frame to the next, not a pause after ea
   // frames 19ms apart under the 16ms default, 51 frames a second on a 60Hz
   // panel, where one frame per interval is 62.5.
   const { app, fences } = makeMockApp();
-  const wnd = new Window(app, { frameInterval: 60 });
+  const wnd = new Window(app, { frameInterval: 80 });
   const starts = [];
   const loop = () => {
     starts.push(performance.now());
-    // the frame's own work: most of the interval
+    // the frame's own work: over half the interval
     const until = performance.now() + 45;
     while (performance.now() < until);
     if (starts.length < 4) wnd.requestAnimationFrame(loop);
@@ -263,9 +263,11 @@ test('frameInterval is a period from one frame to the next, not a pause after ea
   assert.equal(starts.length, 4);
   for (let i = 1; i < starts.length; i++) {
     const gap = starts[i] - starts[i - 1];
-    // 60ms start to start, where a pause after each frame made it 105
-    // (a timer may fire a millisecond early against the high-resolution clock)
-    assert.ok(gap >= 55 && gap < 90, `${gap.toFixed(1)}ms from one frame's start to the next`);
+    // 80ms start to start; a pause after each frame made it 125, and no
+    // timer at all would leave the frame's 45 and the fence. The floor is
+    // loose because a timer can fire a few ms early against the
+    // high-resolution clock (Node 18 measured 54.7 against 60).
+    assert.ok(gap >= 65 && gap < 110, `${gap.toFixed(1)}ms from one frame's start to the next`);
   }
   wnd.destroy();
 });
