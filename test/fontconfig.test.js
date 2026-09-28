@@ -242,6 +242,26 @@ test('a miss prewarms the other faces of its family', () => {
   assert.equal(out.spawns, 4, 'one spawn a face');
 });
 
+test("a source's prewarm has a family's faces before a layout asks for them", () => {
+  // FontManager#prewarm, for a family the caller knows is coming: its four
+  // faces start off the loop, and the asks after them spawn nothing
+  const out = prewarmProbe(
+    "import { readFileSync } from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      'process.env.PATH = BIN.count;\n' +
+      "new FontconfigFontSource().prewarm('monospace');\n" +
+      'process.env.PATH = EMPTY; // an ask that spawned would throw ENOENT\n' +
+      "const face = (weight, style) => ({ family: 'monospace', weight, style });\n" +
+      "const faces = [face(400, 'normal'), face(700, 'normal'), face(400, 'italic'), face(700, 'italic')];\n" +
+      'const paths = faces.map((f) => matchSortedSync(f)[0].path);\n' +
+      "const spawns = readFileSync(join(BIN.count, 'fc-match.spawns'), 'utf8').trim().split('\\n');\n" +
+      "console.log(JSON.stringify({ paths, mono: spawns.filter((s) => s.includes('monospace')).length }));\n",
+    { count: counting('/faces/M.ttf') }
+  );
+  assert.deepEqual(out.paths, ['/faces/M.ttf', '/faces/M.ttf', '/faces/M.ttf', '/faces/M.ttf']);
+  assert.equal(out.mono, 4, 'one spawn a face, all from the prewarm');
+});
+
 test('prewarm for an already-cached pattern spawns nothing', () => {
   const out = prewarmProbe(
     "import { readFileSync } from 'node:fs';\n" +

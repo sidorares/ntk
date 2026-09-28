@@ -45,8 +45,11 @@ first text layout does not stall on them. The answers are written to files
 as well as reported to the event loop, so a layout that asks before the
 loop has run — the first frame's, which holds it — takes a prewarm's answer
 rather than spawning `fc-match` again. The first time any other family is
-used, its four faces start together the same way; a pattern outside those
-still pays one synchronous `fc-match` the first time it is used. A glyph
+used, its four faces start together the same way — but that first use still
+waits for them, so a caller that knows a family is coming can start it
+earlier with `app.fonts.prewarm(family)`: a code editor's monospace, asked
+for before its first render, is ready by its first layout. A pattern outside
+those still pays one synchronous `fc-match` the first time it is used. A glyph
 fallback asks for the pattern of the face it falls back from, so the list
 that face's match or prewarm fetched answers it. And `fc-match` is spawned
 by the path it was found at rather than by its name: spawned by name on
