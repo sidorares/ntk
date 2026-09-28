@@ -9,6 +9,7 @@ import { test } from 'node:test';
 
 import FontManager from '../lib/text/fontmanager.js';
 import Font from '../lib/text/font.js';
+import { TextLayout } from '../lib/text/layout.js';
 import {
   FontconfigFontSource,
   StaticFontSource,
@@ -99,6 +100,35 @@ test('a plain-object source with data candidates satisfies the contract', () => 
   assert.equal(fm.fallbackFor(0x2135, 'anything'), font);
   fm.match('anything else', { weight: 'bold' });
   assert.ok(calls >= 2);
+});
+
+test('a letter the first family lacks is set in the next one the style names', () => {
+  // `Primary, Second` sets a letter Primary has no glyph for in Second, as
+  // CSS has it; the first registered face with one took it, which was a
+  // family the style never named
+  const fm = new FontManager({ source: { matchSorted: () => [] } });
+  fm.load(bytes('KaTeX_Main-Regular.ttf'), { family: 'First' });
+  fm.load(bytes('KaTeX_SansSerif-Regular.ttf'), { family: 'Second' });
+  fm.load(bytes('KaTeX_Size1-Regular.ttf'), { family: 'Primary' });
+  const A = 0x41;
+  assert.equal(fm.match('Primary, Second').hasGlyph(A), false, 'precondition');
+  assert.equal(fm.fallbackFor(A, 'Primary, Second').postscriptName, 'KaTeX_SansSerif-Regular');
+  assert.equal(fm.fallbackFor(A, '"Primary", "Second"').postscriptName, 'KaTeX_SansSerif-Regular');
+  // a list that names no face with the letter still finds one registered
+  assert.equal(fm.fallbackFor(A, 'Primary').postscriptName, 'KaTeX_Main-Regular');
+});
+
+test('a word is shaped again for another family list after its first face', () => {
+  // the shaping memo keyed a word by the face it resolved to, so the
+  // fallback one list set it in answered the same word under another
+  const fm = new FontManager({ source: { matchSorted: () => [] } });
+  fm.load(bytes('KaTeX_Size1-Regular.ttf'), { family: 'Primary' });
+  fm.load(bytes('KaTeX_SansSerif-Regular.ttf'), { family: 'Second' });
+  fm.load(bytes('KaTeX_Typewriter-Regular.ttf'), { family: 'Third' });
+  const faceOf = (family) =>
+    new TextLayout(fm, [{ text: 'A' }], { family, size: 16 }).lines[0].runs[0].run.font.postscriptName;
+  assert.equal(faceOf('Primary, Second'), 'KaTeX_SansSerif-Regular');
+  assert.equal(faceOf('Primary, Third'), 'KaTeX_Typewriter-Regular');
 });
 
 test('a fallback asks the source for the pattern its match asked for', () => {
