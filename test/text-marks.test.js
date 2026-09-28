@@ -1,9 +1,10 @@
-// A run with no glyph a `mark` or `mkmk` lookup acts at is shaped without
-// them (lib/text/marks.js, Font#_layout): fontkit decodes a feature's lookups
-// whole at its first use, and Noto Sans' mark attachment was 14 ms of each
-// face's first shaping. What has to hold is that the answer never changes —
-// the same glyphs at the same places as fontkit's own layout — so the parser
-// is held to hand-built tables here, and the shaping to a real face's.
+// A face's `mark` and `mkmk` lookups are stood in for by empty ones until a
+// run holds a glyph they act at (lib/text/marks.js, Font#_layout): fontkit
+// decodes a feature's lookups whole at its first use, and Noto Sans' mark
+// attachment was 14 ms of each face's first shaping. What has to hold is that
+// the answer never changes — the same glyphs at the same places as fontkit's
+// own layout — so the parser is held to hand-built tables here, and the
+// shaping to a real face's.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
@@ -143,7 +144,7 @@ function fakeFont(tables) {
   };
 }
 
-const covered = (bits, ids) => ids.filter((id) => marksCover(bits, id));
+const covered = (marks, ids) => ids.filter((id) => marksCover(marks.bits, id));
 
 test('the mark glyphs are the first coverage of every mark and mkmk lookup, and nothing else', () => {
   const gpos = layoutTable({
@@ -167,9 +168,10 @@ test('the mark glyphs are the first coverage of every mark and mkmk lookup, and 
       })
     ]
   });
-  const bits = markGlyphs(fakeFont({ GPOS: gpos }));
-  assert.ok(bits, 'a face with mark lookups');
-  assert.deepEqual(covered(bits, [5, 99, 100, 101, 102, 103, 200, 201]), [100, 101, 102, 200]);
+  const marks = markGlyphs(fakeFont({ GPOS: gpos }));
+  assert.ok(marks, 'a face with mark lookups');
+  assert.deepEqual([...marks.lookups].sort(), [1, 2]);
+  assert.deepEqual(covered(marks, [5, 99, 100, 101, 102, 103, 200, 201]), [100, 101, 102, 200]);
 });
 
 test('a context under mark is entered at its first input glyph, found from the subtable', () => {
@@ -195,19 +197,19 @@ test('a context under mark is entered at its first input glyph, found from the s
     first.fill(coverage1(b, [400]), at);
     return at;
   };
-  const bits = markGlyphs(
+  const marks = markGlyphs(
     fakeFont({
       GPOS: layoutTable({ features: [['mark', [0, 1]]], lookups: [lookup(8, chained), lookup(7, context)] })
     })
   );
-  assert.ok(bits);
-  assert.deepEqual(covered(bits, [7, 8, 300, 301, 400]), [300, 301, 400]);
+  assert.ok(marks);
+  assert.deepEqual(covered(marks, [7, 8, 300, 301, 400]), [300, 301, 400]);
 });
 
-test('a face this cannot read to the end, or that could shape marks another way, is shaped whole', () => {
+test('a face this cannot read to the end, or that fontkit shapes another way, is shaped whole', () => {
   const plain = { features: [['mark', [0]]], lookups: [lookup(4, markSub((b) => coverage1(b, [100])))] };
   assert.ok(markGlyphs(fakeFont({ GPOS: layoutTable(plain) })), 'the plain case reads');
-  // nothing to leave out
+  // nothing to stand in for
   assert.equal(markGlyphs(fakeFont({ GPOS: layoutTable({ features: [['kern', [0]]], lookups: plain.lookups }) })), null);
   assert.equal(markGlyphs(fakeFont({})), null, 'no GPOS');
   // a subtable format this does not know
@@ -217,20 +219,22 @@ test('a face this cannot read to the end, or that could shape marks another way,
     return at;
   });
   assert.equal(markGlyphs(fakeFont({ GPOS: layoutTable({ features: [['mark', [0]]], lookups: [odd] }) })), null);
-  // features that change with the variation axes
-  assert.equal(markGlyphs(fakeFont({ GPOS: layoutTable({ ...plain, minor: 1, variations: 64 }) })), null);
-  // a substitution under the same tag, which leaving `mark` out would drop
-  const substitutes = layoutTable({ features: [['mark', [0]]], lookups: [lookup(1, markSub((b) => coverage1(b, [9])))] });
-  assert.equal(markGlyphs(fakeFont({ GPOS: layoutTable(plain), GSUB: substitutes })), null);
-  // an empty one drops nothing
-  const empty = layoutTable({ features: [['mark', []]], lookups: [] });
-  assert.ok(markGlyphs(fakeFont({ GPOS: layoutTable(plain), GSUB: empty })));
   // fontkit shapes a morx face with AAT, not GPOS
   const aat = fakeFont({ GPOS: layoutTable(plain) });
   aat.directory.tables.morx = { length: 0 };
   assert.equal(markGlyphs(aat), null);
   // cut short: never a throw
   assert.equal(markGlyphs(fakeFont({ GPOS: layoutTable(plain).slice(0, 30) })), null);
+});
+
+test('a stood-in lookup is exact wherever it is reached from, so neither variations nor GSUB tags matter', () => {
+  // feature variations and a substitution named `mark` once turned this
+  // off; a stand-in changes no feature, and a lookup reached through a
+  // swapped feature table acts at its coverage like any other
+  const plain = { features: [['mark', [0]]], lookups: [lookup(4, markSub((b) => coverage1(b, [100])))] };
+  assert.ok(markGlyphs(fakeFont({ GPOS: layoutTable({ ...plain, minor: 1, variations: 64 }) })));
+  const substitutes = layoutTable({ features: [['mark', [0]]], lookups: [lookup(1, markSub((b) => coverage1(b, [9])))] });
+  assert.ok(markGlyphs(fakeFont({ GPOS: layoutTable(plain), GSUB: substitutes })));
 });
 
 // --- a real face ------------------------------------------------------------
@@ -276,29 +280,37 @@ function reference(file, text, size) {
 
 const answer = (shaped) => shaped.glyphs.map((g) => [g.id, g.ax, g.dx, g.dy]);
 
-test('a run with no mark is shaped once, without them, and comes out as fontkit shapes it', needsFace, () => {
+/** The mark lookups fontkit has decoded for a face, by type. */
+function decodedMarks(font) {
+  return font.fk.GPOS.lookupList.items.filter((l) => l && l.subTables.length > 0 && l.lookupType >= 4 && l.lookupType <= 6).length;
+}
+
+test('a run with no mark is shaped once, decodes no mark lookup, and comes out as fontkit shapes it', needsFace, () => {
   const { font, asked } = watched(face);
   assert.deepEqual(answer(font.shape('File AVAT', 40)), reference(face, 'File AVAT', 40));
-  assert.deepEqual(asked, [{ mark: false, mkmk: false }]);
+  assert.deepEqual(asked, [undefined], 'once, with the features as asked');
+  assert.equal(decodedMarks(font), 0);
 });
 
-test('a run holding a mark is shaped again, whole, and the face shapes whole from then on', needsFace, () => {
+test('a run holding a mark is shaped again with the real lookups, and so is every run after it', needsFace, () => {
   const { font, asked } = watched(face);
-  const combining = 'é ạ';
+  const combining = 'e\u0301 a\u0323';
   assert.deepEqual(answer(font.shape(combining, 40)), reference(face, combining, 40));
-  assert.deepEqual(asked, [{ mark: false, mkmk: false }, undefined]);
+  assert.deepEqual(asked, [undefined, undefined]);
+  assert.ok(decodedMarks(font) > 0, 'the real lookups are back');
   asked.length = 0;
   assert.deepEqual(answer(font.shape('File', 40)), reference(face, 'File', 40));
-  assert.deepEqual(asked, [undefined], 'its lookups are decoded: nothing left to save');
+  assert.deepEqual(answer(font.shape('o\u0302', 40)), reference(face, 'o\u0302', 40));
+  assert.deepEqual(asked, [undefined, undefined], 'once each: nothing left to stand in for');
 });
 
-test('a run that names mark or mkmk itself is shaped as asked', needsFace, () => {
+test('the features a run asks for reach fontkit as asked', needsFace, () => {
   const { font, asked } = watched(face);
-  font.shape('File', 40, { features: { mark: true } });
-  // an array is fontkit's shorthand for { tag: true }
-  font.shape('File', 40, { features: ['mkmk'] });
-  font.shape('File', 40, { features: ['liga'] });
-  assert.deepEqual(asked, [{ mark: true }, ['mkmk'], { liga: true, mark: false, mkmk: false }]);
+  font.shape('File', 40, { features: { liga: false } });
+  font.shape('File', 40, { features: ['smcp'] });
+  // and a second shaping gets them as asked too, not as fontkit left them
+  font.shape('e\u0301', 40, { features: { liga: false } });
+  assert.deepEqual(asked, [{ liga: false }, ['smcp'], { liga: false }, { liga: false }]);
 });
 
 test('whatever a run holds, the answer is fontkit\'s', needsFace, () => {
