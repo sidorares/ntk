@@ -238,3 +238,33 @@ test('a feature a 0 turns off reaches fontkit as false', () => {
     ]
   );
 });
+
+test('a word across spans shaped alike keeps its kerning, and each span its glyphs', () => {
+  // each span was shaped on its own, so the pair between a word's letters
+  // in two colours was lost: an opening quote an `::before` makes was
+  // kerned with nothing, and the rest of its line came out that much wider
+  const fonts = fontsWith(readFileSync(FIXTURE));
+  const style = { family: 'Test', size: 40 };
+  const whole = new TextLayout(fonts, [{ text: 'AV' }], style);
+  const split = new TextLayout(fonts, [{ text: 'A', color: '#ff0000' }, { text: 'V', color: '#0000ff' }], style);
+  const apart = new TextLayout(fonts, [{ text: 'A' }], style).width + new TextLayout(fonts, [{ text: 'V' }], style).width;
+  assert.ok(whole.width < apart, 'precondition: the face kerns AV');
+  assert.equal(split.width, whole.width, 'kerned as one word');
+  const runs = split.lines[0].runs;
+  assert.deepEqual(
+    runs.map((r) => [r.span.color, r.start, r.end]),
+    [
+      ['#ff0000', 0, 1],
+      ['#0000ff', 1, 2]
+    ]
+  );
+  assert.equal(split.caretPosition(1).x, whole.caretPosition(1).x, 'the caret between them where the glyphs meet');
+  // spans shaped otherwise are shaped apart, as before, and so is one
+  // marked to be, as an inline box with padding is
+  const sized = new TextLayout(fonts, [{ text: 'A' }, { text: 'V', size: 40, letterSpacing: 0.5 }], style);
+  assert.equal(sized.width, apart + 0.5);
+  const marked = new TextLayout(fonts, [{ text: 'A' }, { text: 'V', shapeApart: true }], style);
+  assert.equal(marked.width, apart);
+  const before = new TextLayout(fonts, [{ text: 'A', shapeApart: true }, { text: 'V' }], style);
+  assert.equal(before.width, apart);
+});
