@@ -189,3 +189,40 @@ test('more spellings than the cache holds all still parse', () => {
     }
   }
 });
+
+test('a colour string paints with one picture, however often it is set', () => {
+  // by its spelling (App#solidPictureOf), over the solid the numbers name
+  const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'rgba(10, 20, 30, 0.5)';
+  const first = ctx._backgroundPicture;
+  ctx.fillStyle = '#000';
+  ctx.fillStyle = 'rgba(10, 20, 30, 0.5)';
+  assert.equal(ctx._backgroundPicture, first);
+  // another spelling of the same colour is the same solid
+  ctx.strokeStyle = 'rgba(10,20,30,0.5)';
+  assert.equal(ctx._strokePicture, first);
+  // and a string that is not a colour throws every time it is set
+  for (let i = 0; i < 2; i++) {
+    assert.throws(() => {
+      ctx.fillStyle = 'not-a-colour';
+    }, /Not a color/);
+  }
+});
+
+test('the pictures a colour string names go with the connection', async () => {
+  // freed on close with every other solid, so neither index may outlive them
+  const server = xserver.createServer({ width: 100, height: 100 });
+  const [serverEnd, clientEnd] = xserver.createStreamPair();
+  server.addClientStream(serverEnd);
+  const other = await createClient({
+    stream: clientEnd,
+    fontSource: new StaticFontSource()
+  });
+  const pixmap = other.createPixmap({ width: W, height: H, depth: 24 });
+  pixmap.getContext('2d').fillStyle = 'rgb(1, 2, 3)';
+  assert.ok(other._solidByName.has('rgb(1, 2, 3)'));
+  await other.close();
+  assert.equal(other._solidByName.size, 0);
+  assert.equal(other._solidPictures.size, 0);
+});
