@@ -1,5 +1,15 @@
 # Changelog
 
+## [8.14.1](https://github.com/sidorares/ntk/compare/v8.14.0...v8.14.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **text:** a face no glyph can be made from covers nothing ([#434](https://github.com/sidorares/ntk/issues/434)) ([7dda32d](https://github.com/sidorares/ntk/commit/7dda32db23daddcdcecb9c04e115edab344cb9e3))
+* **text:** a feature a 0 turns off is off in a face's kern table too ([#431](https://github.com/sidorares/ntk/issues/431)) ([b49a383](https://github.com/sidorares/ntk/commit/b49a3834ea600b135aa6ddf345e940d8350009dd))
+* **text:** a letter the first family lacks is set in the families the style names next ([#433](https://github.com/sidorares/ntk/issues/433)) ([5fecee8](https://github.com/sidorares/ntk/commit/5fecee86f2c2b82c40c585f4619939ac46ae1dec))
+* **text:** a mark whose anchor the face leaves out is not attached by that subtable ([#435](https://github.com/sidorares/ntk/issues/435)) ([2c73f20](https://github.com/sidorares/ntk/commit/2c73f20afeb363ab082542800191e7f9c026eb06))
+
 ## [8.14.0](https://github.com/sidorares/ntk/compare/v8.13.1...v8.14.0) (2026-09-28)
 
 
