@@ -45,7 +45,10 @@ first text layout does not stall on them. The answers are written to files,
 and wait there until a layout asks for one. A layout that asks before the
 loop has run (the first frame's, which holds it) takes a prewarm's answer
 rather than spawning `fc-match` again, and a face no text is set in is
-never read at all. The first time any other family is
+never read at all. Even a face that is set in is read only as far as its
+first line: an answer is the whole fallback chain with each face's coverage,
+634 KB for `sans-serif` on a Linux desktop, and the rest of it is read when
+a character first falls back. The first time any other family is
 used, its four faces start together the same way — but that first use still
 waits for them, so a caller that knows a family is coming can start it
 earlier with `app.fonts.prewarm(family)`: a code editor's monospace, asked

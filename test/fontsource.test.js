@@ -334,6 +334,32 @@ test('no system fonts degrades to .notdef instead of crashing mid-shape', () => 
   assert.throws(() => broken.fallbackFor(0x2136, 'ui'), /my source is broken/);
 });
 
+test("match takes a source's best face alone where it can answer one", () => {
+  // the fallback chain behind a face is read when a character first falls
+  // back, so a match that only needs the face asks for it alone
+  const file = join(fontDir, 'KaTeX_Main-Regular.ttf');
+  const asked = [];
+  const source = {
+    matchFirst: (pattern) => {
+      asked.push(['first', pattern.family]);
+      return { path: file, postscriptName: 'KaTeX_Main-Regular' };
+    },
+    matchSorted: (pattern) => {
+      asked.push(['sorted', pattern.family]);
+      return [{ path: file, postscriptName: 'KaTeX_Main-Regular' }];
+    }
+  };
+  const fonts = new FontManager({ source });
+  const face = fonts.match('Test Main');
+  assert.ok(face, 'a face');
+  assert.deepEqual(asked, [['first', 'Test Main']]);
+  // a source without it is asked for the chain, as it always was
+  const plain = { matchSorted: source.matchSorted };
+  asked.length = 0;
+  new FontManager({ source: plain }).match('Test Main');
+  assert.deepEqual(asked, [['sorted', 'Test Main']]);
+});
+
 test('prewarm is handed to the source, and a source with nothing to look up ignores it', () => {
   const asked = [];
   const source = { matchSorted: () => [], prewarm: (family) => asked.push(family) };
