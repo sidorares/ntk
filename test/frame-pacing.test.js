@@ -239,6 +239,39 @@ test('frameInterval paces flushes when the fence is disabled', async () => {
   wnd.destroy();
 });
 
+test('frameInterval is a period from one frame to the next, not a pause after each', async () => {
+  // The timer used to start when a frame ended, so a frame was owed its own
+  // length on top of the interval: a GL map panned by an animation drew 3ms
+  // frames 19ms apart under the 16ms default, 51 frames a second on a 60Hz
+  // panel, where one frame per interval is 62.5.
+  const { app, fences } = makeMockApp();
+  const wnd = new Window(app, { frameInterval: 80 });
+  const starts = [];
+  const loop = () => {
+    starts.push(performance.now());
+    // the frame's own work: over half the interval
+    const until = performance.now() + 45;
+    while (performance.now() < until);
+    if (starts.length < 4) wnd.requestAnimationFrame(loop);
+  };
+  wnd.requestAnimationFrame(loop);
+  // a server that answers every fence at once
+  for (let i = 0; i < 100 && starts.length < 4; i++) {
+    for (const fence of fences.splice(0)) fence(null);
+    await sleep(5);
+  }
+  assert.equal(starts.length, 4);
+  for (let i = 1; i < starts.length; i++) {
+    const gap = starts[i] - starts[i - 1];
+    // 80ms start to start; a pause after each frame made it 125, and no
+    // timer at all would leave the frame's 45 and the fence. The floor is
+    // loose because a timer can fire a few ms early against the
+    // high-resolution clock (Node 18 measured 54.7 against 60).
+    assert.ok(gap >= 65 && gap < 110, `${gap.toFixed(1)}ms from one frame's start to the next`);
+  }
+  wnd.destroy();
+});
+
 // frameInFlight() — the gate a toolkit paints a discrete input's response
 // through. What it has to get right is the *transitions*: false while the
 // server is caught up, true from the moment a frame's fence goes out until

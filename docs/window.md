@@ -387,7 +387,10 @@ frames**, gated by three independent mechanisms:
   `frameSync: false`.
 - **a timer** — at most one paced frame per `frameInterval` ms, which defaults
   to the display's own period (`app.refreshRate`, `16` until that is known),
-  so a local server isn't asked to redraw at input-device rate. Under the
+  so a local server isn't asked to redraw at input-device rate. The interval
+  runs from one frame's start to the next one's, so a frame's own work is
+  inside it rather than added to it: 3 ms frames under a 16.7 ms interval
+  run at 60 fps, not 52. Under the
   vblank clock the display sets the rate instead, and this is only what runs
   the next frame when one drew nothing at all (there is no present to report
   back), or a cap you asked for explicitly.
