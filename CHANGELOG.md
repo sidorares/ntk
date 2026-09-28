@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.13](https://github.com/sidorares/ntk/compare/v8.12.12...v8.12.13) (2026-09-28)
+
+
+### Bug Fixes
+
+* **2d:** a clip rectangle of no area stays a rectangle ([#404](https://github.com/sidorares/ntk/issues/404)) ([c1e3bad](https://github.com/sidorares/ntk/commit/c1e3bad406613d60ecb1d38c4235e8c9dc88063c))
+
 ## [8.12.12](https://github.com/sidorares/ntk/compare/v8.12.11...v8.12.12) (2026-09-28)
 
 
