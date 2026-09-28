@@ -141,7 +141,7 @@ function prewarmProbe(body, stubs = {}) {
   const script = join(dir, 'probe.mjs');
   writeFileSync(
     script,
-    `import { matchSorted, matchSortedSync, prewarm } from ${JSON.stringify(join(root, 'lib/fontconfig.js'))};\n` +
+    `import { matchSorted, matchSortedSync, prewarm, prewarmPatterns } from ${JSON.stringify(join(root, 'lib/fontconfig.js'))};\n` +
       `import { FontconfigFontSource } from ${JSON.stringify(join(root, 'lib/text/fontsource.js'))};\n` +
       `const BIN = ${JSON.stringify(bins)};\n` +
       `const EMPTY = ${JSON.stringify(empty)};\n` +
@@ -314,6 +314,48 @@ test("a family's faces are matched from one child of the process", () => {
   assert.equal(out.paths, 1, 'every face answered from the stub');
   assert.equal(out.matches, 12, 'one fc-match a face');
   assert.equal(out.children, 3, 'one child a family');
+});
+
+test("a prewarm's answers stay in their files until a layout asks for one", () => {
+  // read and parsed as each child exited, a family's answers were 9 ms of
+  // the main thread while the connection was set up, for faces most apps
+  // never set
+  const out = prewarmProbe(
+    "import fs from 'node:fs';\n" +
+      'const read = fs.readFileSync;\n' +
+      'let answers = 0;\n' +
+      "fs.readFileSync = function (file, ...rest) { if (String(file).endsWith('.out')) answers++; return read.call(this, file, ...rest); };\n" +
+      'process.env.PATH = BIN.count;\n' +
+      "const face = (weight, style) => ({ family: 'serif', weight, style });\n" +
+      "await prewarmPatterns([face(400, 'normal'), face(700, 'normal'), face(400, 'italic'), face(700, 'italic')]);\n" +
+      'const beforeAsk = answers;\n' +
+      'process.env.PATH = EMPTY; // an ask that spawned would throw ENOENT\n' +
+      "const [best] = matchSortedSync(face(700, 'normal'));\n" +
+      'console.log(JSON.stringify({ beforeAsk, afterAsk: answers, path: best.path }));\n',
+    { count: counting('/lazy/A.ttf') }
+  );
+  assert.equal(out.beforeAsk, 0, 'nothing read before a layout asked');
+  assert.equal(out.afterAsk, 1, 'the face asked for, and only it');
+  assert.equal(out.path, '/lazy/A.ttf');
+});
+
+test('a prewarm whose child died without an answer does not keep a layout waiting', () => {
+  // the stub kills the subshell it runs in, so no status is ever written;
+  // the sync call must see the child is gone rather than poll for 3 s
+  const out = prewarmProbe(
+    'process.env.PATH = BIN.dies;\n' +
+      'await prewarmPatterns([PATTERN]);\n' +
+      'process.env.PATH = BIN.happy;\n' +
+      'const t0 = performance.now();\n' +
+      'const [best] = matchSortedSync(PATTERN);\n' +
+      'console.log(JSON.stringify({ ms: performance.now() - t0, path: best.path }));\n',
+    {
+      dies: '#!/bin/sh\nkill -9 $PPID\n',
+      happy: '#!/bin/sh\nprintf "/sync/HAPPY.ttf\\tHappy\\tHappy Family\\t20-7e\\n"\n'
+    }
+  );
+  assert.equal(out.path, '/sync/HAPPY.ttf');
+  assert.ok(out.ms < 1000, `the sync call waited ${out.ms} ms`);
 });
 
 test('prewarm for an already-cached pattern spawns nothing', () => {
