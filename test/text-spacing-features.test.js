@@ -210,3 +210,31 @@ test('shaping does not write to the features object it is given', () => {
   const tags = Object.freeze(['sups']);
   assert.doesNotThrow(() => new TextLayout(fonts, [{ text: '789', features: tags }], style));
 });
+
+test('a feature a 0 turns off reaches fontkit as false', () => {
+  // CSS turns a feature off with a 0 — `font-feature-settings: "kern" 0`,
+  // `font-kerning: none`. fontkit reads a 0 as off where it plans the
+  // OpenType features, but where a face's GPOS has no kerning and its older
+  // `kern` table has, it asks `kern !== false`: Times New Roman's pairs were
+  // kerned under `font-kerning: none`, spaced or not. No face CI has keeps
+  // its kerning there alone, so this asks what fontkit is handed.
+  const fonts = fontsWith(readFileSync(FIXTURE));
+  const style = { family: 'Test', size: 16 };
+  const fk = fonts.match('Test', style).fk;
+  const seen = [];
+  const layout = fk.layout;
+  fk.layout = function (text, features, ...rest) {
+    // as handed over: fontkit writes what it plans with back into it
+    seen.push({ ...features });
+    return layout.call(this, text, features, ...rest);
+  };
+  new TextLayout(fonts, [{ text: 'AV', features: { kern: 0 } }], style);
+  new TextLayout(fonts, [{ text: 'AW', features: { kern: 0, sups: 1 }, letterSpacing: 1 }], style);
+  assert.deepEqual(
+    seen.map((f) => [f.kern, f.sups]),
+    [
+      [false, undefined],
+      [false, 1]
+    ]
+  );
+});
