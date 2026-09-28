@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.14.2](https://github.com/sidorares/ntk/compare/v8.14.1...v8.14.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **text:** a word across spans shaped alike is shaped as one ([#438](https://github.com/sidorares/ntk/issues/438)) ([49979a0](https://github.com/sidorares/ntk/commit/49979a04dbf181993fe2d40b8ada88fae3e286ac))
+
 ## [8.14.1](https://github.com/sidorares/ntk/compare/v8.14.0...v8.14.1) (2026-09-28)
 
 
