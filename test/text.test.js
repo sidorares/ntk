@@ -303,6 +303,36 @@ test('spans that share nowrap have no break inside them or between them', needsF
   assert.deepEqual(one, ['alpha-beta gamma-delta']);
 });
 
+test('wrap: false with an ellipsis cuts a line at the width, inside a word', needsFonts, () => {
+  // CSS's text-overflow on text that does not wrap: the ellipsis goes where
+  // the box ends, and the line is cut there, inside a word if that is where
+  // it is. maxLines: 1 wrapped the text first and put the ellipsis after
+  // the last word that fitted, a word short of the box's end.
+  const fonts = new FontManager();
+  const style = { family: 'sans-serif', size: 16 };
+  const text = 'Leslie Alexander, Co-Founder and Chief Executive Officer';
+  const maxWidth = 200;
+  const clamp = new TextLayout(fonts, text, style, { maxWidth, maxLines: 1, overflow: 'ellipsis' });
+  const cut = new TextLayout(fonts, text, style, { maxWidth, wrap: false, overflow: 'ellipsis' });
+  assert.equal(cut.lines.length, 1);
+  assert.ok(cut.truncated);
+  assert.ok(cut.lines[0].width <= maxWidth + 0.5, `within the width: ${cut.lines[0].width}`);
+  assert.ok(
+    cut.lines[0].width > clamp.lines[0].width,
+    `fuller than a clamp: ${cut.lines[0].width} against ${clamp.lines[0].width}`
+  );
+  // each line to a forced break is cut on its own, and one that fits is not
+  const two = new TextLayout(fonts, `short\n${text}`, style, { maxWidth, wrap: false, overflow: 'ellipsis' });
+  assert.equal(two.lines.length, 2);
+  assert.ok(two.lines[1].width <= maxWidth + 0.5);
+  assert.equal(two._text.slice(two.lines[0].start, two.lines[0].end).trim(), 'short');
+  // with no ellipsis a line that does not wrap runs past the width whole
+  const long = new TextLayout(fonts, text, style, { maxWidth, wrap: false });
+  assert.equal(long.lines.length, 1);
+  assert.ok(long.lines[0].width > maxWidth);
+  assert.equal(long.truncated, false);
+});
+
 test('a line too long for its container starts at its start edge', needsFonts, () => {
   // CSS Text 3, 7.1: whatever the alignment, a line that does not fit runs
   // past its end edge, not its start — right-aligned, it was pushed out of
