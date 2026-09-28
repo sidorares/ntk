@@ -14,10 +14,11 @@ import Window from '../lib/window.js';
 let nextId = 0xe000;
 
 const PRESENT_OPCODE = 145;
+const BYPASS = 0x4242;
 
 /** A connection with Present, whose compositor state the test sets. */
 function makeMockApp({ compositing = null, xwayland = false } = {}) {
-  const calls = { copies: 0, presents: [], fences: [] };
+  const calls = { copies: 0, presents: [], fences: [], properties: [] };
   const Present = {
     majorOpcode: PRESENT_OPCODE,
     Option: { None: 0, Async: 1, Copy: 2, UST: 4, Suboptimal: 8 },
@@ -42,7 +43,9 @@ function makeMockApp({ compositing = null, xwayland = false } = {}) {
     CreateWindow() {},
     DestroyWindow() {},
     ChangeWindowAttributes() {},
-    ChangeProperty() {},
+    ChangeProperty(mode, wid, property, type, format, data) {
+      calls.properties.push({ wid, property, data });
+    },
     CreateGC() {},
     CreatePixmap() {},
     FreePixmap() {},
@@ -54,7 +57,7 @@ function makeMockApp({ compositing = null, xwayland = false } = {}) {
       calls.fences.push(cb);
     },
     InternAtom(o, name, cb) {
-      cb(null, 1);
+      cb(null, name === '_NET_WM_BYPASS_COMPOSITOR' ? BYPASS : 1);
     },
     require(name, cb) {
       if (name === 'present') return cb(null, Present);
@@ -185,6 +188,31 @@ test('a compositor that stops hands the window back to Present', async () => {
   assert.ok(calls.presents.length >= 1, 'presents again');
   assert.ok(state.frames > frames, 'and frames kept coming');
   wnd.destroy();
+});
+
+test('a top-level window under a compositor asks not to be unredirected', async () => {
+  // A compositor that unredirects a fullscreen window would put its CopyArea
+  // blits on the scanout, where a copy can tear.
+  const asked = (calls, wnd) =>
+    calls.properties.filter((p) => p.wid === wnd.id && p.property === BYPASS);
+  const { wnd, calls } = await presentWindow({}, { compositing: true });
+  assert.deepEqual(
+    asked(calls, wnd).map((p) => p.data),
+    [[2]],
+    '_NET_WM_BYPASS_COMPOSITOR = 2, once'
+  );
+  wnd.destroy();
+
+  const none = await presentWindow({}, { compositing: false });
+  assert.equal(asked(none.calls, none.wnd).length, 0, 'not without a compositor');
+  none.app.compositing = true;
+  none.wnd._compositingChanged();
+  assert.equal(asked(none.calls, none.wnd).length, 1, 'asked when one starts');
+  none.wnd.destroy();
+
+  const pinned = await presentWindow({ frameClock: 'present' }, { compositing: true });
+  assert.equal(asked(pinned.calls, pinned.wnd).length, 0, 'nor on Present by name');
+  pinned.wnd.destroy();
 });
 
 // --- App#compositing: the selection a compositor owns ------------------------

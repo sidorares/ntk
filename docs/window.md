@@ -531,6 +531,11 @@ Two exceptions keep Present:
   compositor's frame callback — what stops an occluded window from rendering.
 - **`frameClock: 'present'`**, which asks for Present's clock by name.
 
+A top-level window on this path sets `_NET_WM_BYPASS_COMPOSITOR` to 2, "do
+not unredirect me": Mutter, Muffin and KWin unredirect a window that covers
+the screen, and its copies would then reach the scanout directly, where they
+can tear.
+
 `NTK_FRAME_CLOCK=auto|present|fence` sets the default for every window that
 does not name one, for trying a machine both ways without touching the app.
 
