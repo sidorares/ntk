@@ -558,7 +558,15 @@ test('a cut never lands inside a grapheme cluster', () => {
     for (const { segment } of segmenter.segment(text)) out.push(out[out.length - 1] + segment);
     return out;
   };
-  for (const text of ['aaaaéaaaa', 'aa\u{1F468}‍\u{1F469}‍\u{1F466}aa', 'नमस्ते नमस्ते']) {
+  for (const text of [
+    'aaaaéaaaa',
+    'aa\u{1F468}‍\u{1F469}‍\u{1F466}aa',
+    'नमस्ते नमस्ते',
+    // a mark on the first letter is the first cluster, and a CR and the LF
+    // after it are one: the ways ASCII text joins into a cluster
+    'e\u0301aaaaaa',
+    'aa\r\naa'
+  ]) {
     const valid = prefixes(text);
     for (let maxWidth = 8; maxWidth <= 120; maxWidth += 4) {
       const layout = new TextLayout(fonts, text, { family: 'sans-serif', size: 16 }, { maxWidth, maxLines: 1, overflow: 'ellipsis' });
