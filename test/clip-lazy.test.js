@@ -87,6 +87,39 @@ test("nested rectangular clips never build a mask or send trapezoids", async () 
   assert.ok(isWhite(at(img, 95, 95)), "outside both: clipped");
 });
 
+test("a rectangle of no area clips everything, and stays a rectangle", async () => {
+  // what a box of no height clips its content to — a menu at max-height: 0
+  // — with a clip of its content inside it. It was no rectangle to the
+  // stack: the mask was built the size of the pixmap for it, and the
+  // rectangle inside it intersected into that mask.
+  for (const [w, h] of [
+    [80, 0],
+    [0, 80],
+    [0, 0],
+  ]) {
+    const ctx = freshCtx();
+    const which = `${w}x${h}`;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(10, 10, w, h);
+    ctx.clip();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(20, 20, 40, 40);
+    ctx.clip();
+    assert.equal(ctx.clipMask, null, `${which}: no mask`);
+    ctx.fillStyle = "red";
+    ctx.fillRect(0, 0, W, H);
+    ctx.clearRect(0, 0, W, H);
+    assert.equal(ctx.clipMask, null, `${which}: nor one drawing through it`);
+    ctx.restore();
+    ctx.restore();
+    const img = await read(ctx);
+    assert.ok(isWhite(at(img, 30, 30)), `${which}: nothing drawn in it`);
+    assert.ok(isWhite(at(img, 10, 10)), `${which}: or at its corner`);
+  }
+});
+
 test("a rounded clip still masks, and pixels honor the corner", async () => {
   const ctx = freshCtx();
   ctx.save();
