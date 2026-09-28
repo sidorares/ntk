@@ -1,5 +1,31 @@
 # Changelog
 
+## [8.14.0](https://github.com/sidorares/ntk/compare/v8.13.1...v8.14.0) (2026-09-28)
+
+
+### Features
+
+* **fonts:** a prewarm names the faces it starts, and starts them from one child ([#424](https://github.com/sidorares/ntk/issues/424)) ([853893a](https://github.com/sidorares/ntk/commit/853893a24bd1946cde21cd38009599ba2a6d9a12))
+* **fonts:** FontManager#prewarm, for a family a caller knows is coming ([#423](https://github.com/sidorares/ntk/issues/423)) ([9d48e1e](https://github.com/sidorares/ntk/commit/9d48e1e4357ce6140dc44585d2eea526aa27e7a8))
+
+
+### Bug Fixes
+
+* **2d:** geometry is cut only past what the wire carries, and a stroke drops what misses the surface ([#420](https://github.com/sidorares/ntk/issues/420)) ([ea37afc](https://github.com/sidorares/ntk/commit/ea37afccaf84cab3ebffcc08824b915dacf1b507))
+
+
+### Performance Improvements
+
+* **2d:** a colour string's solid picture is found by the string ([#422](https://github.com/sidorares/ntk/issues/422)) ([a32ee42](https://github.com/sidorares/ntk/commit/a32ee428794dccdadc8edc675a31a989c67ed05a))
+* **color:** a colour string is parsed once ([#421](https://github.com/sidorares/ntk/issues/421)) ([850b612](https://github.com/sidorares/ntk/commit/850b612ae53abc5b22114eaaa3e116f8a4ec4c6d))
+* **fonts:** a face's match reads the head of its answer, not the chain ([#429](https://github.com/sidorares/ntk/issues/429)) ([a7d7bbd](https://github.com/sidorares/ntk/commit/a7d7bbd72738e300558bc3f004af35d7138026bd))
+* **fonts:** a prewarm asks for the best face beside the chain ([#430](https://github.com/sidorares/ntk/issues/430)) ([ca15821](https://github.com/sidorares/ntk/commit/ca1582171a3c2d4fde3d17fb1bc432991e92eb53))
+* **fonts:** a prewarm's answer is read when a layout asks for it ([#426](https://github.com/sidorares/ntk/issues/426)) ([6b7dc4b](https://github.com/sidorares/ntk/commit/6b7dc4b00cef2ae2ba7c9140e701701b81eac444))
+* **text:** a face's mark lookups stand in empty until a run needs them ([#428](https://github.com/sidorares/ntk/issues/428)) ([5727b43](https://github.com/sidorares/ntk/commit/5727b43c9f1883635f388de01078c100c5123ea5))
+* **text:** a run with no mark is shaped without mark positioning ([#425](https://github.com/sidorares/ntk/issues/425)) ([ecdba2d](https://github.com/sidorares/ntk/commit/ecdba2d63b51c70ff67ff88d91b3db838b6754e2))
+* **text:** a word no cluster of which fits is not searched for a cut ([#417](https://github.com/sidorares/ntk/issues/417)) ([14fdd29](https://github.com/sidorares/ntk/commit/14fdd29e41d9003e8e0d6383d65d25b52af48ce2))
+* **text:** the clusters of ASCII text are its characters ([#419](https://github.com/sidorares/ntk/issues/419)) ([a37f40f](https://github.com/sidorares/ntk/commit/a37f40f280d51b16ad1b17c6e1c41a8bc07dcb97))
+
 ## [8.13.1](https://github.com/sidorares/ntk/compare/v8.13.0...v8.13.1) (2026-09-28)
 
 
