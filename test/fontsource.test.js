@@ -333,3 +333,12 @@ test('no system fonts degrades to .notdef instead of crashing mid-shape', () => 
   broken.load(bytes('KaTeX_Main-Regular.ttf'), { family: 'ui' });
   assert.throws(() => broken.fallbackFor(0x2136, 'ui'), /my source is broken/);
 });
+
+test('prewarm is handed to the source, and a source with nothing to look up ignores it', () => {
+  const asked = [];
+  const source = { matchSorted: () => [], prewarm: (family) => asked.push(family) };
+  new FontManager({ source }).prewarm('monospace');
+  assert.deepEqual(asked, ['monospace']);
+  // fonts in memory: nothing to warm, and nothing thrown
+  new FontManager({ source: staticSource() }).prewarm('monospace');
+});
