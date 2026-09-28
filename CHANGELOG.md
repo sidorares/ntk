@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.11](https://github.com/sidorares/ntk/compare/v8.12.10...v8.12.11) (2026-09-28)
+
+
+### Bug Fixes
+
+* **gl:** never destroy a surface while it is current ([#399](https://github.com/sidorares/ntk/issues/399)) ([4074196](https://github.com/sidorares/ntk/commit/40741967c8b6c6af82380a65384d950a3c93deac))
+
 ## [8.12.10](https://github.com/sidorares/ntk/compare/v8.12.9...v8.12.10) (2026-09-26)
 
 
