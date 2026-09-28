@@ -205,3 +205,49 @@ test('geometry a little past the surface goes as it came, and what misses it not
     app.rasterizer = new ScanlineRasterizer();
   }
 });
+
+// Canvas draws a rectangle with a negative width or height the other way,
+// and draws nothing for one with a side that is not finite. X encodes a
+// rectangle's size unsigned and its corner in 16 bits, so a negative size
+// that reached the wire threw from inside the paint: `<Html>` found it, an
+// underline whose run came out narrower than nothing, and left its
+// document blank.
+
+test('a rectangle with a negative size fills it the other way', async () => {
+  for (const img of await eachRoute((ctx) => {
+    ctx.fillRect(110, 20, -100, 20);
+    // the far corner a million pixels right, the near one inside: what
+    // came to the wire as x = 1,000,000 and w = -999,950
+    ctx.fillRect(1_000_000, 70, -999_950, 20);
+  })) {
+    assert.ok(isBlack(at(img, 60, 30)), 'the first, drawn leftwards');
+    assert.ok(isWhite(at(img, 5, 30)), 'from where it says');
+    assert.ok(isBlack(at(img, 60, 80)), 'the second, to the edge');
+    assert.ok(isWhite(at(img, 40, 80)), 'from its near corner');
+  }
+});
+
+test('clearRect with a negative size, or past the surface, clears what it covers', async () => {
+  for (const img of await eachRoute((ctx) => {
+    ctx.fillRect(0, 0, W, H);
+    ctx.clearRect(110, 10, -100, 20);
+    ctx.clearRect(-FAR, 60, 2 * FAR, 20);
+  })) {
+    assert.ok(isWhite(at(img, 60, 20)), 'cleared leftwards');
+    assert.ok(isBlack(at(img, 5, 20)), 'and only that far');
+    assert.ok(isWhite(at(img, 60, 70)), 'the band far wider than the surface');
+    assert.ok(isBlack(at(img, 60, 100)), 'and not below it');
+  }
+});
+
+test('a rectangle with a side that is not finite draws nothing', async () => {
+  for (const img of await eachRoute((ctx) => {
+    ctx.fillRect(NaN, 0, 50, 50);
+    ctx.fillRect(0, 0, Infinity, 50);
+    ctx.fillRect(0, 0, 50, -Infinity);
+    ctx.strokeRect(10, 10, NaN, 20);
+    ctx.clearRect(0, 0, NaN, H);
+  })) {
+    assert.ok(isWhite(at(img, 25, 25)));
+  }
+});
