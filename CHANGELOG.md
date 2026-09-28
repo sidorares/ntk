@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.12](https://github.com/sidorares/ntk/compare/v8.12.11...v8.12.12) (2026-09-28)
+
+
+### Bug Fixes
+
+* **window:** the frame interval runs from a frame's start ([#401](https://github.com/sidorares/ntk/issues/401)) ([4f2980f](https://github.com/sidorares/ntk/commit/4f2980ff184a9fe2ba4717714e5859e88cb15836))
+
 ## [8.12.11](https://github.com/sidorares/ntk/compare/v8.12.10...v8.12.11) (2026-09-28)
 
 
