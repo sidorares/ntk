@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.14.6](https://github.com/sidorares/ntk/compare/v8.14.5...v8.14.6) (2026-09-29)
+
+
+### Bug Fixes
+
+* **text:** a pair kerned across a break opportunity is kerned on a line ([ea638c3](https://github.com/sidorares/ntk/commit/ea638c34d4169c679af5268293e3649c1fd548d7))
+* **text:** a pair kerned across a break opportunity is kerned on a line ([#459](https://github.com/sidorares/ntk/issues/459)) ([ea638c3](https://github.com/sidorares/ntk/commit/ea638c34d4169c679af5268293e3649c1fd548d7))
+
 ## [8.14.5](https://github.com/sidorares/ntk/compare/v8.14.4...v8.14.5) (2026-09-29)
 
 
