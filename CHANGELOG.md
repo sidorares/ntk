@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.15.1](https://github.com/sidorares/ntk/compare/v8.15.0...v8.15.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **text:** each span of a line is rounded up to a 64th before the line is fitted ([#467](https://github.com/sidorares/ntk/issues/467)) ([b0aa038](https://github.com/sidorares/ntk/commit/b0aa038f2c4035c47655235b57ffe68c5d70399c))
+
 ## [8.15.0](https://github.com/sidorares/ntk/compare/v8.14.7...v8.15.0) (2026-09-29)
 
 
