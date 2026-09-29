@@ -115,3 +115,18 @@ test('coverage inside the grid does not depend on how far past it the grid reach
     assert.equal(soup, null, `triangle ${JSON.stringify(tris)}: ${soup}`);
   }
 });
+
+test('an edge far outside the grid is passed over, not walked row by row', () => {
+  // a fill under a transform that put it a trillion pixels away: `y0 | 0`
+  // wrapped negative past 2^31, and the row loop ran billions of times
+  const started = performance.now();
+  const far = [5, 5, 60, 5, 60, 1e18, 5, 3e12];
+  // wholly below the grid, starting between 2^31 and 2^32, where `| 0`
+  // wraps to minus 1.29 billion
+  const below = [5, 3e9, 60, 3e9, 60, 3.5e9];
+  const out = rasterizePolys([far, below, [1e15, 2e15, 3e15, 2e15, 2e15, 4e15], [NaN, 1, 5, 9, 1, NaN]], 64, 48);
+  assert.ok(performance.now() - started < 1000, 'promptly');
+  // the part of the first polygon inside the grid still fills
+  assert.equal(out[20 * 64 + 30], 255);
+  assert.equal(out[2 * 64 + 30], 0);
+});
