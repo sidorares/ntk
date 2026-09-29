@@ -251,3 +251,57 @@ test('a rectangle with a side that is not finite draws nothing', async () => {
     assert.ok(isWhite(at(img, 25, 25)));
   }
 });
+
+// Dashing walks only the part of a path the surface can show and passes over
+// the rest by its length (lib/dash.js): a dashed border round a box 380,000
+// pixels tall was 95,000 dashes and 78 ms a stroke. What it draws has to be
+// what a walk of the whole border draws, and a short stroke over the same
+// stretch, started at the phase the border reaches it at, draws exactly that.
+
+test('a dashed border round a box far taller than the surface is dashed in phase', async () => {
+  const dashed = (ctx) => {
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 2;
+  };
+  const border = await eachRoute((ctx) => {
+    dashed(ctx);
+    ctx.strokeRect(10, -FAR, 100, 2 * FAR);
+  });
+  const stretches = await eachRoute((ctx) => {
+    dashed(ctx);
+    // the right edge runs down from (110, -FAR), after the top's 100
+    ctx.lineDashOffset = 100 + (FAR - 2);
+    ctx.beginPath();
+    ctx.moveTo(110, -2);
+    ctx.lineTo(110, H + 2);
+    ctx.stroke();
+    // the left edge runs up from (10, FAR), after the top, the right and the
+    // bottom
+    ctx.lineDashOffset = 100 + 2 * FAR + 100 + (FAR - (H + 2));
+    ctx.beginPath();
+    ctx.moveTo(10, H + 2);
+    ctx.lineTo(10, -2);
+    ctx.stroke();
+  });
+  for (let route = 0; route < border.length; route++) {
+    const img = border[route];
+    assert.ok(isBlack(at(img, 110, 1)) || isBlack(at(img, 110, 8)), 'the right edge is dashed on the surface');
+    assert.deepEqual(Buffer.from(img.data), Buffer.from(stretches[route].data), `route ${route}`);
+  }
+});
+
+test('a pattern too fine to draw one dash at a time strokes solid, and promptly', async () => {
+  const started = performance.now();
+  for (const img of await eachRoute((ctx) => {
+    ctx.setLineDash([1e-9, 1e-9]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(10, 60);
+    ctx.lineTo(110, 60);
+    ctx.stroke();
+  })) {
+    assert.ok(isBlack(at(img, 30, 60)) && isBlack(at(img, 90, 60)), 'a line where the dashes would be');
+  }
+  // it ran the heap out before
+  assert.ok(performance.now() - started < 5000);
+});
