@@ -269,3 +269,29 @@ test("a clip temp GC is created once and freed with the context", async () => {
   assert.equal(ctx._clipMaskGC, null, "and it is released with the context");
   pixmap.destroy();
 });
+
+test("a clip to a rounded box of no height clips everything", async () => {
+  // What an `overflow: hidden` box with rounded corners clips its content to
+  // once it has collapsed: a panel closed to nothing, a menu at no height.
+  // Its corners kept their radius, and the clip let a band of what it held
+  // through.
+  for (const [w, h] of [
+    [30, 0],
+    [0, 30],
+  ]) {
+    const ctx = freshCtx();
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(10, 20, w, h, 12);
+    ctx.clip();
+    ctx.fillStyle = "red";
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    const img = await read(ctx);
+    let through = 0;
+    for (let i = 0; i < img.data.length; i += 4) {
+      if (img.data[i] > 200 && img.data[i + 1] < 60) through += 1;
+    }
+    assert.equal(through, 0, `${w}x${h}: ${through} pixels got through`);
+  }
+});
