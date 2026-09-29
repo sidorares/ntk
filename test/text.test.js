@@ -908,3 +908,15 @@ test('TextLayout: Trebuchet MS kerns a space against an A, as a browser sets it'
   assert.equal(layout.lines.length, 1);
   assert.ok(Math.abs(layout.width - 429.73) < 0.05, `${layout.width}`);
 });
+
+test('TextLayout: a line a hair past its width fits it, as a browser fits it', () => {
+  // A line's advances summed in floating point come out a hair over the
+  // width they were set to fill, and a browser takes the line as fitting,
+  // comparing in 64ths of a pixel with one to spare: under a 64th past,
+  // the words stay on the line; past it, the last one goes to the next
+  const fonts = fixedFonts();
+  const style = { family: 'Test', size: 16 };
+  const width = new TextLayout(fonts, 'alpha beta', style).width;
+  assert.equal(new TextLayout(fonts, 'alpha beta', style, { maxWidth: width - 1 / 128 }).lines.length, 1);
+  assert.equal(new TextLayout(fonts, 'alpha beta', style, { maxWidth: width - 1 / 32 }).lines.length, 2);
+});
