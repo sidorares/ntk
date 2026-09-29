@@ -52,6 +52,21 @@ test('StaticFontSource matches family, weight and style', () => {
   assert.ok(fm.match('No Such Family'));
 });
 
+test('the last match answers again as it was, and a font loaded after it is seen', () => {
+  const fm = new FontManager({ source: staticSource() });
+  const regular = fm.match('Test Main');
+  // asked again, and again after another match: the same face each time
+  assert.equal(fm.match('Test Main'), regular);
+  assert.equal(fm.match('Test Main', { weight: 'bold' }).postscriptName, 'KaTeX_Main-Bold');
+  assert.equal(fm.match('Test Main'), regular);
+  // a weight spelled another way is the same question
+  assert.equal(fm.match('Test Main', { weight: 400 }), regular);
+  // a face registered for the family takes it over at once: the remembered
+  // match does not outlive the cache it came from
+  const loaded = fm.load(bytes('KaTeX_SansSerif-Regular.ttf'), { family: 'Test Main' });
+  assert.equal(fm.match('Test Main'), loaded);
+});
+
 test('per-codepoint fallback works through a StaticFontSource', () => {
   const fm = new FontManager({ source: staticSource() });
   // U+2136 (bet symbol) exists only in the AMS face
