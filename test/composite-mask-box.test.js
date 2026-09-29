@@ -173,7 +173,10 @@ test("the box is the fill's, not the clip's, and the clip still bites", async ()
   assertSamePixels(await read(ctx), await read(ref), "fill over the corner");
 });
 
-test("a fractional fill box grows to whole pixels rather than rounding", async () => {
+test("a fractional fill is put on whole pixels, edge by edge, before its mask is sized", async () => {
+  // Each edge rounded on its own (see rectsOnSurface): 30.5..51 across and
+  // 40.25..50.75 down fill 31..51 and 40..51, and the mask is that box — it
+  // used to be grown outward from the fractional one.
   const draw = (ctx) => {
     ctx.save();
     ctx.beginPath();
@@ -190,10 +193,10 @@ test("a fractional fill box grows to whole pixels rather than rounding", async (
   assert.deepEqual(
     writes.map((w) => w.box),
     [
-      { x: 30, y: 40, w: 21, h: 11 },
-      { x: 30, y: 40, w: 21, h: 11 },
+      { x: 31, y: 40, w: 20, h: 11 },
+      { x: 31, y: 40, w: 20, h: 11 },
     ],
-    "outward: the mask covers every pixel the composite samples",
+    "the rounded box: the mask covers every pixel the composite samples",
   );
 
   const ref = fullSurfaceCtx();
