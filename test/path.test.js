@@ -192,6 +192,34 @@ test('Path2D roundRect area is less than the sharp rect', () => {
   assert.ok(Math.abs(area - exact) / exact < 0.01, `${area} vs ${exact}`);
 });
 
+test('Path2D roundRect of no height or width keeps none of its corners', () => {
+  // The radii scale down so opposite corners never overlap, by the side's
+  // length over the radii along it — 0 for a side of no length. `|| 1` took
+  // that 0 for the 0 / 0 of radii of nothing, so the corners stayed, and the
+  // outline of a box of no height was two lobes of arc a radius above and
+  // below it.
+  for (const [w, h] of [
+    [30, 0],
+    [0, 30],
+    [0, 0],
+  ]) {
+    const p = new Path2D();
+    p.roundRect(10, 20, w, h, 12);
+    for (const { pts } of flattenPath(p._cmds, null)) {
+      for (let i = 0; i < pts.length; i += 2) {
+        assert.ok(pts[i] >= 10 && pts[i] <= 10 + w, `${w}x${h}: x ${pts[i]}`);
+        assert.ok(pts[i + 1] >= 20 && pts[i + 1] <= 20 + h, `${w}x${h}: y ${pts[i + 1]}`);
+      }
+    }
+    assert.equal(pathArea(p, null, 'nonzero'), 0);
+    assert.equal(pathArea(p, null, 'evenodd'), 0);
+  }
+  // …and radii of nothing on a real box leave it the box
+  const box = new Path2D();
+  box.roundRect(0, 0, 20, 10, [0, 0, 0, 0]);
+  assert.equal(pathArea(box), 200);
+});
+
 test('Path2D addPath with a transform', () => {
   const unit = new Path2D();
   unit.rect(0, 0, 1, 1);
