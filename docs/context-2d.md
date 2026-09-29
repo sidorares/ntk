@@ -61,8 +61,14 @@ ctx.fillRect(0, 0, 100, 100);
   `destination-in`, `source-out`, `destination-out`, `source-atop`,
   `destination-atop`, `xor`, `lighter`. With a shape/clip mask the op only
   applies inside the mask coverage
-- `ctx.font` — CSS-ish font string (`'bold italic 40px "DejaVu Sans"'`),
-  resolved through fontconfig; see [fonts.md](fonts.md)
+- `ctx.font` — the CSS `font` shorthand (`'bold italic 40px "DejaVu Sans"'`),
+  resolved through fontconfig; see [fonts.md](fonts.md). Style, weight,
+  `small-caps` and a stretch keyword come in any order before the size; a
+  `/line-height` after it is read and ignored, as canvas ignores it; sizes
+  take any CSS length, `em` and `%` against the 20px a context starts with;
+  and the whole family list is kept, so a letter the first family lacks is
+  set in the next (`'16px "Some Font", serif'`). A string that is not a font
+  is ignored and the font stays what it was
 
 Everything that puts ink on the surface goes through the clip: fills,
 strokes, images, text (`fillText`, `TextLayout.draw`) and the vector shapes

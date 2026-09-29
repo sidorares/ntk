@@ -1,5 +1,5 @@
 // Browser stub for node's `util` — just the handful of helpers reached by
-// bundled dependencies (lru-cache v4 via canvas-fontstyle uses inherits and
+// bundled dependencies (pngjs uses inherits and
 // inspect-ish debugging).
 'use strict';
 

@@ -43,7 +43,6 @@
   },
   "dependencies": {
     "bidi-js": "^1.0.3",
-    "canvas-fontstyle": "^1.0.1",
     "domutils": "^4.0.2",
     "extrude-polyline": "^1.0.6",
     "fontkit": "^2.0.4",
