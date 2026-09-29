@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.14.4](https://github.com/sidorares/ntk/compare/v8.14.3...v8.14.4) (2026-09-29)
+
+
+### Bug Fixes
+
+* **text:** each face of a font collection gets its own shared glyph page ([#451](https://github.com/sidorares/ntk/issues/451)) ([d4a12a1](https://github.com/sidorares/ntk/commit/d4a12a1692d8915f327a021a9242ec8bd5a3e3df))
+
 ## [8.14.3](https://github.com/sidorares/ntk/compare/v8.14.2...v8.14.3) (2026-09-29)
 
 
