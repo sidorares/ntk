@@ -211,6 +211,83 @@ test('more spellings than the cache holds all still parse', () => {
   }
 });
 
+const parsesTo = (value, want) => {
+  const got = cssColorStraight(value);
+  assert.ok(got, `${value} is a colour`);
+  assert.ok(
+    got.every((v, i) => Math.abs(v - want[i]) < 1e-9),
+    `${value}: got [${got}], want [${want}]`
+  );
+};
+
+test("CSS Color 4's rgb() and hsl(): spaces, a slash before the alpha, none", () => {
+  parsesTo('rgb(255 128 0)', [1, 128 / 255, 0, 1]);
+  parsesTo('rgb(255 128 0 / 50%)', [1, 128 / 255, 0, 0.5]);
+  parsesTo('rgba(0 0 0/.25)', [0, 0, 0, 0.25]);
+  parsesTo('rgb(100% 50% 0%)', [1, 0.5, 0, 1]);
+  // `none` is a component left out, which is zero
+  parsesTo('rgb(none 255 none / none)', [0, 1, 0, 0]);
+  parsesTo('hsl(120 100% 50%)', [0, 1, 0, 1]);
+  parsesTo('hsl(240deg 100% 50% / 0.5)', [0, 0, 1, 0.5]);
+  // …and saturation and lightness as bare numbers, which mean percentages
+  parsesTo('hsl(0 100 50)', [1, 0, 0, 1]);
+});
+
+test('an rgb() percentage is a percentage, and nothing is out of range', () => {
+  // parse-color read 100% as a byte of 100: 39% red
+  parsesTo('rgb(100%, 0%, 0%)', [1, 0, 0, 1]);
+  parsesTo('rgba(0, 0, 0, 50%)', [0, 0, 0, 0.5]);
+  // clamped as CSS clamps; a component past 1 reached XRender as it was
+  parsesTo('rgb(300, -5, 0)', [1, 0, 0, 1]);
+  parsesTo('rgba(0, 0, 0, 2)', [0, 0, 0, 1]);
+  parsesTo('rgb(0 0 0 / -1)', [0, 0, 0, 0]);
+});
+
+test('a hue takes any angle unit, and goes round', () => {
+  for (const hue of ['120', '120deg', '133.333grad', `${(2 * Math.PI) / 3}rad`, '0.3333turn', '-240', '480']) {
+    const [r, g, b] = cssColorStraight(`hsl(${hue} 100% 50%)`);
+    assert.deepEqual([r, g, b], [0, 1, 0], hue);
+  }
+});
+
+test("colour names and functions are case-insensitive, as CSS's are", () => {
+  parsesTo('TOMATO', [1, 99 / 255, 71 / 255, 1]);
+  parsesTo('RebeccaPurple', [0.4, 0.2, 0.6, 1]);
+  parsesTo('RGB(255, 0, 0)', [1, 0, 0, 1]);
+  parsesTo('HSLA(120, 100%, 50%, .5)', [0, 1, 0, 0.5]);
+});
+
+test('what CSS does not read is still not a colour', () => {
+  for (const value of [
+    'rgb(255 0 0 0.5)', // an alpha needs its slash
+    'rgb(255 0)',
+    'rgb(255 0 0 / 0.5 / 1)',
+    'rgb(255, 0, 0',
+    'rgb(NaN 0 0)',
+    'hsl(120px 100% 50%)',
+    'currentcolor'
+  ]) {
+    assert.equal(cssColorStraight(value), null, value);
+  }
+});
+
+test('the modern syntax paints what it says', async () => {
+  near(
+    await over('#000', (ctx) => {
+      ctx.fillStyle = 'rgb(255 0 0 / 50%)';
+    }),
+    [128, 0, 0],
+    'half red over black'
+  );
+  near(
+    await over('#000', (ctx) => {
+      ctx.fillStyle = 'hsl(240 100% 50%)';
+    }),
+    [0, 0, 255],
+    'hsl blue'
+  );
+});
+
 test('a colour string paints with one picture, however often it is set', () => {
   // by its spelling (App#solidPictureOf), over the solid the numbers name
   const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });

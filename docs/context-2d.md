@@ -27,8 +27,12 @@ ctx.fillRect(0, 0, 100, 100);
   or a `Picture`.
   Named colors, `rgb[a]()`, `hsl[a]()` and hex in all four lengths
   (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) are accepted; anything
-  unparseable throws rather than drawing something arbitrary. See
-  **Color** below for what alpha does
+  unparseable throws rather than drawing something arbitrary. The
+  functions take both of CSS Color 4's syntaxes — commas, or spaces with
+  the alpha after a slash (`rgb(255 128 0 / 50%)`, `hsl(120deg 50% 50%)`),
+  with percentages, `none` and any angle unit — and names and functions
+  are case-insensitive. A component out of range is clamped, as CSS clamps
+  it. See **Color** below for what alpha does
 - `ctx.lineWidth`, `ctx.lineCap`, `ctx.lineJoin`, `ctx.miterLimit` — stroke
   geometry, including `'round'` caps and joins (rendered as triangle-fan
   disks unioned with the stroke mesh). A join whose inner corner would fall
