@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.14.7](https://github.com/sidorares/ntk/compare/v8.14.6...v8.14.7) (2026-09-29)
+
+
+### Bug Fixes
+
+* **raster:** a drawing is rasterized the same way wherever it lands ([#461](https://github.com/sidorares/ntk/issues/461)) ([24ac3cf](https://github.com/sidorares/ntk/commit/24ac3cf8df73851b4b0160dc553efb7d79df2a36))
+
 ## [8.14.6](https://github.com/sidorares/ntk/compare/v8.14.5...v8.14.6) (2026-09-29)
 
 
