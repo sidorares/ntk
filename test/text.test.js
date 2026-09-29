@@ -828,3 +828,83 @@ test('TextLayout: at a width no cluster fits, a word is not searched for a cut',
   );
 });
 
+
+test('TextLayout: a pair kerned across a break opportunity is kerned on a line, and not across a line break', () => {
+  // Each token between break opportunities is shaped apart, so a pair
+  // either side of one — Trebuchet MS kerns a space against an A — was
+  // never kerned, and a line of it came out wider than a browser's. A face
+  // standing in for it here: its space and an A set 2px closer together.
+  const fonts = fixedFonts();
+  const inner = fonts._shapeCached;
+  fonts._shapeCached = function (text, ...rest) {
+    const shaped = inner.call(this, text, ...rest);
+    if (!text.includes(' A')) return shaped;
+    const runs = shaped.runs.map((r, i) => (i ? r : { ...r, width: r.width - 2 }));
+    return { ...shaped, width: shaped.width - 2, runs };
+  };
+  const style = { family: 'Test', size: 16 };
+  // and its tables say so, as Trebuchet's do (./pairs.js)
+  fonts.match('Test', style).mayKern = () => true;
+  const apart = (text) => inner.call(fonts, text, { ...style, font: fonts.match('Test', style) }).width;
+  const kerned = apart('x ') + apart('A') - 2;
+
+  const one = new TextLayout(fonts, 'x A', style);
+  assert.equal(one.lines.length, 1);
+  assert.ok(Math.abs(one.width - kerned) < 1e-6, `${one.width} is the kerned ${kerned}`);
+  const [first, second] = one.lines[0].runs;
+  assert.ok(Math.abs(second.x - (first.width - 2)) < 1e-6, 'the A is set 2px closer');
+
+  // a line just as wide as the kerned pair holds both
+  assert.equal(new TextLayout(fonts, 'x A', style, { maxWidth: kerned + 1e-3 }).lines.length, 1);
+  // and where the line breaks between them, the A starts its own line
+  const broken = new TextLayout(fonts, 'x A', style, { maxWidth: apart('x') + 1 });
+  assert.equal(broken.lines.length, 2);
+  assert.equal(broken.lines[1].runs[0].x, 0);
+  assert.ok(Math.abs(broken.lines[1].width - apart('A')) < 1e-6);
+});
+
+test('TextLayout: a pair shaped otherwise together than apart is left as it is', () => {
+  // a contextual glyph across a break opportunity is no offset between the
+  // two: only a pair whose glyphs are the same either way is kerned
+  const fonts = fixedFonts();
+  const inner = fonts._shapeCached;
+  fonts._shapeCached = function (text, ...rest) {
+    const shaped = inner.call(this, text, ...rest);
+    if (!text.includes(' A')) return shaped;
+    const runs = shaped.runs.map((r, i) =>
+      i ? r : { ...r, width: r.width - 2, glyphs: r.glyphs.map((g, j) => (j ? g : { ...g, id: g.id + 1 })) }
+    );
+    return { ...shaped, width: shaped.width - 2, runs };
+  };
+  const style = { family: 'Test', size: 16 };
+  fonts.match('Test', style).mayKern = () => true;
+  const apart = (text) => inner.call(fonts, text, { ...style, font: fonts.match('Test', style) }).width;
+  const layout = new TextLayout(fonts, 'x A', style);
+  assert.ok(Math.abs(layout.width - (apart('x ') + apart('A'))) < 1e-6);
+});
+
+test('a face whose tables kern no space is not asked to shape a pair', () => {
+  // KaTeX's main face kerns letters and not its space: a paragraph of it
+  // shapes its words and nothing more
+  const fonts = fixedFonts();
+  const shaped = [];
+  const inner = fonts._shapeCached;
+  fonts._shapeCached = function (text, ...rest) {
+    shaped.push(text);
+    return inner.call(this, text, ...rest);
+  };
+  new TextLayout(fonts, 'x A b C', { family: 'Test', size: 16 });
+  assert.deepEqual(shaped.sort(), ['A ', 'C', 'b ', 'x ']);
+});
+
+test('TextLayout: Trebuchet MS kerns a space against an A, as a browser sets it', needsFonts, (t) => {
+  const fonts = new FontManager();
+  const face = fonts.match('Trebuchet MS', { size: 12 });
+  if (face.fk?.familyName !== 'Trebuchet MS') return t.skip('Trebuchet MS is not installed');
+  const style = { family: 'Trebuchet MS', size: 12 };
+  // Chrome sets this sentence 429.73px wide, and on one line at 430
+  const text = 'Chrome, Firefox, iOS and Android browsers (run by over 90% of the population).';
+  const layout = new TextLayout(fonts, text, style, { maxWidth: 430 });
+  assert.equal(layout.lines.length, 1);
+  assert.ok(Math.abs(layout.width - 429.73) < 0.05, `${layout.width}`);
+});
