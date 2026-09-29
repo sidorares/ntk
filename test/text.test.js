@@ -565,7 +565,12 @@ test('a cut never lands inside a grapheme cluster', () => {
     // a mark on the first letter is the first cluster, and a CR and the LF
     // after it are one: the ways ASCII text joins into a cluster
     'e\u0301aaaaaa',
-    'aa\r\naa'
+    'aa\r\naa',
+    // Latin letters and the punctuation typeset around them, which are cut
+    // without a segmenter — and a mark after a dash, which is not
+    'naïve—“café”…ÆØÅ',
+    '—\u0301aaaaaa',
+    'aa\u200d\u200caa'
   ]) {
     const valid = prefixes(text);
     for (let maxWidth = 8; maxWidth <= 120; maxWidth += 4) {
@@ -577,6 +582,24 @@ test('a cut never lands inside a grapheme cluster', () => {
       );
     }
   }
+});
+
+test('Latin text and its punctuation are cut without a segmenter', (t) => {
+  // UAX#29 joins nothing below U+0300, nor in the general punctuation block
+  // but its two joiners, so cutting such text asks no segmenter — which is
+  // a microsecond a word, and 10 ms for the first one made
+  const fonts = fixedFonts();
+  const segment = t.mock.method(Intl.Segmenter.prototype, 'segment');
+  for (const text of ['naïve—“café”…', 'Æsir – ‘quoted’ ÿ']) {
+    for (let maxWidth = 8; maxWidth <= 120; maxWidth += 4) {
+      new TextLayout(fonts, text, { family: 'sans-serif', size: 16 }, { maxWidth, maxLines: 1, overflow: 'ellipsis' });
+      new TextLayout(fonts, text, { family: 'sans-serif', size: 16 }, { maxWidth, overflowWrap: 'anywhere' });
+    }
+  }
+  assert.equal(segment.mock.callCount(), 0);
+  // …and a mark after a dash still goes to it
+  new TextLayout(fonts, '—\u0301aaaaaa', { family: 'sans-serif', size: 16 }, { maxWidth: 8, maxLines: 1, overflow: 'ellipsis' });
+  assert.ok(segment.mock.callCount() > 0);
 });
 
 test('the ellipsis stands for the text after it, for caret purposes', () => {
