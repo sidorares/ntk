@@ -920,3 +920,67 @@ test('TextLayout: a line a hair past its width fits it, as a browser fits it', (
   assert.equal(new TextLayout(fonts, 'alpha beta', style, { maxWidth: width - 1 / 128 }).lines.length, 1);
   assert.equal(new TextLayout(fonts, 'alpha beta', style, { maxWidth: width - 1 / 32 }).lines.length, 2);
 });
+
+test('TextLayout: a pair either side of a kernAcross span is kerned, as it is unspaced', () => {
+  // Spacing is in addition to kerning (CSS Text 3, 7.2), and a justified
+  // line spaces its spaces alone, each a span of its own: the pairs a space
+  // makes with the letters beside it were dropped there, and the line came
+  // out wider than the same line unjustified. A face standing in for
+  // Arial: a space set 2px closer to an A after it, and an A 3px closer to
+  // a space after it.
+  const fonts = fixedFonts();
+  const inner = fonts._shapeCached;
+  fonts._shapeCached = function (text, ...rest) {
+    const shaped = inner.call(this, text, ...rest);
+    const kern = (text.includes(' A') ? 2 : 0) + (text.includes('A ') ? 3 : 0);
+    if (!kern) return shaped;
+    const runs = shaped.runs.map((r, i) => (i ? r : { ...r, width: r.width - kern }));
+    return { ...shaped, width: shaped.width - kern, runs };
+  };
+  const style = { family: 'Test', size: 16 };
+  fonts.match('Test', style).mayKern = () => true;
+  const spaced = (text) =>
+    text
+      .split(/( )/)
+      .filter(Boolean)
+      .map((t) => (t === ' ' ? { text: t, letterSpacing: 1, kernAcross: true } : { text: t }));
+
+  // the pair across a break opportunity, and the pair inside a word
+  const plain = new TextLayout(fonts, 'x A x', style).width;
+  const apart = new TextLayout(fonts, spaced('x A x'), style).width;
+  assert.ok(Math.abs(apart - (plain + 2)) < 1e-6, `${apart} is ${plain} and its two spaces' spacing`);
+
+  // an A a line ends on keeps its kerning with the space it hangs
+  const head = new TextLayout(fonts, spaced('x A'), style).width;
+  const broken = new TextLayout(fonts, spaced('x A x'), style, { maxWidth: head + 1 });
+  assert.equal(broken.lines.length, 2);
+  assert.ok(Math.abs(broken.lines[0].width - (head - 3)) < 1e-6, `${broken.lines[0].width}`);
+
+  // an element's letter spacing is shaped apart, as a browser shapes it,
+  // and so is a span that differs in more than its spacing
+  const bare = (text) => inner.call(fonts, text, { ...style, font: fonts.match('Test', style) }).width;
+  const spacedA = inner.call(fonts, 'A', { ...style, letterSpacing: 1, font: fonts.match('Test', style) }).width;
+  const element = new TextLayout(fonts, [{ text: 'x ' }, { text: 'A', letterSpacing: 1 }], style).width;
+  assert.ok(Math.abs(element - (bare('x ') + spacedA)) < 1e-6, `${element}`);
+  const bold = new TextLayout(fonts, [{ text: 'x ' }, { text: 'A', weight: 700, kernAcross: true }], style).width;
+  assert.ok(Math.abs(bold - (bare('x ') + bare('A'))) < 1e-6, `${bold}`);
+});
+
+test('TextLayout: a line of Arial with its spaces spaced for justifying keeps their pairs', needsFonts, (t) => {
+  const fonts = new FontManager();
+  const face = fonts.match('Arial', { size: 11 });
+  if (face.fk?.familyName !== 'Arial') return t.skip('Arial is not installed');
+  const style = { family: 'Arial', size: 11 };
+  // Chrome sets this line 188.94px wide, justified or not, and on one line
+  // in a column of 189: Arial kerns a space against a T, and an L against
+  // a space
+  const text = 'into this very page. The HTML remains';
+  const spaced = text
+    .split(/( )/)
+    .filter(Boolean)
+    .map((s) => (s === ' ' ? { text: s, letterSpacing: 1e-6, kernAcross: true } : { text: s }));
+  const plain = new TextLayout(fonts, text, style, { maxWidth: 189 });
+  const justified = new TextLayout(fonts, spaced, style, { maxWidth: 189 });
+  assert.equal(justified.lines.length, 1);
+  assert.ok(Math.abs(justified.width - plain.width) < 1e-4, `${justified.width} is ${plain.width}`);
+});
