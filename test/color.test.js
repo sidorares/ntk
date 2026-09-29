@@ -163,6 +163,27 @@ test('an unparseable colour throws instead of writing garbage', () => {
   }, /Not a color/);
 });
 
+test('a colour that throws leaves the style as it was', async () => {
+  // The throw is the documented answer to a string that is not a colour;
+  // the setter had kept the string before throwing, and `fillRects`, which
+  // reads the string again, threw from a later paint with nothing wrong in it.
+  const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'rgb(10, 20, 30)';
+  ctx.strokeStyle = 'rgb(40, 50, 60)';
+  assert.throws(() => {
+    ctx.fillStyle = 'nonsense';
+  }, /Not a color/);
+  assert.throws(() => {
+    ctx.strokeStyle = '';
+  }, /Not a color/);
+  assert.equal(ctx.fillStyle, 'rgb(10, 20, 30)');
+  assert.equal(ctx.strokeStyle, 'rgb(40, 50, 60)');
+  ctx.fillRects([[0, 0, W, H]]);
+  const img = await ctx.getImageData(0, 0, 1, 1);
+  assert.deepEqual([...img.data.slice(0, 3)], [10, 20, 30]);
+});
+
 test('a colour parsed again is the same colour, and each caller gets its own', () => {
   // Parsed once per spelling (lib/color.js): what has to hold is that the
   // cache changes nothing a caller can see.

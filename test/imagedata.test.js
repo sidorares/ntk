@@ -359,3 +359,30 @@ describe('readPixels', () => {
     assert.deepEqual([...converted], [...img.data]);
   });
 });
+
+describe('putImageData, put anywhere', () => {
+  // Canvas takes every position and extent as a WebIDL long and puts only
+  // what the surface has. X takes the corner in 16 bits: image data put a
+  // million pixels away threw, and a fractional dirty rectangle reached the
+  // typed-array copies and threw there.
+  test('what the surface has is put, and nothing throws', async () => {
+    const ctx = freshCtx();
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, W, H);
+    const black = new ImageData(8, 8);
+    for (let i = 3; i < black.data.length; i += 4) black.data[i] = 255;
+    ctx.putImageData(black, 1e6, 1e6);
+    ctx.putImageData(black, -1e6, 0);
+    ctx.putImageData(black, NaN, Infinity); // taken as (0, 0)
+    ctx.putImageData(black, 12, 12); // half past the right and the bottom
+    // a fractional, upside-down dirty rectangle: rows 0..1, columns 0..3
+    ctx.putImageData(black, 0, 8, 0.5, 1.5, 3.7, -2.2);
+    const img = await ctx.getImageData(0, 0, W, H);
+    const at = (x, y) => img.data[(y * W + x) * 4];
+    assert.equal(at(2, 2), 0, 'the NaN and Infinity put, at the origin');
+    assert.equal(at(14, 14), 0, 'the part of the half-off put the surface has');
+    assert.equal(at(1, 8), 0, 'the dirty rectangle, as long values');
+    assert.equal(at(1, 9), 255, 'and no more of it');
+    assert.equal(at(10, 2), 255, 'nothing elsewhere');
+  });
+});

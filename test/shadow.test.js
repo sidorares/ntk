@@ -889,3 +889,23 @@ describe('blurCoverage on the public surface', () => {
     assert.match(docs, /^## Baking a blur$/m);
   });
 });
+
+// A shadow the surface has none of is drawn as nothing. X takes a
+// destination's corner in 16 bits, and a shadow thrown past it threw out of
+// the paint that drew it: an offset of 65,535, or text a million pixels away.
+test('a shadow thrown past what the wire can carry draws nothing, and throws nothing', async () => {
+  const ctx = target();
+  ctx.fillStyle = 'black';
+  ctx.font = '20px sans-serif';
+  ctx.shadowColor = 'black';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 65535;
+  ctx.fillText('hello', 10, 30);
+  ctx.fillRect(10, 10, 20, 20);
+  ctx.shadowOffsetY = 0;
+  ctx.fillText('far', 1e12, 1e12);
+  const at = await readAll(ctx);
+  // the rectangle itself is there, and no shadow anywhere near it
+  assert.equal(at(15, 15)[3], 255, 'the rectangle');
+  assert.equal(at(60, 60)[3], 0, 'nothing beside it');
+});

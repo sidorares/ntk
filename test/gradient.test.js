@@ -168,3 +168,75 @@ test('beyond its outermost stops a gradient clamps to their colours', async () =
   near(at(4, 32)[0], 0, 6, 'before the first stop clamps to black');
   near(at(60, 32)[0], 255, 6, 'after the last stop clamps to white');
 });
+
+// XRender takes a gradient's points and radii in 16.16 fixed point, and a
+// coordinate past 32,767 overflowed the word it is written into, out of the
+// paint that used the gradient. One that reaches that far is made at a scale
+// that fits, with the picture transform scaled to match.
+
+test('a gradient reaching past what the wire carries paints what the same gradient does nearer', async () => {
+  const far = freshCtx();
+  const g = far.createLinearGradient(-100000, 0, 100000, 0);
+  g.addColorStop(0, 'black');
+  g.addColorStop(1, 'white');
+  far.fillStyle = g;
+  far.fillRect(0, 0, W, H);
+  // the same ramp, made a thousand times smaller and painted under a
+  // transform that stretches it back
+  const near_ = freshCtx();
+  near_.setTransform(1000, 0, 0, 1, 0, 0);
+  const small = near_.createLinearGradient(-100, 0, 100, 0);
+  small.addColorStop(0, 'black');
+  small.addColorStop(1, 'white');
+  near_.fillStyle = small;
+  near_.fillRect(0, 0, W / 1000, H);
+  const a = await pixels(far);
+  const b = await pixels(near_);
+  for (const x of [0, 20, 40, 63]) near(a(x, 30)[0], b(x, 30)[0], 2, `x ${x}`);
+  // the middle of a ramp 200,000 wide: half way, whatever the surface shows
+  near(a(32, 30)[0], 128, 3, 'the middle');
+
+  const radial = freshCtx();
+  const r = radial.createRadialGradient(32, 32, 0, 32, 32, 100000);
+  r.addColorStop(0, 'black');
+  r.addColorStop(1, 'white');
+  radial.fillStyle = r;
+  radial.fillRect(0, 0, W, H);
+  near((await pixels(radial))(32, 32)[0], 0, 3, 'a radial one reaching as far, at its centre');
+});
+
+test('a gradient the server could not be asked for names no picture after', async () => {
+  const errors = [];
+  const report = console.error;
+  console.error = (...args) => errors.push(args.join(' '));
+  try {
+    const ctx = freshCtx();
+    // a stop past what 16.16 fixed point carries: the request for the
+    // picture throws as it is written
+    const broken = ctx.createLinearGradient(0, 0, 10, 0);
+    broken.addColorStop(1e10, 'black');
+    ctx.fillStyle = broken;
+    assert.throws(() => ctx.fillRect(0, 0, 10, 10));
+    // asked again, it is asked again — not a picture the server never made
+    assert.throws(() => ctx.fillRect(0, 0, 10, 10));
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, 10, 10);
+    near((await pixels(ctx))(5, 5)[0], 0, 3, 'the fill after it');
+  } finally {
+    console.error = report;
+  }
+  assert.deepEqual(errors.filter((e) => /X error/.test(e)), []);
+});
+
+test('a gradient with geometry that is not finite paints, rather than throwing', async () => {
+  // canvas refuses such a gradient when it is made; here it is taken as 0
+  // where it is not finite, and a NaN had kept a point of 32,768 from
+  // being scaled to fit
+  const ctx = freshCtx();
+  const g = ctx.createLinearGradient(32768, NaN, -1, Infinity);
+  g.addColorStop(0, 'black');
+  g.addColorStop(1, 'black');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  near((await pixels(ctx))(10, 10)[0], 0, 3, 'painted in its colour');
+});
