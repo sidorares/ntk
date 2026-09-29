@@ -38,6 +38,39 @@ delete process.env.NTK_NO_SHARED_GLYPHS;
 const require = createRequire(import.meta.url);
 const fontDir = join(dirname(require.resolve('katex/package.json')), 'dist', 'fonts');
 const fontBytes = readFileSync(join(fontDir, 'KaTeX_Main-Regular.ttf'));
+const boldBytes = readFileSync(join(fontDir, 'KaTeX_Main-Bold.ttf'));
+
+/**
+ * A font collection (.ttc) of single-face fonts: the header, each face's
+ * table directory, then every table at its new offset. Helvetica.ttc is the
+ * shape this stands in for — a regular and a bold face in one file, their
+ * glyphs numbered alike — and KaTeX's Main faces number theirs alike too.
+ */
+function collectionOf(faces) {
+  const head = Buffer.alloc(12 + 4 * faces.length);
+  head.write('ttcf', 0, 'latin1');
+  head.writeUInt32BE(0x00010000, 4);
+  head.writeUInt32BE(faces.length, 8);
+  const dirs = faces.map((face) => Buffer.from(face.subarray(0, 12 + 16 * face.readUInt16BE(4))));
+  let dataAt = head.length + dirs.reduce((n, dir) => n + dir.length, 0);
+  let dirAt = head.length;
+  const tables = [];
+  faces.forEach((face, i) => {
+    head.writeUInt32BE(dirAt, 12 + 4 * i);
+    dirAt += dirs[i].length;
+    for (let t = 0; t < face.readUInt16BE(4); t++) {
+      const record = 12 + 16 * t;
+      const offset = face.readUInt32BE(record + 8);
+      const length = face.readUInt32BE(record + 12);
+      dirs[i].writeUInt32BE(dataAt, record + 8);
+      const table = Buffer.alloc((length + 3) & ~3);
+      face.copy(table, 0, offset, offset + length);
+      tables.push(table);
+      dataAt += table.length;
+    }
+  });
+  return Buffer.concat([head, ...dirs, ...tables]);
+}
 
 function makeFontSource() {
   const source = new StaticFontSource();
@@ -72,12 +105,12 @@ function spyRasterize(font) {
 const TEXT_W = 200;
 const TEXT_H = 60;
 
-async function drawText(app, text, { size = 24 } = {}) {
+async function drawText(app, text, { size = 24, weight = '' } = {}) {
   const pixmap = app.createPixmap({ width: TEXT_W, height: TEXT_H, depth: 24 });
   const ctx = pixmap.getContext('2d');
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, TEXT_W, TEXT_H);
-  ctx.font = `${size}px sans-serif`;
+  ctx.font = `${weight} ${size}px sans-serif`.trim();
   ctx.fillStyle = 'black';
   ctx.fillText(text, 10, 40);
   const img = await ctx.getImageData(0, 0, TEXT_W, TEXT_H);
@@ -139,7 +172,7 @@ function makeWorld() {
 // ---------------------------------------------------------------------------
 
 test('glyphd wire: requests round-trip in both key modes', () => {
-  const fontReq = { token: 'ntkg1:abc:wght=460:24:a8', indices: true, keys: [0, 7, 65535], bytes: 0 };
+  const fontReq = { token: 'ntkg2:abc:Face-Bold:wght=460:24:a8', indices: true, keys: [0, 7, 65535], bytes: 0 };
   assert.deepEqual(parseGlyphdRequest(encodeGlyphdRequest(fontReq)), fontReq);
 
   const shapeReq = {
@@ -181,9 +214,27 @@ test('font page tokens are content-addressed and pin size and version', () => {
   const a = Font.fromData(fontBytes);
   const b = Font.fromData(fontBytes);
   const t24 = fontPageToken(a, 24);
-  assert.match(t24, /^ntkg1:[0-9a-f]{40}::24:a8$/, 'versioned, hashed, static face has no coords');
+  assert.match(
+    t24,
+    /^ntkg2:[0-9a-f]{40}:KaTeX_Main-Regular::24:a8$/,
+    'versioned, hashed, the face named, static face has no coords'
+  );
   assert.equal(fontPageToken(b, 24), t24, 'two loads of the same bytes name the same page');
   assert.notEqual(fontPageToken(a, 32), t24, 'the pixel size is part of the name');
+});
+
+test('the faces of one collection are pages of their own', () => {
+  const collection = collectionOf([fontBytes, boldBytes]);
+  const regular = Font.fromData(collection, { postscriptName: 'KaTeX_Main-Regular' });
+  const bold = Font.fromData(collection, { postscriptName: 'KaTeX_Main-Bold' });
+  assert.equal(bold.fk.postscriptName, 'KaTeX_Main-Bold', 'the collection holds both faces');
+  // one file, so one hash: the name has to say which face of it
+  assert.notEqual(fontPageToken(regular, 24), fontPageToken(bold, 24));
+  assert.equal(
+    fontPageToken(Font.fromData(collection, { postscriptName: 'KaTeX_Main-Bold' }), 24),
+    fontPageToken(bold, 24),
+    'and a face loaded twice is still one page'
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -242,6 +293,42 @@ test('an unwarmed first draw falls back privately, then adopts the shared page',
     const second = await drawText(app2, 'Hello');
     assert.equal(uploads.n, before, 'the adopted page re-draws with zero uploads');
     assert.equal(Buffer.compare(first, second), 0, 'fallback and shared draws are pixel-identical');
+  } finally {
+    await world.close();
+  }
+});
+
+test("a collection's regular face draws its own glyphs where its bold face shared them first", async () => {
+  // Helvetica.ttc on a Mac: a page's bold lead ("The X Window System")
+  // uploaded `w` before any regular text had one, and every regular `w` on
+  // the display was drawn bold from then on — in every ntk app, for as long
+  // as the directory held the page
+  const collection = collectionOf([fontBytes, boldBytes]);
+  const fontSource = () => {
+    const source = new StaticFontSource();
+    source.add(collection, { family: 'Test Main', postscriptName: 'KaTeX_Main-Regular', weight: 400 });
+    source.add(collection, { family: 'Test Main', postscriptName: 'KaTeX_Main-Bold', weight: 700 });
+    source.alias('sans-serif', 'Test Main');
+    return source;
+  };
+  const world = makeWorld();
+  try {
+    const alone = await world.app({ fontSource: fontSource(), sharedGlyphs: false });
+    const regular = await drawText(alone, 'wow');
+    const bold = await drawText(alone, 'wow', { weight: 'bold' });
+    assert.notEqual(Buffer.compare(regular, bold), 0, 'the two faces draw differently');
+
+    const app1 = await world.app({ fontSource: fontSource() });
+    const boldFace = app1.fonts.match('sans-serif', { weight: 700 });
+    assert.equal(boldFace.fk.postscriptName, 'KaTeX_Main-Bold');
+    assert.equal(await warmSharedGlyphs(app1, boldFace, 24, 'wow'), true, 'the bold glyphs are shared');
+
+    const app2 = await world.app({ fontSource: fontSource() });
+    const regularFace = app2.fonts.match('sans-serif');
+    assert.equal(regularFace.fk.postscriptName, 'KaTeX_Main-Regular');
+    assert.equal(await warmSharedGlyphs(app2, regularFace, 24, 'wow'), true);
+    assert.equal(Buffer.compare(await drawText(app2, 'wow'), regular), 0, 'drawn in its own weight');
+    assert.equal(Buffer.compare(await drawText(app1, 'wow', { weight: 'bold' }), bold), 0);
   } finally {
     await world.close();
   }

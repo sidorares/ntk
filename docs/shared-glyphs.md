@@ -145,13 +145,13 @@ version. Two addressing families cover everything ntk uploads:
 file, far too big to name literally, so a hash stands in for it:
 
 ```
-ntkg1:<sha1 of font file bytes>:<variation coords>:<px size>:<format>
+ntkg2:<sha1 of font file bytes>:<face>:<variation coords>:<px size>:<format>
 ```
 
-with the member key being the font glyph index. Two refinements the
+with the member key being the font glyph index. Three refinements the
 "sha1 of font + glyph id" idea needs in practice:
 
-- **The namespace version (`ntkg1`) is load-bearing, not hygiene.** A
+- **The namespace version (`ntkg2`) is load-bearing, not hygiene.** A
   glyph's advance is baked into the set at `AddGlyphs` time (`offX`,
   rounded by the uploader), and idempotent duplicate uploads assume
   byte-identical rasterization. Both hold only among processes running
@@ -162,6 +162,12 @@ with the member key being the font glyph index. Two refinements the
   shared use, cached per `Font` — a `path#psName` key
   (`lib/text/font.js`) names a file on *this* machine, which another
   process, or the same app after an upgrade, cannot trust.
+- **A file is not a face.** A collection — Helvetica.ttc, a `.dfont` —
+  holds several faces, and they number their glyphs alike, so `<face>`,
+  the face's PostScript name, is the half of `path#psName` the hash does
+  not replace. `ntkg1` left it out: Helvetica and Helvetica-Bold were one
+  page, and whichever face uploaded a glyph first was what both drew — a
+  bold lead's `w` in every regular `w` on the display after it.
 
 **Shape pages are parameter-addressed** — hashing would be overkill and
 worse. The rounded-box fast path (`lib/shapeglyphs.js`) mints corner
