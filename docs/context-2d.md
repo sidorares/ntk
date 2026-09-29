@@ -864,11 +864,36 @@ sigma-is-half-the-radius rule and the bake-don't-filter rule are all there.
 **Text shadows are cached** — keyed by (text, font, blur) on the connection —
 because text is the one drawing with a short, stable name. A label redrawn
 every frame, or a specimen redrawn on every slider tick, builds its coverage
-once and composites it afterwards. Paths, rectangles and images have no such
-key and rebuild their coverage per draw, so a large blurred path shadow in a
-render loop is the shape to watch for; draw it into a `Surface` yourself —
+once and composites it afterwards.
+
+**A rectangle's or a rounded rectangle's shadow comes from a tile.** A
+blurred `fill` of a path that is one `rect()` or one `roundRect()` — circular
+or elliptical corners — or, filled `'evenodd'`, one inside another (the
+frame an inset box shadow is cast around), and a blurred `fillRect`, is not
+blurred where it is drawn. Its shadow is the same all along its straight
+edges wherever they are and however long, so it is made once, for a copy
+of the shape shortened to three pixels of straight edge on each axis that
+has room, and drawn as up to nine pieces of that tile: the corners as they
+are, the straight pixel stretched between them. The tile is named by the
+corners, the blur and the hole — not by where the shape is, how long its
+sides are, or which part of it a paint reaches — so every card on a page
+with the same shadow draws from one, a strip a scroll exposes across a
+shadow composites a strip of it, and none of it runs a server blur. It is
+kept with the other shadow coverage (`cacheBytes`), made in JavaScript from
+the shape's exact coverage and a gaussian of σ `shadowBlur / 2`, and a wide
+blur's tile is made at a half, a quarter, … of the size, as a wide blur is
+above, and scaled up as it is drawn. It is uncapped by `maxSigma`: what a
+tile costs is bounded by that scale. On XQuartz a header's
+`box-shadow: inset 0 0 100px` repainted by a scroll's exposed strip went
+from 31 to 52 frames a second. The plan and the pixels have no X in them and
+are exported as `ntk/shadow-tiles`, which react-x11 draws its CoreGraphics
+and Direct2D shadows from too.
+
+A shape under a transform that rotates, skews or mirrors, and any other
+path or image, still blurs its coverage per draw — a large blurred path in a
+render loop is the shape to watch for; draw it into a `Surface` yourself,
 with [`blurCoverage`](surface.md#baking-a-blur) if the blur is the expensive
-part — and `drawImage` that instead.
+part, and `drawImage` that instead.
 
 **Laid-out text is cached too**, on the identity of the runs it is made of
 rather than on a string: a whole paragraph is one coverage surface, whatever
@@ -910,6 +935,8 @@ defaults):
   at 4, four at 3, seven at 2
 - `maxScale` (4) — how far that shrink may go whatever the floor allows.
   `maxScale: 1` blurs everything at full resolution, which is what 8.6 did
+- `tiles` (true) — whether a rectangle's or a rounded rectangle's shadow
+  comes from a tile, as above. `false` blurs every shadow where it is drawn
 
 Only what could be seen is rendered: a shape's ink is clipped to the part
 whose shadow can land on the target at all (its own bounds, moved back by
