@@ -1,5 +1,25 @@
 # Changelog
 
+## [8.14.3](https://github.com/sidorares/ntk/compare/v8.14.2...v8.14.3) (2026-09-29)
+
+
+### Bug Fixes
+
+* **color:** rgb() and hsl() in CSS Color 4's syntax, rgb() percentages as percentages, every component clamped ([#445](https://github.com/sidorares/ntk/issues/445)) ([18f7f50](https://github.com/sidorares/ntk/commit/18f7f50b135a77bff053670e13fe386a4f505bb0))
+* **context2d:** a rectangle with a negative size is drawn the other way, and one that is not finite not at all ([#440](https://github.com/sidorares/ntk/issues/440)) ([8f56e13](https://github.com/sidorares/ntk/commit/8f56e136fb807c375648c1797cc0d3b616b74993))
+* **context2d:** a shadow, gradient or image put past what X carries draws what it can instead of throwing ([#444](https://github.com/sidorares/ntk/issues/444)) ([13d0d50](https://github.com/sidorares/ntk/commit/13d0d506ace89200914a62a6745d2cbf37d92038))
+* **context2d:** read the font shorthand ourselves — 2000px is a size, not weight 200 at size 0 ([#447](https://github.com/sidorares/ntk/issues/447)) ([7984353](https://github.com/sidorares/ntk/commit/7984353def1a14621bfdaf40664075a0eb2531c6))
+* **rasterize:** an edge past the grid's border is cut there, and one with no row in it passed over ([#443](https://github.com/sidorares/ntk/issues/443)) ([76724a0](https://github.com/sidorares/ntk/commit/76724a020aee485f25b85b8f4ec011262b748a91))
+* **text:** a vector glyph bigger than the surface is cut to it, instead of asking X for a mask it cannot make ([#446](https://github.com/sidorares/ntk/issues/446)) ([47a7b6a](https://github.com/sidorares/ntk/commit/47a7b6a0bf6d4ca4c1e4cbd0d1486a2a944a0ee3))
+
+
+### Performance Improvements
+
+* **context2d:** dash a stroke only where the surface can show it ([#441](https://github.com/sidorares/ntk/issues/441)) ([2e2b30d](https://github.com/sidorares/ntk/commit/2e2b30ded3a057c2721ff4fef73c74a78eb46d5c))
+* **text:** answer the last font match again without looking it up ([#450](https://github.com/sidorares/ntk/issues/450)) ([b80aed5](https://github.com/sidorares/ntk/commit/b80aed5dddb081ebfe7cfb464af6a49078cf32a4))
+* **text:** cut Latin text and its punctuation into clusters without a segmenter ([#448](https://github.com/sidorares/ntk/issues/448)) ([f833913](https://github.com/sidorares/ntk/commit/f833913da8700d12dbec9c1e949cb6a8d2fbe5a0))
+* **text:** hand the last run's glyph page back without looking it up again ([#449](https://github.com/sidorares/ntk/issues/449)) ([fcaa742](https://github.com/sidorares/ntk/commit/fcaa742e6ebf952e119436fd579794f90e573cbd))
+
 ## [8.14.2](https://github.com/sidorares/ntk/compare/v8.14.1...v8.14.2) (2026-09-28)
 
 
