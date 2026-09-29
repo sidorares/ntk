@@ -42,7 +42,11 @@ ctx.fillRect(0, 0, 100, 100);
   copy, and the state participates in `save()`/`restore()`. Dashing splits
   the flattened polyline by arc length, so caps apply to each dash; on
   closed subpaths the pattern continues around the loop (no cap at the seam
-  unless a gap lands there)
+  unless a gap lands there). Only the part of a path the surface can show is
+  dashed; the rest moves the pattern along by its length, so a dashed border
+  round a box far taller than the window costs what the window shows. A
+  pattern that would still make more than 100,000 dashes there is stroked
+  solid, as Chrome's Skia strokes one: dashes that fine are a tone
 - `ctx.globalAlpha` — multiplies fills, strokes, `fillRect` and `drawImage`
   (not text)
 - `ctx.shadowColor`, `ctx.shadowBlur`, `ctx.shadowOffsetX`,
