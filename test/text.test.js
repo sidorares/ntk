@@ -984,3 +984,34 @@ test('TextLayout: a line of Arial with its spaces spaced for justifying keeps th
   assert.equal(justified.lines.length, 1);
   assert.ok(Math.abs(justified.width - plain.width) < 1e-4, `${justified.width} is ${plain.width}`);
 });
+
+test('TextLayout: a line fits as a browser fits it, each span rounded up to a 64th', () => {
+  // A browser rounds each item of a line, an element's text, up to a 64th
+  // of a pixel before it adds it (Blink's SnappedWidth), and fits the sum
+  // with a 64th to spare. Words that fit as one span, a hair over, break as
+  // three, each part rounded up; spaces spaced out apart, as a justified
+  // line's are, are part of the text around them and round with it
+  const fonts = fixedFonts();
+  const style = { family: 'Test', size: 16.3 };
+  const up = (width) => Math.ceil(width * 64 - 1e-7) / 64;
+  const words = ['alpha ', 'beta', ' gamma'];
+  const spans = words.map((text) => ({ text }));
+  const whole = new TextLayout(fonts, words.join(''), style).width;
+  const rounded = new TextLayout(fonts, spans, style).lines[0].runs.reduce((sum, run) => sum + up(run.width), 0);
+  assert.ok(rounded > up(whole), `the parts round up past the whole: ${rounded} ${up(whole)}`);
+  const maxWidth = up(whole) - 1 / 64;
+  assert.equal(new TextLayout(fonts, words.join(''), style, { maxWidth }).lines.length, 1, 'one span fits');
+  assert.equal(new TextLayout(fonts, spans, style, { maxWidth }).lines.length, 2, 'three spans, rounded up, do not');
+  const spaced = [
+    { text: 'alpha' },
+    { text: ' ', kernAcross: true },
+    { text: 'beta' },
+    { text: ' ', kernAcross: true },
+    { text: 'gamma' }
+  ];
+  assert.equal(
+    new TextLayout(fonts, spaced, style, { maxWidth }).lines.length,
+    1,
+    'spaces spaced apart round with the text around them'
+  );
+});
