@@ -31,6 +31,7 @@
     "./path": "./lib/path.js",
     "./gl": "./lib/gl.js",
     "./shadow-math": "./lib/shadowmath.js",
+    "./shadow-tiles": "./lib/shadowtiles.js",
     "./image": "./lib/image.js",
     "./svg": "./lib/widgets/svgview.js",
     "./font": "./lib/text/font.js"

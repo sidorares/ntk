@@ -760,16 +760,22 @@ describe('a wide blur runs at reduced scale', () => {
   test('the 2d context gets it without asking', async () => {
     // The shadow properties call blurCoverage, so the reduced kernel is what
     // the server sees for a wide `shadowBlur` — and the shadow still lands.
+    // A triangle: a rect or a rounded rect is drawn from a tile instead.
     const ctx = target(160, 140);
     const { filters } = record(() => {
       ctx.shadowColor = '#ff0000';
       ctx.shadowBlur = 42; // sigma 21
       ctx.fillStyle = 'rgba(0, 0, 0, 0)';
-      ctx.fillRect(50, 50, 60, 40);
+      ctx.beginPath();
+      ctx.moveTo(40, 40);
+      ctx.lineTo(120, 40);
+      ctx.lineTo(80, 110);
+      ctx.closePath();
+      ctx.fill();
     });
     assert.equal(taps(filters), 2 * shadowReach(21 / 4) + 1);
     const at = await readAll(ctx, 160, 140);
-    assert.ok(at(80, 70)[3] > 100, `the shadow is there (alpha ${at(80, 70)[3]})`);
+    assert.ok(at(80, 60)[3] > 100, `the shadow is there (alpha ${at(80, 60)[3]})`);
     ctx.destroy();
   });
 

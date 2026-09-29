@@ -69,6 +69,7 @@ for (const [specifier, allowed] of [
   ['ntk/path', []],
   ['ntk/gl', []],
   ['ntk/shadow-math', []],
+  ['ntk/shadow-tiles', []],
   ['ntk/image', []],
   // the SVG parser is what this one is for
   ['ntk/svg', ['htmlparser2']]
