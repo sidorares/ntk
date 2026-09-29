@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.16.1](https://github.com/sidorares/ntk/compare/v8.16.0...v8.16.1) (2026-09-29)
+
+
+### Performance Improvements
+
+* **shadows:** a rect's or a rounded rect's shadow comes from a tile made once ([#471](https://github.com/sidorares/ntk/issues/471)) ([27eccb4](https://github.com/sidorares/ntk/commit/27eccb485999f6dd3517b3761cbd4231f1fdcee1))
+
 ## [8.16.0](https://github.com/sidorares/ntk/compare/v8.15.1...v8.16.0) (2026-09-29)
 
 
