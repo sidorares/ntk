@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { DEFAULT_TEXT_POLICY, routeGlyphSize, trimGlyphPages } from '../lib/text/glyphs.js';
+import { DEFAULT_TEXT_POLICY, getGlyphPage, routeGlyphSize, trimGlyphPages } from '../lib/text/glyphs.js';
 
 const fakeFont = (key) => ({ key });
 const fakeApp = (policy) => ({ textPolicy: policy });
@@ -84,6 +84,26 @@ test('trimGlyphPages never evicts pages referenced by the current draw', () => {
   trimGlyphPages(app, undefined, new Set([inUsePage]));
   assert.deepEqual(destroyed, ['other']);
   assert.ok(app._glyphPages.has('inuse'));
+});
+
+test('the page the last run used is handed back as it is, and an evicted one never is', () => {
+  // shared glyphs "on", so a page makes no private set on a server this has not got
+  const app = { textPolicy: { cacheBytes: 0 }, _sharedGlyphs: {} };
+  const font = { key: 'face' };
+  const a = getGlyphPage(app, font, 16);
+  assert.equal(getGlyphPage(app, font, 16), a, 'asked again: the same page');
+  const b = getGlyphPage(app, font, 20);
+  assert.notEqual(b, a);
+  assert.equal(getGlyphPage(app, font, 16), a, 'and back: still the page it was');
+  // the LRU order is the map's, most recent last, whatever the memo skipped
+  assert.deepEqual([...app._glyphPages.values()], [b, a]);
+  a.bytes = 1;
+  b.bytes = 1;
+  trimGlyphPages(app);
+  assert.equal(app._glyphPages.size, 0, 'a budget of nothing evicts both');
+  const again = getGlyphPage(app, font, 16);
+  assert.notEqual(again, a, 'a destroyed page is not handed back');
+  assert.equal(app._glyphPages.get('face@16'), again);
 });
 
 test('default policy matches issue #45 thresholds', () => {
