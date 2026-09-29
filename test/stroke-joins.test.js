@@ -254,3 +254,80 @@ test('closed curves are symmetric too, up to the arc lowering', async () => {
     assert.ok(worst <= 16, `${name}: asymmetry ${worst} at ${where}`);
   }
 });
+
+// ---------------------------------------------- a loop arc() leaves open
+
+/** a ring about the centre, from arc(); closed when asked */
+function ring(ctx, { close = false } = {}) {
+  ctx.beginPath();
+  ctx.arc(CX, CY, 30, 0, 2 * Math.PI);
+  if (close) ctx.closePath();
+  ctx.stroke();
+}
+
+test('a full circle from arc() strokes as the loop it is, closed or not', async () => {
+  // arc() leaves its subpath open, so a stroked ring was an open run whose
+  // two ends met at angle 0 — each with a cap square to its own chord, and
+  // a flattened curve's first and last chords point a chord's angle apart.
+  // A wedge of ink went missing outside the seam, a hairline across every
+  // ring, and was doubled inside it. The ring drawn open is the ring drawn
+  // closed now, whatever the cap.
+  for (const cap of ['butt', 'round', 'square']) {
+    for (const lw of [1.5, 3.3, 8]) {
+      const style = (ctx) => {
+        ctx.lineWidth = lw;
+        ctx.lineCap = cap;
+      };
+      const open = await render((ctx) => {
+        style(ctx);
+        ring(ctx);
+      });
+      const closed = await render((ctx) => {
+        style(ctx);
+        ring(ctx, { close: true });
+      });
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          assert.equal(
+            open(x, y),
+            closed(x, y),
+            `${cap} cap, lineWidth ${lw}: open and closed differ at ${x},${y}`
+          );
+        }
+      }
+      // and the seam is nowhere to be seen: a quarter turn maps the ring
+      // onto itself, up to the arc lowering's few steps (see above)
+      const { worst, where } = asymmetry(open);
+      assert.ok(worst <= 16, `${cap} cap, lineWidth ${lw}: asymmetry ${worst} at ${where}`);
+    }
+  }
+});
+
+test('a translucent ring is not double-inked where it began', async () => {
+  const at = await render((ctx) => {
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.lineWidth = 8;
+    ring(ctx);
+  });
+  const { worst, where } = asymmetry(at);
+  assert.ok(worst <= 16, `asymmetry ${worst} at ${where}`);
+});
+
+test('a path that comes back to its start at a corner keeps its caps', async () => {
+  // Only a loop that leaves the way it arrived is stroked as one. A square
+  // drawn back to its first corner without closePath has two ends there,
+  // and the spec gives them caps: butt ends leave that corner notched, as a
+  // browser draws it, while the three corners in between are joined.
+  const at = await render((ctx) => {
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(20, 20);
+    ctx.lineTo(100, 20);
+    ctx.lineTo(100, 100);
+    ctx.lineTo(20, 100);
+    ctx.lineTo(20, 20);
+    ctx.stroke();
+  });
+  assert.equal(at(17, 17), 255, 'the corner the path began and ended at is notched');
+  assert.equal(at(102, 17), 0, 'a corner in between is joined');
+});
