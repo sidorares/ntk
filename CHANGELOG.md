@@ -1,5 +1,16 @@
 # Changelog
 
+## [8.14.5](https://github.com/sidorares/ntk/compare/v8.14.4...v8.14.5) (2026-09-29)
+
+
+### Bug Fixes
+
+* **context:** a destroyed context takes its listeners off its drawable ([#457](https://github.com/sidorares/ntk/issues/457)) ([b9544e7](https://github.com/sidorares/ntk/commit/b9544e7e9137ea0a1e00cb3e0889ec293e0abcf9))
+* **fill:** a fractional rectangle's edges round to whole pixels, each on its own ([#456](https://github.com/sidorares/ntk/issues/456)) ([ca84c05](https://github.com/sidorares/ntk/commit/ca84c05090819bbbfaae977e471bbe5adc5aad3c))
+* **path:** a rounded rectangle of no height or width keeps none of its corners ([#453](https://github.com/sidorares/ntk/issues/453)) ([8278672](https://github.com/sidorares/ntk/commit/827867226f79d3045c403c3f17a0bec8d57a31f9))
+* **stroke:** a loop that ends heading the way it began is stroked closed ([#455](https://github.com/sidorares/ntk/issues/455)) ([b9b8217](https://github.com/sidorares/ntk/commit/b9b8217cd563e41f62fc338d7753194c95d913b5))
+* **text:** a face with no x-height in its tables takes its x's ([#458](https://github.com/sidorares/ntk/issues/458)) ([621ffcd](https://github.com/sidorares/ntk/commit/621ffcdf013d1bed99b9d7475e607a29a8ccb3cb))
+
 ## [8.14.4](https://github.com/sidorares/ntk/compare/v8.14.3...v8.14.4) (2026-09-29)
 
 
