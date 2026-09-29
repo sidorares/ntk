@@ -990,18 +990,26 @@ test('TextLayout: a line fits as a browser fits it, each span rounded up to a 64
   // of a pixel before it adds it (Blink's SnappedWidth), and fits the sum
   // with a 64th to spare. Words that fit as one span, a hair over, break as
   // three, each part rounded up; spaces spaced out apart, as a justified
-  // line's are, are part of the text around them and round with it
+  // line's are, are part of the text around them and round with it; and a
+  // line is as wide as it was fitted, so it fits its own width again
   const fonts = fixedFonts();
   const style = { family: 'Test', size: 16.3 };
+  const items = { fit: 'items' };
   const up = (width) => Math.ceil(width * 64 - 1e-7) / 64;
   const words = ['alpha ', 'beta', ' gamma'];
   const spans = words.map((text) => ({ text }));
   const whole = new TextLayout(fonts, words.join(''), style).width;
-  const rounded = new TextLayout(fonts, spans, style).lines[0].runs.reduce((sum, run) => sum + up(run.width), 0);
+  const split = new TextLayout(fonts, spans, style);
+  const rounded = split.lines[0].runs.reduce((sum, run) => sum + up(run.width), 0);
   assert.ok(rounded > up(whole), `the parts round up past the whole: ${rounded} ${up(whole)}`);
   const maxWidth = up(whole) - 1 / 64;
-  assert.equal(new TextLayout(fonts, words.join(''), style, { maxWidth }).lines.length, 1, 'one span fits');
-  assert.equal(new TextLayout(fonts, spans, style, { maxWidth }).lines.length, 2, 'three spans, rounded up, do not');
+  assert.equal(new TextLayout(fonts, words.join(''), style, { ...items, maxWidth }).lines.length, 1, 'one span fits');
+  assert.equal(
+    new TextLayout(fonts, spans, style, { ...items, maxWidth }).lines.length,
+    2,
+    'three spans, rounded up, do not'
+  );
+  assert.equal(new TextLayout(fonts, spans, style, { maxWidth }).lines.length, 1, 'unless asked to be');
   const spaced = [
     { text: 'alpha' },
     { text: ' ', kernAcross: true },
@@ -1010,8 +1018,16 @@ test('TextLayout: a line fits as a browser fits it, each span rounded up to a 64
     { text: 'gamma' }
   ];
   assert.equal(
-    new TextLayout(fonts, spaced, style, { maxWidth }).lines.length,
+    new TextLayout(fonts, spaced, style, { ...items, maxWidth }).lines.length,
     1,
     'spaces spaced apart round with the text around them'
+  );
+  const measured = new TextLayout(fonts, spans, style, items);
+  assert.equal(measured.width, rounded, 'as wide as it was fitted');
+  assert.equal(measured.lines[0].width, rounded, 'and so is its line');
+  assert.equal(
+    new TextLayout(fonts, spans, style, { ...items, maxWidth: measured.width }).lines.length,
+    1,
+    'and it fits its own width'
   );
 });
