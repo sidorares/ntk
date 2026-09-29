@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.16.0](https://github.com/sidorares/ntk/compare/v8.15.1...v8.16.0) (2026-09-29)
+
+
+### Features
+
+* **text:** only a layout with fit: 'items' rounds its spans up to a 64th, in its widths as in its fill ([#469](https://github.com/sidorares/ntk/issues/469)) ([10489c2](https://github.com/sidorares/ntk/commit/10489c2e5d120353c75aaa5ff3813fb70789d4e8))
+
 ## [8.15.1](https://github.com/sidorares/ntk/compare/v8.15.0...v8.15.1) (2026-09-29)
 
 
