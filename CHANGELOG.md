@@ -1,5 +1,17 @@
 # Changelog
 
+## [8.15.0](https://github.com/sidorares/ntk/compare/v8.14.7...v8.15.0) (2026-09-29)
+
+
+### Features
+
+* **text:** a kernAcross span keeps its kerning, as a justified space does ([#466](https://github.com/sidorares/ntk/issues/466)) ([0178ef5](https://github.com/sidorares/ntk/commit/0178ef5f48d91302dd06e1ea5e900f36ecc8bc0a))
+
+
+### Bug Fixes
+
+* **text:** a line a hair past its width fits it, as a browser fits it ([#464](https://github.com/sidorares/ntk/issues/464)) ([2148d40](https://github.com/sidorares/ntk/commit/2148d405b8e42edd5fe418141d427f88a81a1c64))
+
 ## [8.14.7](https://github.com/sidorares/ntk/compare/v8.14.6...v8.14.7) (2026-09-29)
 
 
