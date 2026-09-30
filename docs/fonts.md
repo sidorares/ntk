@@ -84,6 +84,18 @@ wrong one. ntk names Helvetica ahead of the generic in the pattern it hands
 fontconfig's own `sans-serif` list — CJK to Hiragino, as before. Every other
 family, and every other platform, reaches `fc-match` as written.
 
+A weight is translated onto fontconfig's scale, where regular is 80 and
+black is 210. The hundreds are fontconfig's named weights — 400 is its
+regular, 700 its bold — and a weight between two of them is as far between
+theirs, rounded to a whole number: `font-weight: 450` asks for 90, halfway
+from regular to medium. Weights below 100 and above 900 ask for thin and
+black. The face is then the one fontconfig finds nearest that weight, so 450
+in a family with a regular and a bold is the regular, as it is in a browser.
+Nearest is not quite CSS's rule, which looks in a direction first — heavier
+above 500, lighter below 400, and up to 500 between the two — so the faces
+differ where a weight sits between two a family has, on the side CSS does
+not look first: 520 in Arial is the regular here and the bold in a browser.
+
 Text layout is synchronous, so it always pays that cost inline. Code that
 can await — a font picker matching as the user types, a preferences page —
 should ask the source instead, and not block the event loop at all:
