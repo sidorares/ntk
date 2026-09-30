@@ -2,7 +2,8 @@
 // instance cut out of it per point that is actually asked for.
 //
 // Hermetic — the variable face is `test/fixtures`, since nothing else in the
-// tree has an axis and fontkit cannot instantiate one out of a .woff2.
+// tree has an axis: as an sfnt, and as the WOFF and the WOFF2 a web page
+// serves.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -31,6 +32,74 @@ function manager() {
 }
 
 // --- the axis ---------------------------------------------------------------
+
+for (const container of ['woff', 'woff2']) {
+  test(`an instance comes out of a .${container} as it does out of the sfnt`, () => {
+    // fontkit 2.0.4 rebuilt the face as a plain sfnt from the container's
+    // bytes: the instance had no tables, and the first character drawn in it
+    // threw. A web page set in a variable font — nextjs.org in Geist — drew
+    // nothing at any weight but the file's default.
+    const file = join(fixtures, `MonelogicsSubset[wght].${container}`);
+    const font = Font.loadSync(file);
+    const sfnt = load();
+    assert.equal(font.fk.type, container.toUpperCase());
+    assert.deepEqual(font.variationAxes, sfnt.variationAxes);
+
+    /** every glyph of a face: its outline, its advance and its box */
+    const glyphsOf = (face) =>
+      Array.from({ length: face.fk.numGlyphs }, (_, id) => {
+        const glyph = face.fk.getGlyph(id);
+        const { minX, minY, maxX, maxY } = glyph.bbox;
+        return `${id} ${glyph.advanceWidth} ${glyph.path.toSVG()} ${[minX, minY, maxX, maxY]}`;
+      });
+
+    for (const wght of [100, 650, 900]) {
+      const instance = font.variation({ wght });
+      const expected = sfnt.variation({ wght });
+      assert.equal(widthOf(instance), widthOf(expected), `the sample's width at ${wght}`);
+      // every glyph, not the sample's: the ones a WOFF2's `loca` read as
+      // empty were the ones that did not come out
+      assert.deepEqual(glyphsOf(instance), glyphsOf(expected), `every glyph at ${wght}`);
+      const [first] = instance.shape(SAMPLE, 64).glyphs;
+      assert.ok(instance.rasterize(first.id, 64), 'an instance rasterizes');
+    }
+    // and the face it was cut from is as it was
+    assert.equal(widthOf(font), widthOf(sfnt));
+  });
+
+  test(`text is laid out in a registered .${container} at a weight off its default`, () => {
+    // the way a web font arrives: bytes, registered under a name, and then
+    // matched at the weight a style asks for, which is where it threw
+    const bytes = readFileSync(join(fixtures, `MonelogicsSubset[wght].${container}`));
+    const fonts = manager();
+    fonts.load(bytes, { family: 'Web VF', weight: 400 });
+    const bold = fonts.match('Web VF', { weight: 700 });
+    assert.deepEqual(bold.variationCoords, { wght: 700 });
+    const regular = fonts.layout([{ text: SAMPLE }], { family: 'Web VF', size: 40, weight: 400 }, {});
+    const heavy = fonts.layout([{ text: SAMPLE }], { family: 'Web VF', size: 40, weight: 700 }, {});
+    assert.ok(heavy.width > regular.width, 'bold sets wider than regular');
+    const sfnt = manager().layout([{ text: SAMPLE }], { family: 'Test VF', size: 40, weight: 700 }, {});
+    assert.equal(heavy.width, sfnt.width, 'as wide as in the sfnt');
+  });
+}
+
+test("a WOFF2 glyph's box is its outline's, whatever its loca table reads as", () => {
+  // the transformed `glyf` of a WOFF2 has no `loca` in the file, and what
+  // fontkit reads in its place called five of this face's glyphs empty:
+  // their boxes were read from a header that is not there
+  const font = Font.loadSync(join(fixtures, 'MonelogicsSubset[wght].woff2'));
+  const sfnt = load();
+  for (let id = 0; id < font.fk.numGlyphs; id += 1) {
+    const { minX, minY, maxX, maxY } = font.fk.getGlyph(id).cbox;
+    const outline = sfnt.fk.getGlyph(id).bbox;
+    if (!sfnt.fk.getGlyph(id).path.commands.length) continue;
+    assert.deepEqual(
+      [minX, minY, maxX, maxY],
+      [outline.minX, outline.minY, outline.maxX, outline.maxY],
+      `glyph ${id}`
+    );
+  }
+});
 
 test('a variable face reports its axes, a static one reports none', () => {
   const font = load();

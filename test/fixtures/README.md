@@ -1,11 +1,12 @@
 # Test fixtures
 
-## `MonelogicsSubset[wght].ttf`
+## `MonelogicsSubset[wght].ttf`, `.woff`, `.woff2`
 
 A variable font, for the variable-font tests — nothing else in the tree has
-an axis, and `fontkit` cannot instantiate one out of a `.woff2` (see
-`docs/fonts.md#variable-fonts`), so a real uncompressed variable face has to
-be here.
+an axis. The `.woff` and the `.woff2` are the same font in the containers a
+web page serves one in, made from the `.ttf` with fontTools
+(`TTFont(path)`, `font.flavor = 'woff2'`, `font.save(...)`): an instance has
+to come out of each the same (see `docs/fonts.md#variable-fonts`).
 
 It is [monelogics](https://github.com/sklinkert/monelogics-font) 3.002
 (itself a derivative of Libre Franklin), subset to the glyphs the tests set —
