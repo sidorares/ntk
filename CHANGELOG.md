@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.17.3](https://github.com/sidorares/ntk/compare/v8.17.2...v8.17.3) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** fontkit comes from npm again, and a variable face in a WOFF or a WOFF2 is read as the sfnt inside it ([#485](https://github.com/sidorares/ntk/issues/485)) ([b5d5320](https://github.com/sidorares/ntk/commit/b5d5320724dc6d30dbaf5bd63faac4a50dacb48e))
+* **svg:** an element that is display: none is not drawn, nor anything in it ([#483](https://github.com/sidorares/ntk/issues/483)) ([3ece30b](https://github.com/sidorares/ntk/commit/3ece30b6758ca811112463e81fcd680bc46d7edf))
+
 ## [8.17.2](https://github.com/sidorares/ntk/compare/v8.17.1...v8.17.2) (2026-09-30)
 
 
