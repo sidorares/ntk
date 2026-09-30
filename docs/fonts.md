@@ -478,20 +478,25 @@ Step the control, not the font.
 A variable font is instantiated out of whatever ntk reads it from: `.ttf`
 and `.otf`, and `.woff` and `.woff2`, which is how a variable web font is
 nearly always served. The instance is the same font whichever it came in —
-the tests set the same text in all three and compare.
+the tests compare every glyph of one across the three.
 
-That is fontkit's doing, and not yet the fontkit on npm: 2.0.4 rebuilds the
-face as a plain sfnt from the container's bytes, so an instance of a WOFF or
-a WOFF2 came back with no tables and threw at the first character drawn —
-a web page set in a variable font drew nothing at any weight but the file's
-default. ntk depends on
-[windowkit's fork](https://github.com/windowkit/fontkit), which carries the
-fix ([foliojs/fontkit#389](https://github.com/foliojs/fontkit/pull/389)), as
-a release tarball rather than a version on npm: `package.json` names its
-URL. Nothing about installing ntk changes. An application that pins
-`fontkit` itself — an `overrides` entry, a resolution — to npm's gets npm's
-behaviour back, and ntk says so at the call: `cannot instantiate a variation
-of …`.
+fontkit does not do that by itself. It cuts an instance by reading the file
+again as a plain sfnt, which neither container is: a WOFF has another
+directory and a WOFF2 is Brotli-compressed, so the instance came back with
+no tables and threw at the first character drawn — a web page set in a
+variable font drew nothing at any weight but the file's default. So a
+variable face that arrives in a container is read from the sfnt inside it
+(`lib/text/sfnt.js`): a WOFF's tables inflated, a WOFF2's decompressed and
+its `glyf` and `loca` written back from the streams the format keeps them
+as. That is done once, when the face is opened — 10 ms for Geist's 70 KB
+variable WOFF2 — and costs the font's uncompressed size in memory, which
+fontkit holds for a WOFF2 it has read anyway.
+
+A static face stays in its container: nothing is asked of it that the
+container does not answer. A container that cannot be taken apart — a
+WOFF2 whose `hmtx` is transformed, which fontkit does not read either —
+stays too, and `variation()` says so at the call: `cannot instantiate a
+variation of …`.
 
 ## Font objects and matching
 

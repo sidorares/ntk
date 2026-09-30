@@ -1,6 +1,6 @@
 {
   "name": "ntk",
-  "version": "8.17.2",
+  "version": "8.17.3",
   "description": "Desktop UI toolkit for X11 with canvas-like 2d and OpenGL rendering",
   "author": "Andrey Sidorov <sidorares@yandex.ru>",
   "license": "MIT",
@@ -46,7 +46,7 @@
     "bidi-js": "^1.0.3",
     "domutils": "^4.0.2",
     "extrude-polyline": "^1.0.6",
-    "fontkit": "https://github.com/windowkit/fontkit/releases/download/v2.0.4-windowkit.1/fontkit-2.0.4-windowkit.1.tgz",
+    "fontkit": "^2.0.4",
     "htmlparser2": "^12.0.0",
     "jpeg-js": "^0.4.4",
     "linebreak": "^1.1.0",

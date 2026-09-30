@@ -322,6 +322,42 @@ test('SvgView: paint declared on the root <svg> reaches the shapes', async (t) =
   pixmap.destroy();
 });
 
+test('SvgView: display, visibility, a style opacity and a nested <svg>, as a browser draws them', async (t) => {
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx } = freshCtx(200);
+
+  // each drew an opaque red square at 8,8, the last at 0,0 rather than 10,10
+  const square = (attrs) => `<rect ${attrs} x="8" y="8" width="24" height="24" fill="#cf222e"/>`;
+  const docs = [
+    square('display="none"'),
+    square('style="display:none"'),
+    square('visibility="hidden"'),
+    square('style="opacity:.2"'),
+    '<svg x="10" y="10" width="20" height="20"><rect width="20" height="20" fill="#cf222e"/></svg>'
+  ];
+  docs.forEach((body, i) =>
+    new SvgView(null)
+      .setSvg(`<svg width="40" height="40"><rect width="40" height="40" fill="#ddf4ff"/>${body}</svg>`)
+      .draw(ctx, i * 40, 0)
+  );
+
+  const image = await readPixels(ctx, 200, 200);
+  const back = [0xdd, 0xf4, 0xff];
+  const red = [0xcf, 0x22, 0x2e];
+  for (const i of [0, 1, 2]) assert.deepEqual(px(image, 200, i * 40 + 20, 20), back, `document ${i + 1} draws no square`);
+  // a fifth of the red over the blue
+  const faint = px(image, 200, 3 * 40 + 20, 20);
+  back.forEach((c, k) => {
+    const want = 0.2 * red[k] + 0.8 * c;
+    assert.ok(Math.abs(faint[k] - want) <= 3, `faint square channel ${k}: ${faint[k]}, want ~${want}`);
+  });
+  assert.deepEqual(px(image, 200, 4 * 40 + 5, 5), back, 'nothing of the nested svg at its own 0,0');
+  assert.deepEqual(px(image, 200, 4 * 40 + 12, 12), red, 'the nested svg is at 10,10');
+  assert.deepEqual(px(image, 200, 4 * 40 + 28, 28), red, 'and 20 across');
+  assert.deepEqual(px(image, 200, 4 * 40 + 32, 32), back);
+  pixmap.destroy();
+});
+
 test('createPattern: a tile repeats across a fill, on a real server', async (t) => {
   if (skip) return t.skip(skip);
   const { pixmap, ctx } = freshCtx();

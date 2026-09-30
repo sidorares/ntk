@@ -222,20 +222,18 @@ What that means in practice:
   reached, and with a working answer for every machine that does not have it.
   What it buys cannot be had in JS at all — only a GPU driver can produce a
   dma-buf.
-  **`fontkit` is a fork's release tarball, not a version on npm.** Upstream
-  releases rarely (2.0.4 is from 2024) and a fix ntk needs can wait there
-  for years: `getVariation` on a WOFF or WOFF2, without which a web page in
-  a variable font drew nothing (foliojs/fontkit#389). So `dependencies`
-  names the URL of a tarball attached to a GitHub release of
-  [windowkit/fontkit](https://github.com/windowkit/fontkit) — what
-  `npm publish` would have uploaded, built by that repository's release
-  workflow from a tag, with the lockfile holding its integrity. Not a
-  `github:` spec: a git dependency has no `dist/`, npm builds one on every
-  install with parcel and the rest of the devDependencies, and Bun installs
-  it unbuilt. The fork's `WINDOWKIT.md` lists what it carries and how a
-  release is cut. **When upstream releases a version with all of it, go back
-  to a range on npm** — the fork is a bridge, and `lib/text/marks.js` reads
-  fontkit's internals, so a build that drifts from upstream is a cost.
+  **A dependency is a version on npm — never a URL, never a git ref.** npm
+  12 fetches neither unless an application says so (`allow-remote` and
+  `allow-git` default to `none`), and for a dependency of a dependency an
+  application cannot say so short of allowing them all. 8.17.2 named a fork
+  of fontkit by its release tarball's URL, to get `getVariation` on a WOFF2
+  before upstream had it: every test job passed on the npm its Node ships,
+  the publish job, which upgrades npm, refused the dependency in `npm ci`,
+  and the version never reached the registry — where no application on
+  that npm could have installed it. CI's `publishable` job now does what the
+  publish job does and then installs the packed result. What fontkit lacks
+  is made here, around it (`lib/text/sfnt.js`, `lib/text/marks.js`), and
+  offered upstream (foliojs/fontkit#389); it is not waited for.
 - **ESM**, Node >= 18.19. No TypeScript for now (a possible later migration —
   keep JSDoc accurate instead). `process.getBuiltinModule` (Node >= 20.16) is
   reached through `lib/builtin.js`, which falls back to `createRequire` below

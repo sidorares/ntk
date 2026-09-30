@@ -6,7 +6,8 @@ A variable font, for the variable-font tests — nothing else in the tree has
 an axis. The `.woff` and the `.woff2` are the same font in the containers a
 web page serves one in, made from the `.ttf` with fontTools
 (`TTFont(path)`, `font.flavor = 'woff2'`, `font.save(...)`): an instance has
-to come out of each the same (see `docs/fonts.md#variable-fonts`).
+to come out of each the same, and the sfnt ntk makes of each has to be the
+`.ttf` again (see `docs/fonts.md#variable-fonts`).
 
 It is [monelogics](https://github.com/sklinkert/monelogics-font) 3.002
 (itself a derivative of Libre Franklin), subset to the glyphs the tests set —
