@@ -768,6 +768,51 @@ test('the pattern fc-match receives is the platform list', () => {
   assert.equal(out.path, '/f/A.ttf');
 });
 
+// fontconfig's weights are not CSS's: regular is 80 there and black 210. A
+// weight that is not one of the hundreds went over as it was, so 450 was a
+// weight past twice black, and the face was the heaviest the family has:
+// text a page sets at `font-weight: 450` came out in Arial Bold, where a
+// browser sets it in Arial Regular.
+test('a weight between two of the hundreds is between their weights in the pattern', () => {
+  const cases = [
+    [450, 90], // halfway from regular (80) to medium (100)
+    [550, 140],
+    [650, 190],
+    [425, 85],
+    [850, 208], // 207.5: a pattern's weight is a whole number
+    ['450', 90],
+    // CSS takes 1 to 1000, and what is outside the table is its nearest end
+    [950, 210],
+    [1000, 210],
+    [1, 0],
+    // the hundreds and the keywords, as they were
+    [400, 80],
+    [500, 100],
+    ['600', 180],
+    ['normal', 80],
+    ['bold', 200]
+  ];
+  const out = prewarmProbe(
+    "import { readFileSync } from 'node:fs';\n" +
+      "import { join } from 'node:path';\n" +
+      'process.env.PATH = BIN.args;\n' +
+      // a family a case, so that two cases with one answer are two patterns:
+      // a pattern already asked for is not asked for again
+      `for (const [i, weight] of ${JSON.stringify(cases.map(([weight]) => weight))}.entries()) {\n` +
+      "  await prewarm({ family: 'F' + i, weight, style: 'normal' });\n" +
+      '}\n' +
+      "const patterns = readFileSync(join(BIN.args, 'fc-match.args'), 'utf8').trim().split('\\n');\n" +
+      'console.log(JSON.stringify({ patterns }));\n',
+    {
+      args: '#!/bin/sh\nfor a in "$@"; do last="$a"; done\necho "$last" >> "$0.args"\nprintf "/f/A.ttf\\tA\\tA\\t20-7e\\n"\n'
+    }
+  );
+  assert.deepEqual(
+    out.patterns,
+    cases.map(([, fcWeight], i) => `F${i}:weight=${fcWeight}`)
+  );
+});
+
 let hasHelvetica = false;
 if (hasFontconfig && process.platform === 'darwin') {
   try {
@@ -848,4 +893,20 @@ test('fontconfig: a family name with a hyphen in it does not cut the list after 
     weight: 'normal'
   });
   assert.equal(first?.family, installed.family, 'the family after the unknown one is the face');
+});
+
+test('fontconfig: a weight of 450 is not the bold of a family', { skip: !hasFontconfig && 'fc-match not installed' }, (t) => {
+  // what fontconfig makes of the weight the pattern carries: the face
+  // nearest it, which for 450 is the regular — or a medium, where the family
+  // has one, as CSS has it too. As `weight=450` it was the bold.
+  const face = (family, weight) => {
+    const [best] = matchSortedSync({ family, weight, style: 'normal' });
+    return `${best.path} ${best.postscriptName}`;
+  };
+  const [{ family }] = matchSortedSync({ family: 'sans-serif', weight: 400, style: 'normal' });
+  const regular = face(family, 400);
+  const medium = face(family, 500);
+  const bold = face(family, 700);
+  if (bold === regular || bold === medium) return t.skip(`${family} has no bold of its own`);
+  assert.ok([regular, medium].includes(face(family, 450)), `${family} at 450: ${face(family, 450)}`);
 });
