@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.17.0](https://github.com/sidorares/ntk/compare/v8.16.2...v8.17.0) (2026-09-30)
+
+
+### Features
+
+* **text:** a line says how far it moves the pen where text goes on after it, its trailing white space kept ([#475](https://github.com/sidorares/ntk/issues/475)) ([80b9ec8](https://github.com/sidorares/ntk/commit/80b9ec82cfe0f4ba96f7cd7514b2789008f816b4))
+
 ## [8.16.2](https://github.com/sidorares/ntk/compare/v8.16.1...v8.16.2) (2026-09-30)
 
 
