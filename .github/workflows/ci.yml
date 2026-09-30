@@ -67,6 +67,11 @@ jobs:
           node-version: 24
       - run: npm install -g npm@latest
       - run: npm ci
+      # From a release until the next release PR, the version package.json
+      # names is on npm already, and a dry run refuses to publish over it as
+      # the real one would. The rehearsal is of everything but the number:
+      # the next patch is one no release has taken yet
+      - run: npm version patch --no-git-tag-version
       - run: npm publish --dry-run
       - name: An application installs the package
         run: |
