@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { deflateSync } from 'node:zlib';
 
 import { charsetHas } from '../lib/fontconfig.js';
+import Font from '../lib/text/font.js';
 import FontManager from '../lib/text/fontmanager.js';
 import { StaticFontSource } from '../lib/text/fontsource.js';
 import { encodeGlyphItems } from '../lib/text/glyphs.js';
@@ -1030,4 +1032,74 @@ test('TextLayout: a line fits as a browser fits it, each span rounded up to a 64
     1,
     'and it fits its own width'
   );
+});
+
+/**
+ * A WOFF of a TrueType font with its last glyph emptied: its `loca` entry
+ * made the same as the one after it, and the glyph table cut to where its
+ * data ends, so the empty glyph sits at the table's very end. Each table is
+ * compressed, as a WOFF's are, which gives the glyph table a buffer of its
+ * own in fontkit.
+ */
+function woffWithEmptyLastGlyph(ttf) {
+  const numTables = ttf.readUInt16BE(4);
+  const tables = [];
+  for (let i = 0; i < numTables; i++) {
+    const at = 12 + i * 16;
+    const tag = ttf.toString('latin1', at, at + 4);
+    const offset = ttf.readUInt32BE(at + 8);
+    const length = ttf.readUInt32BE(at + 12);
+    tables.push({ tag, data: Buffer.from(ttf.subarray(offset, offset + length)) });
+  }
+  const table = (tag) => tables.find((t) => t.tag === tag);
+  const numGlyphs = table('maxp').data.readUInt16BE(4);
+  const long = table('head').data.readInt16BE(50) === 1;
+  const loca = table('loca').data;
+  const read = (i) => (long ? loca.readUInt32BE(i * 4) : loca.readUInt16BE(i * 2) * 2);
+  const write = (i, v) => (long ? loca.writeUInt32BE(v, i * 4) : loca.writeUInt16BE(v / 2, i * 2));
+  const end = read(numGlyphs);
+  write(numGlyphs - 1, end);
+  const glyf = table('glyf');
+  glyf.data = glyf.data.subarray(0, end);
+  const entries = tables.map((t) => ({ ...t, packed: deflateSync(t.data) }));
+  let offset = 44 + 20 * numTables;
+  const header = Buffer.alloc(offset);
+  header.write('wOFF', 0, 'latin1');
+  header.writeUInt32BE(ttf.readUInt32BE(0), 4);
+  header.writeUInt16BE(numTables, 12);
+  let sfntSize = 12 + 16 * numTables;
+  const bodies = [];
+  entries.forEach((t, i) => {
+    const stored = t.packed.length < t.data.length ? t.packed : t.data;
+    const at = 44 + i * 20;
+    header.write(t.tag, at, 'latin1');
+    header.writeUInt32BE(offset, at + 4);
+    header.writeUInt32BE(stored.length, at + 8);
+    header.writeUInt32BE(t.data.length, at + 12);
+    const padded = Buffer.alloc((stored.length + 3) & ~3);
+    stored.copy(padded);
+    bodies.push(padded);
+    offset += padded.length;
+    sfntSize += (t.data.length + 3) & ~3;
+  });
+  header.writeUInt32BE(offset, 8);
+  header.writeUInt32BE(sfntSize, 16);
+  return Buffer.concat([header, ...bodies]);
+}
+
+test('Font: an empty glyph at the end of a WOFF glyph table has an empty box', () => {
+  // fontkit reads a TrueType glyph's box from a header the glyph may not
+  // have: at the end of a WOFF's glyph table, past it, and every layout in
+  // a face from fonts.com that ends on four empty glyphs threw
+  const font = Font.fromData(woffWithEmptyLastGlyph(fontBytes('KaTeX_Main-Regular.ttf')));
+  const last = font.fk.getGlyph(font.fk.numGlyphs - 1);
+  let advance;
+  assert.doesNotThrow(() => {
+    advance = last.advanceWidth;
+  }, 'its metrics read');
+  assert.ok(Number.isFinite(advance), `an advance of its own: ${advance}`);
+  const box = font.glyphExtents(font.fk.numGlyphs - 1, 16);
+  assert.ok(!(box.maxX > box.minX), `an empty box: ${JSON.stringify(box)}`);
+  const a = font.fk.glyphForCodePoint(0x41).cbox;
+  assert.ok(a.maxX > a.minX, `and a drawn glyph keeps its own: ${JSON.stringify(a)}`);
 });
