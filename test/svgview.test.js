@@ -179,6 +179,37 @@ test('linearGradient paint resolves via url(#id) in user coordinates', () => {
   assert.equal(gradient.stops[1][1], 'rgba(0, 0, 255, 0.5)');
 });
 
+test('an element that is display: none is not drawn, nor anything in it', () => {
+  // SVG 1.1, 11.5: `display` is not inherited, and nothing in an element
+  // that is `none` is rendered, whatever it says of itself. Illustrator
+  // exports a hidden layer as `<g display="none">` around shapes it marks
+  // `display="inline"`, and every hidden layer of such a file was drawn
+  // over the one that shows
+  const view = new SvgView(null).setSvg(
+    `<svg viewBox="0 0 10 10">
+      <g><circle cx="5" cy="5" r="4" fill="#fff"/></g>
+      <g display="none"><rect display="inline" width="10" height="10" fill="#c157a1"/></g>
+      <g style="display: none"><rect width="10" height="10" fill="#00f"/></g>
+      <rect display="none" width="10" height="10" fill="#0f0"/>
+      <g display="inline"><rect width="2" height="2" fill="#f00"/></g>
+    </svg>`
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 10, 10);
+  assert.deepEqual(
+    of(ctx.calls, 'fill').map((call) => call[3]),
+    ['#fff', '#f00'],
+    'the layers that show, and none of the hidden ones'
+  );
+  // and what is not drawn is none of the document's paints
+  const icon = new SvgView(null).setSvg(
+    `<svg viewBox="0 0 10 10"><rect width="10" height="10" fill="#333"/>
+      <g display="none"><rect display="inline" width="10" height="10" fill="#c157a1"/></g></svg>`
+  );
+  assert.equal(icon.paintKind, 'mono');
+  assert.equal(icon.soloPaint, '#333');
+});
+
 test('a gradient takes what it does not set, and its stops, from the one its href names', () => {
   // SVG 1.1, 13.2.2: an editor writes the stops once and points every
   // gradient that uses them at it. Read without the reference each had no
