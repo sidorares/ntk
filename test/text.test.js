@@ -1034,6 +1034,43 @@ test('TextLayout: a line fits as a browser fits it, each span rounded up to a 64
   );
 });
 
+test("TextLayout: a line's advance keeps the white space it ends on, rounded once in its item", () => {
+  // A line's width leaves out the white space it ends on. Where text goes on
+  // after it on the same line — a piece of a line composed a piece at a
+  // time — the space is on the line, and a browser rounds an element's text
+  // up to a 64th with its spaces in it, once: the text and the space rounded
+  // apart, a hair more each, came to more than a line that Chrome fits
+  const fonts = fixedFonts();
+  const style = { family: 'Test', size: 16.3 };
+  const items = { fit: 'items' };
+  const up = (width) => Math.ceil(width * 64 - 1e-7) / 64;
+  const bare = (text) => new TextLayout(fonts, text, style).lines[0].width;
+  // the word and a space, as the line would take them were an x after them
+  const spaced = bare('alpha x') - bare('x');
+  assert.ok(spaced > bare('alpha') + 1, `a space is some width: ${spaced} ${bare('alpha')}`);
+
+  const raw = new TextLayout(fonts, 'alpha ', style).lines[0];
+  assert.equal(raw.width, bare('alpha'), 'its width is the word');
+  assert.ok(Math.abs(raw.advance - spaced) < 1e-9, `its advance the word and the space: ${raw.advance} ${spaced}`);
+
+  const fitted = new TextLayout(fonts, 'alpha ', style, items).lines[0];
+  assert.equal(fitted.width, up(bare('alpha')), 'fitted, the word rounded up');
+  assert.equal(fitted.advance, up(spaced), 'and the word and its space rounded up together');
+
+  // each span its own item, the last one with its space
+  const two = new TextLayout(fonts, [{ text: 'alpha ' }, { text: 'beta ' }], style, items).lines[0];
+  const beta = bare('beta x') - bare('x');
+  assert.equal(two.width, up(spaced) + up(bare('beta')), 'two items, the last without its space');
+  assert.equal(two.advance, up(spaced) + up(beta), 'and with it');
+
+  // a line that ends on no white space, or one a wrap ended
+  const none = new TextLayout(fonts, 'alpha', style, items).lines[0];
+  assert.equal(none.advance, none.width, 'nothing to keep');
+  const wrapped = new TextLayout(fonts, 'alpha beta', style, { ...items, maxWidth: bare('alpha') + 2 });
+  assert.equal(wrapped.lines.length, 2, 'the words wrap');
+  assert.equal(wrapped.lines[0].advance, up(spaced), 'the first line keeps the space it wrapped after');
+});
+
 /**
  * A WOFF of a TrueType font with its last glyph emptied: its `loca` entry
  * made the same as the one after it, and the glyph table cut to where its
