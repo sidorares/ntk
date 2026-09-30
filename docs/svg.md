@@ -85,6 +85,9 @@ Presentation attributes (also inside inline `style="…"`, which wins):
 - `fill`, `stroke` — colors, `none`, `currentColor`, `url(#gradient)`
 - `fill-rule` (`nonzero`/`evenodd`), `fill-opacity`, `stroke-opacity`,
   `opacity` (multiplies down the tree)
+- `display: none`, by attribute or `style`: the element and everything in
+  it are left out, whatever `display` a child names — which is how an
+  editor exports a hidden layer
 - `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-miterlimit`
 - `transform` — `matrix`, `translate`, `scale`, `rotate` (incl. the
   3-argument center form), `skewX`, `skewY`, in any list combination
