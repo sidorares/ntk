@@ -11,7 +11,7 @@ The pipeline is pure JavaScript — no compiled modules:
    including each font's unicode coverage, cached per pattern.
 2. **Parsing** (`lib/text/font.js`):
    [fontkit](https://www.npmjs.com/package/fontkit) parses
-   `.ttf`/`.otf`/`.woff`/`.ttc` (collection faces are selected by
+   `.ttf`/`.otf`/`.woff`/`.woff2`/`.ttc` (collection faces are selected by
    postscript name).
 3. **Rasterization** (`lib/rasterize.js`): glyph outlines are rasterized to
    8-bit alpha bitmaps by a small built-in scanline rasterizer (non-zero
@@ -461,14 +461,25 @@ What this does *not* do is quantize for you. A slider bound straight to
 dragged, and each is a legitimate rasterization at a size you are drawing.
 Step the control, not the font.
 
-### `.woff2` cannot be instantiated
+### Any container instantiates
 
-fontkit rebuilds the face from the original stream, which for a WOFF2 is
-still Brotli-compressed, so the instance comes back unusable. ntk detects
-this and says so at the call rather than letting it surface as a null
-dereference deep in shaping — but the fix is to ship the `.ttf`/`.otf` of a
-variable font rather than its `.woff2`. Static `.woff2` faces are unaffected;
-this is only about instantiating an axis.
+A variable font is instantiated out of whatever ntk reads it from: `.ttf`
+and `.otf`, and `.woff` and `.woff2`, which is how a variable web font is
+nearly always served. The instance is the same font whichever it came in —
+the tests set the same text in all three and compare.
+
+That is fontkit's doing, and not yet the fontkit on npm: 2.0.4 rebuilds the
+face as a plain sfnt from the container's bytes, so an instance of a WOFF or
+a WOFF2 came back with no tables and threw at the first character drawn —
+a web page set in a variable font drew nothing at any weight but the file's
+default. ntk depends on
+[windowkit's fork](https://github.com/windowkit/fontkit), which carries the
+fix ([foliojs/fontkit#389](https://github.com/foliojs/fontkit/pull/389)), as
+a release tarball rather than a version on npm: `package.json` names its
+URL. Nothing about installing ntk changes. An application that pins
+`fontkit` itself — an `overrides` entry, a resolution — to npm's gets npm's
+behaviour back, and ntk says so at the call: `cannot instantiate a variation
+of …`.
 
 ## Font objects and matching
 
