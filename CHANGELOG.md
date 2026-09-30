@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.17.4](https://github.com/sidorares/ntk/compare/v8.17.3...v8.17.4) (2026-09-30)
+
+
+### Bug Fixes
+
+* **context2d:** a thumbnail drawn under a transform far across a window is drawn instead of throwing ([#486](https://github.com/sidorares/ntk/issues/486)) ([7a16b1c](https://github.com/sidorares/ntk/commit/7a16b1ce3e511810c908262d31163da06910f95c))
+* **svg:** a hidden shape is not drawn, an opacity in a style is read, and a nested svg is a viewport of its own ([#487](https://github.com/sidorares/ntk/issues/487)) ([13600c8](https://github.com/sidorares/ntk/commit/13600c8c76cb340deefa28ae43724b88affa554d))
+
 ## [8.17.3](https://github.com/sidorares/ntk/compare/v8.17.2...v8.17.3) (2026-09-30)
 
 
