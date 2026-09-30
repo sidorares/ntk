@@ -67,7 +67,17 @@ jobs:
           node-version: 24
       - run: npm install -g npm@latest
       - run: npm ci
-      - run: npm publish --dry-run
+      # The version on master is one npm already has: release-please bumps it
+      # only in the release PR, which the publish job then runs on. npm
+      # refuses a dry run over a published version as firmly as a publish, so
+      # after every release this failed on every PR, whatever it changed. A
+      # version npm has not seen stands in for the bump; a prerelease one
+      # needs a tag.
+      - name: A version npm has not seen, as the release PR's would be
+        run: |
+          base="$(npm pkg get version | tr -d '"')"
+          npm pkg set version="$base-ci.$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+      - run: npm publish --dry-run --tag ci
       - name: An application installs the package
         run: |
           tarball="$PWD/$(npm pack --silent)"
