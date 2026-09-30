@@ -156,6 +156,44 @@ test('a degenerate CTM paints nothing rather than the last transform', async () 
   assert.deepEqual(at(32, 32), [255, 255, 255], 'a collapsed transform has nothing to sample');
 });
 
+test('a gradient filled scaled down far from the origin does not throw, and paints after', async () => {
+  const w = 2300;
+  const pixmap = app.createPixmap({ width: w, height: H, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, w, H);
+  const g = rampX(ctx, 2000);
+
+  const errors = [];
+  const report = console.error;
+  console.error = (...args) => errors.push(args.join(' '));
+  try {
+    // A fortieth of its size at x 2,200: the picture transform is the
+    // CTM's inverse, whose translation is that position times the
+    // downscale — 88,000, past what 16.16 fixed point carries. Every fill
+    // samples a gradient at device coordinates, so the fill is skipped
+    // rather than thrown out of the paint.
+    ctx.save();
+    ctx.translate(2200, 40);
+    ctx.scale(1 / 40, 1 / 40);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 2000, 800);
+    ctx.restore();
+    // the gradient is still itself where its transform fits
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 2000, 20);
+    const img = await ctx.getImageData(0, 0, w, 20);
+    const at = (x, y) => img.data[(y * w + x) * 4];
+    near(at(2, 10), 0, 3, 'its start');
+    near(at(1000, 10), 128, 3, 'its middle');
+    near(at(1997, 10), 255, 3, 'its end');
+  } finally {
+    console.error = report;
+  }
+  assert.deepEqual(errors.filter((e) => /X error/.test(e)), []);
+  pixmap.destroy();
+});
+
 test('beyond its outermost stops a gradient clamps to their colours', async () => {
   const ctx = freshCtx();
   const g = ctx.createLinearGradient(24, 0, 40, 0);

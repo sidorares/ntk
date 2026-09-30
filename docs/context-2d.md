@@ -198,7 +198,10 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   composite of the whole drawable) or a node-canvas-like object exposing
   `image.context.getImageData()` (pixels are uploaded). A rectangular clip
   is applied by the server or by narrowing the composite, never through a
-  full-surface mask
+  full-surface mask. Under a transform the server samples the image from
+  the corner of the box it lands in, so a thumbnail drawn small far across
+  a wide window is drawn like any other; an image scaled below 1/32,768 of
+  its size — under a pixel across — draws nothing
 - `ctx.destroy()` / `Symbol.dispose` — release the context's server-side
   resources: its GCs, its Picture and its masks. Solid-colour sources are
   cached on the `App`, shared across contexts, and freed with `app.close()`.
@@ -708,6 +711,16 @@ ctx.fillStyle = g;
   node's origin, and a scaled context scales the ramp with the shape. A
   transform that collapses (a zero scale) paints nothing, as the canvas spec
   says
+- A fill **scaled down far from the surface's origin** can paint nothing
+  too. The server samples a gradient at device coordinates through the
+  CTM's inverse, written in 16.16 fixed point, and that inverse's
+  translation is the device position times the downscale: a box at a
+  fortieth of its size at x 2,200 asks for 88,000, past the 32,767 the wire
+  carries. Such a fill is skipped rather than thrown. To draw it, paint the
+  box on a [`Surface`](surface.md) at its own size and `drawImage` the
+  surface under the transform: an image's transform carries where in the
+  image the drawn box starts, not where on the surface. Patterns share the
+  limit
 - Past the outermost stops the gradient **clamps** to their colours, so a
   fill wider than the ramp keeps its end colours instead of fading to
   transparent
@@ -770,7 +783,9 @@ chart fills and any texture-shaped background.
 - The pattern is painted in **user space**, like the gradients above: the
   transform in force at fill time applies to the tile as well as to the
   shape, so a scaled context scales its grid. A transform that collapses (a
-  zero scale) paints nothing, as the canvas spec says
+  zero scale) paints nothing, as the canvas spec says, and so does one
+  scaled down far from the origin — see [Gradients](#gradients) for why,
+  and for drawing it through a `Surface` instead
 - Whole-pixel tiling samples with the `nearest` filter — the tile's own
   pixels, exactly — and anything else (a fractional offset, a scale, a
   rotation) resamples bilinearly
