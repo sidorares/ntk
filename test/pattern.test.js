@@ -208,6 +208,47 @@ test('a degenerate pattern transform paints nothing rather than the last one', a
   tile.destroy();
 });
 
+test('a pattern filled scaled down far from the origin does not throw, and paints after', async () => {
+  const w = 2300;
+  const pixmap = app.createPixmap({ width: w, height: H, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, w, H);
+  const tile = checkerTile();
+  const pattern = ctx.createPattern(tile, 'repeat');
+
+  const errors = [];
+  const report = console.error;
+  console.error = (...args) => errors.push(args.join(' '));
+  try {
+    // A fortieth of its size at x 2,200: the picture transform is the
+    // inverse of the CTM, whose translation is that position times the
+    // downscale — 88,000, past what 16.16 fixed point carries, and the
+    // request encoder threw on it. Every fill samples a pattern at device
+    // coordinates, so the fill is skipped rather than thrown out of the
+    // paint.
+    ctx.save();
+    ctx.translate(2200, 40);
+    ctx.scale(1 / 40, 1 / 40);
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, 2000, 800);
+    ctx.restore();
+    // the pattern is still itself where its transform fits
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, 16, 16);
+    const img = await ctx.getImageData(0, 0, 16, 16);
+    const at = (x, y) => [...img.data.slice((y * 16 + x) * 4, (y * 16 + x) * 4 + 3)];
+    assert.deepEqual(at(0, 0), RED, 'the red quadrant of the tile');
+    assert.deepEqual(at(6, 6), BLUE, 'the blue one, a tile along');
+    assert.deepEqual(at(2, 0), WHITE, 'a transparent one');
+  } finally {
+    console.error = report;
+  }
+  assert.deepEqual(errors.filter((e) => /X error/.test(e)), []);
+  tile.destroy();
+  pixmap.destroy();
+});
+
 test('patterns fill paths and stroke them, like any other style', async () => {
   const ctx = freshCtx();
   const tile = checkerTile();

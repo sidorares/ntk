@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
-import { blurCoverage, blurScale, createClient, Path2D, Surface, SvgView } from '../lib/index.js';
+import { blurCoverage, blurScale, createClient, Image, Path2D, Surface, SvgView } from '../lib/index.js';
 import { withTimeout } from './helpers/async.js';
 
 let app = null;
@@ -80,6 +80,61 @@ test('transforms: scale applies to paths and restore rolls it back', async (t) =
   assert.deepEqual(px(image, 64, 20, 20), [0, 0, 255], 'scaled rect covers 2x area');
   assert.deepEqual(px(image, 64, 30, 30), [255, 255, 255], 'outside scaled rect');
   assert.deepEqual(px(image, 64, 41, 41), [255, 0, 0], 'restore reset the transform');
+  pixmap.destroy();
+});
+
+test('transforms: a thumbnail rotated far from the origin lands where the matrix puts it', async (t) => {
+  if (skip) return t.skip(skip);
+  const W = 2300;
+  const H = 100;
+  const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, W, H);
+  // one colour per quadrant of a 2000x1200 image
+  const iw = 2000;
+  const ih = 1200;
+  const data = Buffer.alloc(iw * ih * 4);
+  for (let y = 0; y < ih; y++) {
+    for (let x = 0; x < iw; x++) {
+      const i = (y * iw + x) * 4;
+      data[i] = x < iw / 2 ? 255 : 0;
+      data[i + 1] = y < ih / 2 ? 0 : 255;
+      data[i + 2] = x < iw / 2 ? 0 : 255;
+      data[i + 3] = 255;
+    }
+  }
+  const img = new Image({ width: iw, height: ih, data });
+
+  // The composite samples from the box's corner, so the transform carries
+  // where in the image that corner is rather than where on the surface: at
+  // x 2,200 and a fortieth of the size the latter was 88,000, past 16.16.
+  ctx.save();
+  ctx.translate(2225, 55);
+  ctx.rotate(Math.PI / 2);
+  ctx.translate(-2225, -55);
+  ctx.drawImage(img, 2200, 40, 50, 30);
+  ctx.restore();
+  // and one too small for the transform to say: nothing, not a throw
+  ctx.save();
+  ctx.translate(2000, 55);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(img, 0, 0, 0.05, 0.03);
+  ctx.restore();
+
+  const image = await readPixels(ctx, W, H);
+  assert.deepEqual(px(image, W, 2232, 38), [255, 0, 0], "the image's top-left, top-right on screen");
+  assert.deepEqual(px(image, W, 2232, 72), [0, 0, 255], 'its top-right, bottom-right');
+  assert.deepEqual(px(image, W, 2217, 38), [255, 255, 0], 'its bottom-left, top-left');
+  assert.deepEqual(px(image, W, 2217, 72), [0, 255, 255], 'its bottom-right, bottom-left');
+  assert.deepEqual(px(image, W, 2207, 55), [255, 255, 255], 'left of it');
+  assert.deepEqual(px(image, W, 2203, 43), [255, 255, 255], 'where it was before the turn');
+  for (let y = 50; y < 60; y++) {
+    for (let x = 1995; x < 2005; x++) {
+      assert.deepEqual(px(image, W, x, y), [255, 255, 255], `the tiny one, at ${x},${y}`);
+    }
+  }
+  img.destroy();
   pixmap.destroy();
 });
 

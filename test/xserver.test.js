@@ -220,6 +220,137 @@ test('drawImage: server-side scaling with the picture transform', async () => {
   wnd.destroy();
 });
 
+/**
+ * A 2000x1200 photograph stand-in: one colour per quadrant, so where each
+ * lands tells the rotation apart from a mirror or a shift.
+ */
+function quadrantImage() {
+  const w = 2000;
+  const h = 1200;
+  const data = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const left = x < w / 2;
+      const top = y < h / 2;
+      data[i] = left ? 255 : 0;
+      data[i + 1] = top ? 0 : 255;
+      data[i + 2] = left ? 0 : 255;
+      data[i + 3] = 255;
+    }
+  }
+  return new Image({ width: w, height: h, data });
+}
+
+/** An unhandled X error is reported through console.error, not thrown. */
+async function xErrorsDuring(fn) {
+  const errors = [];
+  const report = console.error;
+  console.error = (...args) => errors.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    console.error = report;
+  }
+  return errors.filter((e) => /X error/.test(e));
+}
+
+test('drawImage: a thumbnail under a rotation far from the origin lands where the matrix puts it', async () => {
+  const W = 2300;
+  const H = 100;
+  const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, W, H);
+  const img = quadrantImage();
+
+  // A fortieth of the image, turned a quarter about its own centre, at
+  // x 2,200: the picture transform's translation was that position times
+  // the downscale, 88,000, and the request encoder threw on it.
+  const errors = await xErrorsDuring(async () => {
+    ctx.save();
+    ctx.translate(2225, 55);
+    ctx.rotate(Math.PI / 2);
+    ctx.translate(-2225, -55);
+    ctx.drawImage(img, 2200, 40, 50, 30);
+    ctx.restore();
+    await ctx.getImageData(0, 0, 1, 1);
+  });
+  assert.deepEqual(errors, []);
+
+  // The 50x30 rectangle at (2200, 40) turned about its centre is 30x50 at
+  // (2210, 30). The image's left half is its top, and its top half is its
+  // right.
+  const image = await ctx.getImageData(0, 0, W, H);
+  const RED = [255, 0, 0];
+  const BLUE = [0, 0, 255];
+  const YELLOW = [255, 255, 0];
+  const CYAN = [0, 255, 255];
+  const WHITE = [255, 255, 255];
+  assert.deepEqual(px(image, W, 2232, 38), RED, 'top-left of the image, top-right on screen');
+  assert.deepEqual(px(image, W, 2232, 72), BLUE, 'top-right of the image, bottom-right');
+  assert.deepEqual(px(image, W, 2217, 38), YELLOW, 'bottom-left of the image, top-left');
+  assert.deepEqual(px(image, W, 2217, 72), CYAN, 'bottom-right of the image, bottom-left');
+  assert.deepEqual(px(image, W, 2212, 32), YELLOW, 'a corner, two pixels in');
+  assert.deepEqual(px(image, W, 2237, 77), BLUE, 'the opposite corner');
+  for (const [x, y, what] of [
+    [2207, 55, 'left of it'],
+    [2242, 55, 'right of it'],
+    [2225, 27, 'above it'],
+    [2225, 82, 'below it'],
+    [2203, 43, 'where the rectangle was before the turn'],
+  ]) {
+    assert.deepEqual(px(image, W, x, y), WHITE, what);
+  }
+
+  // the upload's transform is put back: an unscaled draw samples it as is
+  ctx.drawImage(img, 0, 0);
+  const plain = await ctx.getImageData(0, 0, W, H);
+  assert.deepEqual(px(plain, W, 2, 2), RED);
+  assert.deepEqual(px(plain, W, 1998, 50), BLUE);
+  assert.deepEqual(px(plain, W, 2100, 50), WHITE);
+  img.destroy();
+  pixmap.destroy();
+});
+
+test('drawImage: an image drawn past what 16.16 fixed point carries draws nothing, rather than throwing', async () => {
+  const W = 2300;
+  const H = 100;
+  const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, W, H);
+  const data = Buffer.alloc(8 * 8 * 4);
+  for (let i = 0; i < data.length; i += 4) data.set([255, 0, 0, 255], i);
+  const img = new Image({ width: 8, height: 8, data });
+
+  // 1/40,000 of its size: one device pixel steps across 40,000 source
+  // pixels, which the transform's linear part cannot say whatever the
+  // position. It is less than a pixel across, and nothing to see.
+  const errors = await xErrorsDuring(async () => {
+    ctx.save();
+    ctx.translate(2225, 55);
+    ctx.rotate(Math.PI / 2);
+    ctx.translate(-2225, -55);
+    ctx.drawImage(img, 2200, 40, 0.0002, 0.0002);
+    ctx.restore();
+    await ctx.getImageData(0, 0, 1, 1);
+  });
+  assert.deepEqual(errors, []);
+
+  const image = await ctx.getImageData(0, 0, W, H);
+  const inked = [];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const [r, g, b] = px(image, W, x, y);
+      if (r !== 255 || g !== 255 || b !== 255) inked.push([x, y]);
+    }
+  }
+  assert.deepEqual(inked, [], 'no pixel changed');
+  img.destroy();
+  pixmap.destroy();
+});
+
 test("composite ops: 'source-over' blends, 'copy' replaces", async () => {
   const { wnd, ctx } = freshWindow(64, 64);
 
