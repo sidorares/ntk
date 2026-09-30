@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.17.1](https://github.com/sidorares/ntk/compare/v8.17.0...v8.17.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **fontconfig:** a family name is escaped for fc-match, so a hyphen in one does not cut the list after it short ([#477](https://github.com/sidorares/ntk/issues/477)) ([2d65b8f](https://github.com/sidorares/ntk/commit/2d65b8f3d20b8acf405d2ae42f1e8a9f02ff4918))
+
 ## [8.17.0](https://github.com/sidorares/ntk/compare/v8.16.2...v8.17.0) (2026-09-30)
 
 
