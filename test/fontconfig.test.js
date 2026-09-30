@@ -762,7 +762,8 @@ test('the pattern fc-match receives is the platform list', () => {
         'printf "/f/A.ttf\\tA\\tA\\t20-7e\\n"\n'
     }
   );
-  const family = process.platform === 'darwin' ? 'Helvetica,sans-serif' : 'sans-serif';
+  // each name escaped as fontconfig's syntax reads it: a `-` starts a size
+  const family = process.platform === 'darwin' ? 'Helvetica,sans\\-serif' : 'sans\\-serif';
   assert.deepEqual(out.patterns, [`${family}:weight=80`]);
   assert.equal(out.path, '/f/A.ttf');
 });
