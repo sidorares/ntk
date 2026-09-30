@@ -762,7 +762,8 @@ test('the pattern fc-match receives is the platform list', () => {
         'printf "/f/A.ttf\\tA\\tA\\t20-7e\\n"\n'
     }
   );
-  const family = process.platform === 'darwin' ? 'Helvetica,sans-serif' : 'sans-serif';
+  // each name escaped as fontconfig's syntax reads it: a `-` starts a size
+  const family = process.platform === 'darwin' ? 'Helvetica,sans\\-serif' : 'sans\\-serif';
   assert.deepEqual(out.patterns, [`${family}:weight=80`]);
   assert.equal(out.path, '/f/A.ttf');
 });
@@ -832,3 +833,19 @@ test('fc-match is spawned by its path, found once for each PATH', () => {
   }
 });
 
+
+test('fontconfig: a family name with a hyphen in it does not cut the list after it short', { skip: !hasFontconfig }, () => {
+  // In fontconfig's pattern syntax a `-` starts the point size. Unescaped,
+  // `tablet-gothic-condensed, "arial narrow", arial` was the family `tablet`
+  // and a size fc-match could not read, and every family after it was lost:
+  // the face was fontconfig's default, where a browser takes the next family
+  // the list names that is installed
+  const [installed] = matchSortedSync({ family: 'serif', style: 'normal', weight: 'normal' });
+  assert.ok(installed?.family, 'fontconfig has a serif face');
+  const [first] = matchSortedSync({
+    family: `no-such-hyphenated-family, "${installed.family}"`,
+    style: 'normal',
+    weight: 'normal'
+  });
+  assert.equal(first?.family, installed.family, 'the family after the unknown one is the face');
+});
