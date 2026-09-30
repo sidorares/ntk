@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import Font, { normalizeVariations, variationKey } from '../lib/text/font.js';
@@ -15,6 +16,7 @@ import FontManager from '../lib/text/fontmanager.js';
 import { StaticFontSource } from '../lib/text/fontsource.js';
 import { opszFixture } from './helpers/opsz-fixture.js';
 
+const require = createRequire(import.meta.url);
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const VF = join(fixtures, 'MonelogicsSubset[wght].ttf');
 const SAMPLE = 'Handgloves';
@@ -35,14 +37,15 @@ function manager() {
 
 for (const container of ['woff', 'woff2']) {
   test(`an instance comes out of a .${container} as it does out of the sfnt`, () => {
-    // fontkit 2.0.4 rebuilt the face as a plain sfnt from the container's
-    // bytes: the instance had no tables, and the first character drawn in it
-    // threw. A web page set in a variable font — nextjs.org in Geist — drew
-    // nothing at any weight but the file's default.
+    // fontkit cuts an instance by reading the file again as a plain sfnt:
+    // out of a container it had no tables, and the first character drawn in
+    // it threw. A web page set in a variable font — nextjs.org in Geist —
+    // drew nothing at any weight but the file's default. The face is read
+    // from the sfnt inside the container instead (text/sfnt.js).
     const file = join(fixtures, `MonelogicsSubset[wght].${container}`);
     const font = Font.loadSync(file);
     const sfnt = load();
-    assert.equal(font.fk.type, container.toUpperCase());
+    assert.equal(font.fk.type, 'TTF', 'the sfnt, not the container');
     assert.deepEqual(font.variationAxes, sfnt.variationAxes);
 
     /** every glyph of a face: its outline, its advance and its box */
@@ -84,15 +87,19 @@ for (const container of ['woff', 'woff2']) {
 }
 
 test("a WOFF2 glyph's box is its outline's, whatever its loca table reads as", () => {
-  // the transformed `glyf` of a WOFF2 has no `loca` in the file, and what
-  // fontkit reads in its place called five of this face's glyphs empty:
-  // their boxes were read from a header that is not there
-  const font = Font.loadSync(join(fixtures, 'MonelogicsSubset[wght].woff2'));
-  const sfnt = load();
+  // A static face stays in its container. The transformed `glyf` of a WOFF2
+  // has no `loca` in the file, and what fontkit reads in its place is wrong
+  // about 17 of this face's 286 glyphs: their boxes were read from a header
+  // that is not there.
+  const fontDir = join(dirname(require.resolve('katex/package.json')), 'dist', 'fonts');
+  const font = Font.loadSync(join(fontDir, 'KaTeX_Main-Regular.woff2'));
+  const sfnt = Font.loadSync(join(fontDir, 'KaTeX_Main-Regular.ttf'));
+  assert.equal(font.fk.type, 'WOFF2');
+  assert.equal(font.fk.numGlyphs, sfnt.fk.numGlyphs);
   for (let id = 0; id < font.fk.numGlyphs; id += 1) {
+    if (!sfnt.fk.getGlyph(id).path.commands.length) continue;
     const { minX, minY, maxX, maxY } = font.fk.getGlyph(id).cbox;
     const outline = sfnt.fk.getGlyph(id).bbox;
-    if (!sfnt.fk.getGlyph(id).path.commands.length) continue;
     assert.deepEqual(
       [minX, minY, maxX, maxY],
       [outline.minX, outline.minY, outline.maxX, outline.maxY],
