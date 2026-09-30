@@ -51,6 +51,31 @@ jobs:
       - name: Run tests under Xvfb
         run: xvfb-run -a npm test
 
+  # What the release's publish job does, as far as the upload, and then what
+  # an application does with the result. The test jobs install with the npm
+  # their Node ships; the publish job upgrades npm first, and the newest npm
+  # is what an application installs with. ntk 8.17.2 named a dependency by a
+  # tarball's URL: every test job passed, the publish job refused it in
+  # `npm ci` (npm 12 fetches no URL or git dependency unless told to), and
+  # no application on that npm could have installed it either.
+  publishable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - run: npm publish --dry-run
+      - name: An application installs the package
+        run: |
+          tarball="$PWD/$(npm pack --silent)"
+          mkdir "$RUNNER_TEMP/app" && cd "$RUNNER_TEMP/app"
+          npm init -y > /dev/null
+          npm install "$tarball"
+          node -e "import('ntk/font').then((m) => { if (typeof m.default.fromData !== 'function') process.exit(1); })"
+
   website:
     runs-on: ubuntu-latest
     steps:
