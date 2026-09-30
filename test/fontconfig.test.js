@@ -832,3 +832,19 @@ test('fc-match is spawned by its path, found once for each PATH', () => {
   }
 });
 
+
+test('fontconfig: a family name with a hyphen in it does not cut the list after it short', { skip: !hasFontconfig }, () => {
+  // In fontconfig's pattern syntax a `-` starts the point size. Unescaped,
+  // `tablet-gothic-condensed, "arial narrow", arial` was the family `tablet`
+  // and a size fc-match could not read, and every family after it was lost:
+  // the face was fontconfig's default, where a browser takes the next family
+  // the list names that is installed
+  const [installed] = matchSortedSync({ family: 'serif', style: 'normal', weight: 'normal' });
+  assert.ok(installed?.family, 'fontconfig has a serif face');
+  const [first] = matchSortedSync({
+    family: `no-such-hyphenated-family, "${installed.family}"`,
+    style: 'normal',
+    weight: 'normal'
+  });
+  assert.equal(first?.family, installed.family, 'the family after the unknown one is the face');
+});
