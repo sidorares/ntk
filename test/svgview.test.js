@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Path2D, matApply, matMultiply, matInvert } from '../lib/path.js';
+import { Path2D, flattenPath, matApply, matMultiply, matInvert } from '../lib/path.js';
 import SvgView, { parseSvgTransform } from '../lib/widgets/svgview.js';
 
 // A recording 2d-context stand-in with a working transform stack, so the
@@ -58,6 +58,9 @@ function mockCtx() {
     },
     fillText(text, x, y) {
       calls.push(['fillText', text, x, y, this.font, this.textAlign, this.fillStyle]);
+    },
+    clip(path) {
+      calls.push(['clip', path, this._m.slice()]);
     },
     createLinearGradient(x1, y1, x2, y2) {
       const g = { type: 'linear', x1, y1, x2, y2, stops: [], addColorStop(o, c) { this.stops.push([o, c]); return this; } };
@@ -208,6 +211,193 @@ test('an element that is display: none is not drawn, nor anything in it', () => 
   );
   assert.equal(icon.paintKind, 'mono');
   assert.equal(icon.soloPaint, '#333');
+});
+
+test('what display: none hides can still be referenced, and a use of it draws nothing', () => {
+  // SVG 2, 5.3: a symbol, a gradient and what is in a hidden group are
+  // still there for a use or a url() to name; an element that is itself
+  // display: none is drawn as nothing through a use too
+  const view = new SvgView(null).setSvg(
+    `<svg viewBox="0 0 10 10">
+      <defs style="display: none">
+        <linearGradient id="g" display="none"><stop offset="0" stop-color="#f00"/></linearGradient>
+      </defs>
+      <symbol id="s" display="none"><rect width="1" height="1" fill="#100"/></symbol>
+      <g display="none"><rect id="in" width="1" height="1" fill="#200"/></g>
+      <rect id="off" display="none" width="1" height="1" fill="#300"/>
+      <use href="#s"/>
+      <use href="#in"/>
+      <use href="#off"/>
+      <rect width="1" height="1" fill="url(#g)"/>
+    </svg>`
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 10, 10);
+  const fills = of(ctx.calls, 'fill').map((call) => call[3]);
+  assert.deepEqual(fills.slice(0, 2), ['#100', '#200']);
+  assert.equal(fills.length, 3);
+  assert.equal(fills[2].type, 'linear');
+});
+
+test('a shape whose visibility is hidden is not drawn, and one in a hidden group can show again', () => {
+  // SVG 1.1, 11.5: `visibility` is inherited, unlike `display`, and hides
+  // only what an element paints itself. A group that is hidden still holds
+  // what says `visible`
+  const view = new SvgView(null).setSvg(
+    `<svg viewBox="0 0 10 10">
+      <rect visibility="hidden" width="1" height="1" fill="#100"/>
+      <rect style="visibility: collapse" width="1" height="1" fill="#200"/>
+      <rect visibility="hidden" style="visibility: visible" width="1" height="1" fill="#300"/>
+      <rect visibility="hidden" style="visibility: sideways" width="1" height="1" fill="#400"/>
+      <g visibility="hidden">
+        <rect width="1" height="1" fill="#500"/>
+        <rect visibility="visible" width="1" height="1" fill="#600"/>
+        <g><rect width="1" height="1" fill="#700"/></g>
+        <text x="0" y="5">hidden</text>
+      </g>
+      <defs><rect id="plain" width="1" height="1"/></defs>
+      <use href="#plain" visibility="hidden" fill="#800"/>
+      <use href="#plain" fill="#900"/>
+      <text x="0" y="5" style="visibility:hidden">hidden too</text>
+      <text x="0" y="5">shown</text>
+    </svg>`
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 10, 10);
+  assert.deepEqual(
+    of(ctx.calls, 'fill').map((call) => call[3]),
+    ['#300', '#600', '#900'],
+    'inline style over the attribute, a child that shows itself, a use that is not hidden'
+  );
+  assert.deepEqual(of(ctx.calls, 'fillText').map((call) => call[1]), ['shown']);
+
+  // and a hidden shape paints none of the document's colours
+  const icon = new SvgView(null).setSvg(
+    `<svg viewBox="0 0 10 10" fill="currentColor"><rect width="10" height="10"/>
+      <rect visibility="hidden" width="4" height="4" fill="#c157a1"/>
+      <g style="visibility: hidden"><text fill="#00f">x</text><path d="M0 0h1v1z" stroke="#0f0"/></g></svg>`
+  );
+  assert.equal(icon.paintKind, 'mono');
+  assert.equal(icon.soloPaint, 'currentColor');
+  // what shows itself again in a hidden group is counted
+  const shown = new SvgView(null).setSvg(
+    `<svg viewBox="0 0 10 10" fill="currentColor"><rect width="10" height="10"/>
+      <g visibility="hidden"><rect visibility="visible" width="4" height="4" fill="#c157a1"/></g></svg>`
+  );
+  assert.equal(shown.paintKind, 'multi');
+});
+
+test('opacity in an inline style is read, and wins over the attribute', () => {
+  // as fill-opacity and stroke-opacity already were: `style="opacity:.2"`
+  // drew an opaque shape
+  const view = new SvgView(null).setSvg(
+    `<svg viewBox="0 0 10 10">
+      <rect style="opacity:.2" width="1" height="1"/>
+      <rect opacity="0.9" style="opacity: 0.4" width="1" height="1"/>
+      <rect opacity="50%" width="1" height="1"/>
+      <rect opacity="0.6" style="opacity: bold" width="1" height="1"/>
+      <rect opacity="3" width="1" height="1"/>
+      <g style="opacity: .5"><rect width="1" height="1" style="opacity: .5; fill-opacity: 40%"/></g>
+      <rect style="opacity: 0" width="1" height="1"/>
+    </svg>`
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 10, 10);
+  const alphas = of(ctx.calls, 'fill').map((call) => Math.round(call[4] * 1e6) / 1e6);
+  // a percentage is of 1, a declaration it cannot read leaves the
+  // attribute's, a value past 1 is 1, a group's multiplies down, and what
+  // is transparent is not drawn at all
+  assert.deepEqual(alphas, [0.2, 0.4, 0.5, 0.6, 1, 0.1]);
+});
+
+test('a nested <svg> is a viewport at its x and y, not a group', () => {
+  // SVG 2, 8.2: the inner document's origin is its x,y, and what it draws
+  // is clipped to its width by height
+  const view = new SvgView(null).setSvg(
+    `<svg width="40" height="40">
+      <svg x="10" y="10" width="20" height="20"><rect width="20" height="20" fill="#cf222e"/></svg>
+    </svg>`
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 40, 40);
+  const [fill] = of(ctx.calls, 'fill');
+  assert.deepEqual(matApply(fill[5], 0, 0), [10, 10]);
+  assert.deepEqual(matApply(fill[5], 20, 20), [30, 30]);
+  const [clip] = of(ctx.calls, 'clip');
+  assert.ok(clip, 'the viewport is a clip');
+  // the clip is the viewport, set in the space around it
+  assert.deepEqual(matApply(clip[2], 0, 0), [0, 0]);
+  assert.deepEqual(flattenPath(clip[1]._cmds)[0].pts, [10, 10, 30, 10, 30, 30, 10, 30]);
+  // and nothing of it outlives it
+  const saves = of(ctx.calls, 'save').length;
+  assert.equal(of(ctx.calls, 'restore').length, saves);
+});
+
+test('a nested <svg> fits its viewBox as preserveAspectRatio says', () => {
+  const at = (par) => {
+    const view = new SvgView(null).setSvg(
+      `<svg width="40" height="40"><svg x="4" y="8" width="32" height="24" viewBox="0 0 10 10"${
+        par ? ` preserveAspectRatio="${par}"` : ''
+      }><rect width="10" height="10"/></svg></svg>`
+    );
+    const ctx = mockCtx();
+    view.draw(ctx, 0, 0, 40, 40);
+    const m = of(ctx.calls, 'fill')[0][5];
+    return [...matApply(m, 0, 0), ...matApply(m, 10, 10)].map((v) => Math.round(v * 1e6) / 1e6);
+  };
+  // xMidYMid meet: 24 square, centred across the 32
+  assert.deepEqual(at(null), [8, 8, 32, 32]);
+  assert.deepEqual(at('xMidYMid meet'), [8, 8, 32, 32]);
+  assert.deepEqual(at('xMinYMax'), [4, 8, 28, 32]);
+  assert.deepEqual(at('xMaxYMin meet'), [12, 8, 36, 32]);
+  // slice: 32 square, over the 24 and clipped to it
+  assert.deepEqual(at('xMinYMin slice'), [4, 8, 36, 40]);
+  assert.deepEqual(at('xMidYMid slice'), [4, 4, 36, 36]);
+  // none stretches it
+  assert.deepEqual(at('none'), [4, 8, 36, 32]);
+  // a value it cannot read is the default, all of it
+  assert.deepEqual(at('xMidYMad slice'), [8, 8, 32, 32]);
+});
+
+test('a nested <svg> takes percentages of the viewport around it, and its viewBox origin', () => {
+  const view = new SvgView(null).setSvg(
+    `<svg viewBox="0 0 40 40">
+      <svg x="25%" y="25%" width="50%" height="50%">
+        <rect width="100%" height="100%" fill="#1a7f37"/>
+        <svg x="50%" width="50%" height="50%"><rect width="4" height="4" fill="#cf222e"/></svg>
+      </svg>
+      <svg x="5" y="5" width="30" height="30" viewBox="10 10 20 20"><rect x="10" y="10" width="1" height="1" fill="#000"/></svg>
+      <svg><rect width="1" height="1" fill="#fff"/></svg>
+    </svg>`
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 80, 80);
+  const [, inner, origin, full] = of(ctx.calls, 'fill');
+  // the viewBox's user space is 40 across, drawn at 80: twice what it says
+  assert.deepEqual(matApply(inner[5], 0, 0), [40, 20], 'half of the 20 it sits in, from 10,10');
+  assert.deepEqual(matApply(origin[5], 10, 10), [10, 10], 'the viewBox origin goes to its x,y');
+  assert.deepEqual(matApply(full[5], 0, 0), [0, 0], 'no x, y, width or height is all of it');
+  assert.equal(of(ctx.calls, 'clip').length, 4);
+});
+
+test('a nested <svg> is not clipped where its overflow is visible, and draws nothing at size zero', () => {
+  const view = new SvgView(null).setSvg(
+    `<svg width="40" height="40">
+      <svg x="10" y="10" width="20" height="20" overflow="visible"><rect width="1" height="1" fill="#100"/></svg>
+      <svg x="10" y="10" width="20" height="20" style="overflow: auto"><rect width="1" height="1" fill="#200"/></svg>
+      <svg width="0" height="20"><rect width="1" height="1" fill="#300"/></svg>
+      <svg width="-5"><rect width="1" height="1" fill="#400"/></svg>
+      <svg viewBox="0 0 0 10"><rect width="1" height="1" fill="#500"/></svg>
+      <svg viewBox="0 0 -10 10" x="3"><rect width="1" height="1" fill="#600"/></svg>
+    </svg>`
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 40, 40);
+  const fills = of(ctx.calls, 'fill');
+  assert.deepEqual(fills.map((call) => call[3]), ['#100', '#200', '#600']);
+  assert.equal(of(ctx.calls, 'clip').length, 1, 'only the one whose overflow is not visible');
+  // a negative viewBox is an error, and is ignored rather than the element
+  assert.deepEqual(matApply(fills[2][5], 0, 0), [3, 0]);
 });
 
 test('a gradient takes what it does not set, and its stops, from the one its href names', () => {
