@@ -1,5 +1,14 @@
 # Changelog
 
+## [8.17.2](https://github.com/sidorares/ntk/compare/v8.17.1...v8.17.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **svg:** a gradient takes its stops, and what it does not set, from the gradient its href names ([#481](https://github.com/sidorares/ntk/issues/481)) ([9db8108](https://github.com/sidorares/ntk/commit/9db810839bc46f85be8fdc31c9068178a6b442c0))
+* **text:** a font weight between two of the hundreds goes to fontconfig on its own scale, so 450 in Arial is the regular and not the bold ([#480](https://github.com/sidorares/ntk/issues/480)) ([3973b42](https://github.com/sidorares/ntk/commit/3973b42fe230575f0811dc4761101efbbea604ea))
+* **text:** a variable font is instantiated out of a WOFF or a WOFF2, where the first weight off the file's default threw ([#479](https://github.com/sidorares/ntk/issues/479)) ([b009cdd](https://github.com/sidorares/ntk/commit/b009cdd9bd3591fd5f5e37f7a8cc1ce9cfb2444e))
+
 ## [8.17.1](https://github.com/sidorares/ntk/compare/v8.17.0...v8.17.1) (2026-09-30)
 
 
