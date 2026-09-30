@@ -70,6 +70,13 @@ Elements:
 - structure: `svg` (`viewBox`, `width`/`height`, presentation attributes),
   `g`, `defs`, `use` (`href`/`xlink:href` to a local `#id`, `x`/`y` offset,
   `symbol` targets), `a` (rendered, not clickable)
+- a nested `svg` is a new viewport, not a group: `width` by `height` at
+  `x`,`y`, each a length or a percentage of the viewport around it, and all
+  of that viewport where unset. Its `viewBox` is fitted in as
+  `preserveAspectRatio` says — any alignment, `meet` (the default), `slice`
+  or `none` — and what it draws is clipped to the viewport unless its
+  `overflow` is `visible` or `auto`. A zero or negative `width` or `height`,
+  or a zero-sized `viewBox`, draws nothing
 - paint servers: `linearGradient`, `radialGradient` with `stop`
   (`offset`, `stop-color`, `stop-opacity`), `gradientUnits` of
   `objectBoundingBox` (default) or `userSpaceOnUse`, `gradientTransform`,
@@ -84,10 +91,15 @@ Presentation attributes (also inside inline `style="…"`, which wins):
 
 - `fill`, `stroke` — colors, `none`, `currentColor`, `url(#gradient)`
 - `fill-rule` (`nonzero`/`evenodd`), `fill-opacity`, `stroke-opacity`,
-  `opacity` (multiplies down the tree)
-- `display: none`, by attribute or `style`: the element and everything in
-  it are left out, whatever `display` a child names — which is how an
-  editor exports a hidden layer
+  `opacity` (multiplies down the tree) — each a number or a percentage
+- `display: none`: the element and everything in it are left out, whatever
+  `display` a child names — which is how an editor exports a hidden layer.
+  What is only ever drawn by reference (a gradient, a `symbol`) is still
+  there to reference, and a `use` of an element that is `display: none`
+  draws nothing
+- `visibility: hidden` or `collapse`: the shapes and text it reaches are not
+  drawn. It is inherited, and a shape inside a hidden group that says
+  `visibility="visible"` is drawn again
 - `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-miterlimit`
 - `transform` — `matrix`, `translate`, `scale`, `rotate` (incl. the
   3-argument center form), `skewX`, `skewY`, in any list combination
@@ -110,8 +122,9 @@ no area.
 
 Not supported (skipped silently): CSS stylesheets/`<style>`, `clipPath`,
 `mask`, `filter`, `pattern`, `marker`, animation/SMIL, `foreignObject`,
-external references, `preserveAspectRatio` values other than the default
-behavior, stroke dashing, and full `text` layout (`tspan`, `textPath`).
+external references, `preserveAspectRatio` on the root `svg` (whose
+`viewBox` is stretched to the box `draw` is given), a `symbol`'s `viewBox`,
+stroke dashing, and full `text` layout (`tspan`, `textPath`).
 
 ## Taking colour from the caller
 
@@ -155,7 +168,9 @@ whether the colour belongs in its cache key:
   and `soloPaint` is `null`.
 
 Opacity does not enter into it: `opacity`, `fill-opacity` and
-`stroke-opacity` scale coverage, which a mask carries perfectly well.
+`stroke-opacity` scale coverage, which a mask carries perfectly well. What
+is not drawn at all — under `display: none`, or a shape whose `visibility`
+is `hidden` — commits to no colour.
 
 ## SVG path data elsewhere
 
