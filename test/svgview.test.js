@@ -179,6 +179,82 @@ test('linearGradient paint resolves via url(#id) in user coordinates', () => {
   assert.equal(gradient.stops[1][1], 'rgba(0, 0, 255, 0.5)');
 });
 
+test('a gradient takes what it does not set, and its stops, from the one its href names', () => {
+  // SVG 1.1, 13.2.2: an editor writes the stops once and points every
+  // gradient that uses them at it. Read without the reference each had no
+  // stops, and what it filled was not drawn
+  const view = new SvgView(null);
+  view.setSvg(`<svg xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 20 10">
+    <defs>
+      <linearGradient id="stops" gradientUnits="userSpaceOnUse" x2="7">
+        <stop offset="0" stop-color="#ff0000"/>
+        <stop offset="1" stop-color="#0000ff"/>
+      </linearGradient>
+      <linearGradient id="line" xlink:href="#stops" x1="2" y1="3"/>
+      <linearGradient id="twice" href="#line" y2="9"/>
+      <radialGradient id="round" href="#twice" cx="4" cy="5" r="6"/>
+      <linearGradient id="own" href="#stops"><stop offset="0.5" stop-color="#00ff00"/></linearGradient>
+      <linearGradient id="self" href="#loop"/><linearGradient id="loop" href="#self"/>
+    </defs>
+    <rect width="10" height="10" fill="url(#line)"/>
+    <rect width="10" height="10" fill="url(#twice)"/>
+    <rect width="10" height="10" fill="url(#round)"/>
+    <rect width="10" height="10" fill="url(#own)"/>
+    <rect width="10" height="10" fill="url(#loop)"/>
+  </svg>`);
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 20, 10);
+  const [line, twice, round, own, loop] = of(ctx.calls, 'fill').map((fill) => fill[3]);
+  const colors = (g) => g.stops.map((stop) => stop[1]);
+  // its own x1 and y1, the other's units and x2, and the other's stops
+  assert.deepEqual([line.x1, line.y1, line.x2, line.y2], [2, 3, 7, 0]);
+  assert.deepEqual(colors(line), ['#ff0000', '#0000ff']);
+  // through a gradient that itself takes after one
+  assert.deepEqual([twice.x1, twice.y1, twice.x2, twice.y2], [2, 3, 7, 9]);
+  assert.deepEqual(colors(twice), ['#ff0000', '#0000ff']);
+  // a radial one takes a linear one's stops and units, and none of its line
+  assert.equal(round.type, 'radial');
+  assert.deepEqual([round.x1, round.y1, round.r1], [4, 5, 6]);
+  assert.deepEqual(colors(round), ['#ff0000', '#0000ff']);
+  // stops of its own are the ones it has
+  assert.deepEqual(colors(own), ['#00ff00']);
+  // and two that name each other are read once each
+  assert.deepEqual(colors(loop), []);
+});
+
+test('a gradient is set through its gradientTransform', () => {
+  const view = new SvgView(null);
+  const gradient = (attrs) =>
+    `<linearGradient ${attrs}><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>`;
+  view.setSvg(`<svg viewBox="0 0 10 10">
+    <defs>
+      ${gradient('id="moved" gradientUnits="userSpaceOnUse" x2="10" gradientTransform="translate(5, 1)"')}
+      ${gradient('id="stretched" gradientUnits="userSpaceOnUse" x2="10" y2="10" gradientTransform="scale(2, 1)"')}
+      ${gradient('id="turned" gradientTransform="rotate(90)"')}
+      <radialGradient id="round" gradientUnits="userSpaceOnUse" cx="5" cy="5" r="5"
+        gradientTransform="translate(1, 2) scale(2)"><stop offset="0" stop-color="#f00"/></radialGradient>
+    </defs>
+    <rect width="10" height="10" fill="url(#moved)"/>
+    <rect width="10" height="10" fill="url(#stretched)"/>
+    <rect x="10" y="20" width="10" height="40" fill="url(#turned)"/>
+    <rect width="10" height="10" fill="url(#round)"/>
+  </svg>`);
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 10, 10);
+  const [moved, stretched, turned, round] = of(ctx.calls, 'fill').map((fill) => fill[3]);
+  const line = (g) => [g.x1, g.y1, g.x2, g.y2].map((v) => Math.round(v * 1e6) / 1e6);
+  assert.deepEqual(line(moved), [5, 1, 15, 1]);
+  // stretched across, its lines of one colour lean, and the gradient's
+  // line is the one square to them: not where the matrix takes its end,
+  // (20, 10), which would run the colours along a line they do not cross
+  assert.deepEqual(line(stretched), [0, 0, 8, 16]);
+  // in the box's own space where that is its units: a quarter turn about
+  // the box's corner, across a box four times as tall as it is wide
+  assert.deepEqual(line(turned), [10, 20, 10, 60]);
+  // a circle's centre goes with the matrix, and its radius with its scale
+  assert.deepEqual([round.x1, round.y1, round.r1], [11, 12, 10]);
+});
+
 test('use references defs content with x/y offset', () => {
   const view = new SvgView(null);
   view.setSvg(`<svg viewBox="0 0 100 100">

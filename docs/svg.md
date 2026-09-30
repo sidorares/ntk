@@ -72,7 +72,11 @@ Elements:
   `symbol` targets), `a` (rendered, not clickable)
 - paint servers: `linearGradient`, `radialGradient` with `stop`
   (`offset`, `stop-color`, `stop-opacity`), `gradientUnits` of
-  `objectBoundingBox` (default) or `userSpaceOnUse`
+  `objectBoundingBox` (default) or `userSpaceOnUse`, `gradientTransform`,
+  and `href`/`xlink:href` to another gradient, whose attributes it takes
+  where it sets none and whose stops it takes where it has none, through
+  any number of them. A radial gradient under a `gradientTransform` that
+  stretches it stays a circle, of the same area
 - `text` — basic: `x`, `y`, `font-size`, `font-family`, `text-anchor`,
   solid `fill`; rendered through the shaped-text pipeline
 
