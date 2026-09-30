@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.16.2](https://github.com/sidorares/ntk/compare/v8.16.1...v8.16.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **text:** an empty TrueType glyph has an empty box, even at the end of a WOFF's glyph table ([#473](https://github.com/sidorares/ntk/issues/473)) ([54e12ad](https://github.com/sidorares/ntk/commit/54e12adb45e64d1e60790329692878cadd2daff2))
+
 ## [8.16.1](https://github.com/sidorares/ntk/compare/v8.16.0...v8.16.1) (2026-09-29)
 
 
