@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.17.7](https://github.com/sidorares/ntk/compare/v8.17.6...v8.17.7) (2026-10-01)
+
+
+### Bug Fixes
+
+* **svg:** a switch draws the first of its children whose conditions hold, where it drew nothing ([#497](https://github.com/sidorares/ntk/issues/497)) ([2b99f0c](https://github.com/sidorares/ntk/commit/2b99f0c7fc93fbce108c28334a92c3e514f44073))
+* **text:** a face loaded with app.fonts.load picks the weight CSS picks, as the font sources do, so 520 between a regular and a bold is the bold ([#496](https://github.com/sidorares/ntk/issues/496)) ([d94bef6](https://github.com/sidorares/ntk/commit/d94bef64d0819a9572606b297afe43430c5cce8b))
+
 ## [8.17.6](https://github.com/sidorares/ntk/compare/v8.17.5...v8.17.6) (2026-10-01)
 
 
