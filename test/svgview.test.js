@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { parseDocument } from 'htmlparser2';
+
 import { Path2D, flattenPath, matApply, matMultiply, matInvert } from '../lib/path.js';
 import SvgView, { parseSvgTransform } from '../lib/widgets/svgview.js';
 
@@ -474,6 +476,117 @@ test('a gradient is set through its gradientTransform', () => {
   assert.deepEqual(line(turned), [10, 20, 10, 60]);
   // a circle's centre goes with the matrix, and its radius with its scale
   assert.deepEqual([round.x1, round.y1, round.r1], [11, 12, 10]);
+});
+
+test('a <switch> draws its child through its own transform and opacity, as a <g> would', () => {
+  // how CSS Zen Garden 219's footer.svg wraps each icon: nothing under a
+  // switch was drawn, since it was read as a shape and had no geometry
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 100 100">
+    <switch transform="matrix(2,0,0,3,10,20)" opacity="0.5">
+      <path d="M0 0h4v4z" fill="#ffffff" fill-opacity="0.5"/>
+    </switch>
+  </svg>`);
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 100, 100);
+  const fills = of(ctx.calls, 'fill');
+  assert.equal(fills.length, 1);
+  assert.equal(fills[0][3], '#ffffff');
+  assert.equal(fills[0][4], 0.25, 'the switch opacity times the fill-opacity');
+  assert.deepEqual(matApply(fills[0][5], 4, 4), [18, 32]);
+});
+
+test('a <switch> draws the first child whose conditions hold, and none of the rest', () => {
+  const draw = (body, opts) => {
+    const view = new SvgView(null, opts).setSvg(`<svg viewBox="0 0 10 10">${body}</svg>`);
+    const ctx = mockCtx();
+    view.draw(ctx, 0, 0, 10, 10);
+    return { fills: of(ctx.calls, 'fill').map((call) => call[3]), texts: of(ctx.calls, 'fillText').map((call) => call[1]) };
+  };
+  const rect = (attrs) => `<rect width="10" height="10" ${attrs}/>`;
+
+  // a child with no conditions holds, so the one after it is never reached
+  assert.deepEqual(draw(`<switch>${rect('fill="#100"')}${rect('fill="#200"')}</switch>`).fills, ['#100']);
+  // how Illustrator writes a document: its own data behind an extension
+  // nothing else supports, and what everyone else draws after it
+  assert.deepEqual(
+    draw(`<switch>
+      <foreignObject requiredExtensions="http://ns.adobe.com/AdobeIllustrator/10.0/" width="1" height="1"/>
+      <g>${rect('fill="#100"')}</g>
+    </switch>`).fills,
+    ['#100']
+  );
+  assert.deepEqual(draw(`<switch>${rect('requiredExtensions="" fill="#100"')}${rect('fill="#200"')}</switch>`).fills, ['#200']);
+  // how draw.io writes a label: HTML for a renderer with foreignObject, and
+  // the text for one without, which this is
+  assert.deepEqual(
+    draw(`<switch>
+      <foreignObject requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" width="10" height="10"/>
+      <text x="1" y="8">label</text>
+    </switch>`).texts,
+    ['label']
+  );
+  // a feature it does draw holds, as does one it does not know
+  assert.deepEqual(
+    draw(`<switch>${rect('requiredFeatures="http://www.w3.org/TR/SVG11/feature#Shape" fill="#100"')}${rect('fill="#200"')}</switch>`).fills,
+    ['#100']
+  );
+  // the one chosen is drawn as it says, so one that is display: none is
+  // chosen, and draws nothing in place of the next
+  assert.deepEqual(draw(`<switch>${rect('display="none" fill="#100"')}${rect('fill="#200"')}</switch>`).fills, []);
+  // and none holding draws nothing
+  assert.deepEqual(draw(`<switch>${rect('requiredExtensions="x" fill="#100"')}</switch>`).fills, []);
+});
+
+test('systemLanguage holds for the languages the view reads, narrowed or widened by a subtag', () => {
+  const view = (languages) =>
+    new SvgView(null, { languages }).setSvg(`<svg viewBox="0 0 10 10">
+      <switch>
+        <rect width="10" height="10" systemLanguage="fr" fill="#100"/>
+        <rect width="10" height="10" systemLanguage="en-US, de" fill="#200"/>
+        <rect width="10" height="10" systemLanguage="" fill="#300"/>
+        <rect width="10" height="10" fill="#400"/>
+      </switch>
+      <rect width="10" height="10" systemLanguage="fr-CA" fill="#500"/>
+    </svg>`);
+  const fills = (languages) => {
+    const ctx = mockCtx();
+    view(languages).draw(ctx, 0, 0, 10, 10);
+    return of(ctx.calls, 'fill').map((call) => call[3]);
+  };
+  // outside a switch too, a shape whose conditions fail is not drawn
+  assert.deepEqual(fills(['fr']), ['#100', '#500']);
+  assert.deepEqual(fills(['FR-ca']), ['#100', '#500']);
+  assert.deepEqual(fills(['en']), ['#200']);
+  assert.deepEqual(fills(['de-CH']), ['#200']);
+  // an empty one never holds, and the child after it with none is the one
+  assert.deepEqual(fills(['en-GB']), ['#400']);
+  assert.deepEqual(fills(['ja', 'en-us']), ['#200'], 'any of them');
+  // what a view reads by default is a list of lowercase tags
+  for (const tag of new SvgView(null).languages) assert.match(tag, /^[a-z0-9-]+$/);
+});
+
+test('a <switch> read from an HTML parse, its attribute names lowercased', () => {
+  const doc = parseDocument(
+    `<svg viewBox="0 0 10 10"><switch>
+      <rect width="10" height="10" requiredExtensions="x" fill="#100"/>
+      <rect width="10" height="10" systemLanguage="de" fill="#200"/>
+      <rect width="10" height="10" fill="#300"/>
+    </switch></svg>`
+  );
+  const ctx = mockCtx();
+  new SvgView(null, { languages: ['en'] }).setSvgDom(doc.children[0]).draw(ctx, 0, 0, 10, 10);
+  assert.deepEqual(of(ctx.calls, 'fill').map((call) => call[3]), ['#300']);
+});
+
+test('paint scan: only the child a <switch> chooses counts', () => {
+  const view = new SvgView(null, { languages: ['en'] }).setSvg(`<svg viewBox="0 0 10 10"><switch>
+    <rect width="10" height="10" systemLanguage="de" fill="#f00"/>
+    <rect width="10" height="10" fill="currentColor"/>
+    <rect width="10" height="10" fill="#00f"/>
+  </switch></svg>`);
+  assert.equal(view.paintKind, 'mono');
+  assert.equal(view.soloPaint, 'currentColor');
 });
 
 test('use references defs content with x/y offset', () => {
