@@ -85,16 +85,37 @@ fontconfig's own `sans-serif` list — CJK to Hiragino, as before. Every other
 family, and every other platform, reaches `fc-match` as written.
 
 A weight is translated onto fontconfig's scale, where regular is 80 and
-black is 210. The hundreds are fontconfig's named weights — 400 is its
-regular, 700 its bold — and a weight between two of them is as far between
-theirs, rounded to a whole number: `font-weight: 450` asks for 90, halfway
-from regular to medium. Weights below 100 and above 900 ask for thin and
-black. The face is then the one fontconfig finds nearest that weight, so 450
-in a family with a regular and a bold is the regular, as it is in a browser.
-Nearest is not quite CSS's rule, which looks in a direction first — heavier
-above 500, lighter below 400, and up to 500 between the two — so the faces
-differ where a weight sits between two a family has, on the side CSS does
-not look first: 520 in Arial is the regular here and the bold in a browser.
+black is 210, by fontconfig's own table — the one it reads every face's OS/2
+weight through, so 400 is 80, 700 is 200 and 350 is 55 — and a weight
+between two of its entries is as far between theirs, rounded to a whole
+number: `font-weight: 450` asks for 90, halfway from regular to medium.
+Weights up to 100 ask for thin, and 1000 for extrablack, 215.
+
+The face is the one CSS's font matching picks
+([CSS Fonts 4 §5.2](https://www.w3.org/TR/css-fonts-4/#font-style-matching)),
+as a browser's is: the normal width first, then the style — italic, then
+oblique, then upright, for an italic ask — and then the weight, looking in a
+direction first: from the weight asked up to 500 and then lighter for 400 to
+500, lighter first below 400, heavier first above 500. Fontconfig alone takes
+the face *nearest* the weight, after the slant and before the width, and the
+two differ where a weight sits between two a family has, on the side CSS
+does not look first: 520 in Arial is its regular to fontconfig and its bold
+to CSS, 420 in Helvetica Neue its regular and its medium, 800 in Avenir Next
+its bold and its heavy, and 900 in Helvetica Neue its condensed black and its
+bold. One `fc-match` cannot say which weights a family has — `fc-match -s`
+leaves out every face whose coverage the faces before it already give, which
+is the rest of a family — so the first prewarm's child also lists every face
+once, with `fc-list`: 45 ms for 1,900 faces on a Mac, beside the matches and
+spawning nothing of the app's. Most faces never read it. Where fontconfig
+answered with the weight asked for, or with a face nothing CSS tries first
+could be nearer than — 500 in Helvetica, whose regular is nearer than a 500
+would be — its face is CSS's already. A face that does read the listing costs
+a layout about a millisecond, once a family, or waits for the listing if it
+is asked for in the 45 ms it takes. The family is the one the pattern named:
+`Avenir Next Ultra Light`, the name two of Avenir Next's faces also go by, is
+those two. A weight a variable font's axis holds is set on the axis, as
+before. Where there is no `fc-list` — it ships beside `fc-match` in every
+fontconfig package — the face is fontconfig's nearest.
 
 Text layout is synchronous, so it always pays that cost inline. Code that
 can await — a font picker matching as the user types, a preferences page —
