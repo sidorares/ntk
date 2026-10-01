@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.17.5](https://github.com/sidorares/ntk/compare/v8.17.4...v8.17.5) (2026-10-01)
+
+
+### Bug Fixes
+
+* **context2d:** a gradient or pattern drawn small far across a window is drawn, sampled from where its own origin lands ([#491](https://github.com/sidorares/ntk/issues/491)) ([03954f5](https://github.com/sidorares/ntk/commit/03954f5f2e37c1fa36a4d6811a71e61e5deb7e87))
+* **text:** a font weight is the face CSS picks, looking in its direction first, so 520 in Arial is the bold ([#493](https://github.com/sidorares/ntk/issues/493)) ([646d236](https://github.com/sidorares/ntk/commit/646d2368ed8d6fa76098402e6498017268a65747))
+
 ## [8.17.4](https://github.com/sidorares/ntk/compare/v8.17.3...v8.17.4) (2026-09-30)
 
 
