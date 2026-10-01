@@ -309,6 +309,10 @@ ctx.drawGlyphs(ctx.Render.PictOp.Over, ctx.createSolidPicture(1, 1, 1, 1), [
   ctx.font = '16px Inter';
   ```
 
+  Faces loaded into one family are matched by style and then by the weight
+  CSS picks, as a font source's are — see
+  [fonts.md](fonts.md#loading-a-font-file-directly).
+
 - `fallbackFor(codepoint, family, opts)` → `Font | null`
 - `shape(text, style)` → shaped runs (see below)
 - `layout(content, style, options)` → `TextLayout`
