@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.17.6](https://github.com/sidorares/ntk/compare/v8.17.5...v8.17.6) (2026-10-01)
+
+
+### Bug Fixes
+
+* **text:** a font source of files picks the weight CSS picks, as fontconfig's does, so 520 between a regular and a bold is the bold ([#494](https://github.com/sidorares/ntk/issues/494)) ([eec4015](https://github.com/sidorares/ntk/commit/eec40158ccdce5c09b2514d5504fa834b83ad5ae))
+
 ## [8.17.5](https://github.com/sidorares/ntk/compare/v8.17.4...v8.17.5) (2026-10-01)
 
 
