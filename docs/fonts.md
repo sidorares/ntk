@@ -180,8 +180,18 @@ await createClient({ fontSource: 'system' });         // the default, said out l
 — a FontSource passes straight through — which is why the same value works
 everywhere a source does.
 
-`StaticFontSource` matches with fontconfig-like semantics: requested
-families first (in list order), then closest weight and style; every added
+`StaticFontSource` matches as the system path does: requested families
+first (in list order), then within a family the style — italic or upright,
+as asked — and then the weight CSS's font matching picks, looking in a
+direction first as [described above](#using-css-style-font-names): up to 500
+and then lighter for 400 to 500, lighter first below 400, heavier first
+above 500. So a family of a regular and a bold sets 520 in the bold whether
+fontconfig found it or the app handed it over, where this source used to
+take the face *nearest* the weight. A variable face added without a `weight`
+holds every weight on its `wght` axis; a `weight` passed to `add` is the
+face's, as `@font-face`'s descriptor is, so a variable face added at 400 is
+matched as a face at 400 (and still drawn at the weight asked for). Faces
+alike in all of that come back in the order they were added. Every added
 face doubles as a fallback candidate with real coverage data, so
 per-codepoint fallback behaves exactly like the system path.
 
