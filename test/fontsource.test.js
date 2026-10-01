@@ -303,6 +303,150 @@ test('FontManager.load accepts font bytes', () => {
   assert.equal(fm.match('Frak'), font);
 });
 
+// `app.fonts.load` registers faces the manager matches itself, ahead of any
+// source. It took the face nearest in weight, so a regular and a bold loaded
+// that way set 520 in the regular, where the same two faces found through
+// fontconfig or handed over as a font spec set it in the bold.
+
+/** a manager with nothing behind its loaded faces */
+const loadedOnly = () => new FontManager({ source: { matchSorted: () => [] } });
+
+test('a weight between two loaded faces is the one CSS looks at first, not the nearest', () => {
+  const fm = loadedOnly();
+  fm.load(bytes('KaTeX_Main-Regular.ttf'), { family: 'Loaded' });
+  fm.load(bytes('KaTeX_Main-Bold.ttf'), { family: 'Loaded' });
+  const spec = new FontManager({
+    source: fontsDir(['KaTeX_Main-Regular.ttf', 'KaTeX_Main-Bold.ttf'])
+  });
+  // 400 to 500 look up to 500 first, and then lighter; above 500, heavier
+  // first, so 520 is the bold, 120 from the regular and 180 from it; below
+  // 400, lighter first, and with none lighter the nearest heavier
+  const expected = [
+    [450, 'Regular'],
+    [500, 'Regular'],
+    [520, 'Bold'],
+    [550, 'Bold'],
+    [300, 'Regular'],
+    [100, 'Regular']
+  ];
+  for (const [weight, face] of expected) {
+    const loaded = fm.match('Loaded', { weight }).postscriptName;
+    assert.equal(loaded, `KaTeX_Main-${face}`, `at ${weight}`);
+    // and it is the face the font-spec source picks of the same two files
+    assert.equal(loaded, spec.match('KaTeX_Main', { weight }).postscriptName, `at ${weight}`);
+  }
+});
+
+test('every weight in loaded families shaped like real ones is the face CSS picks', () => {
+  // the shapes the StaticFontSource test above uses, loaded instead of added,
+  // all into one manager, beside a source holding the same faces
+  const families = {
+    Arial: [[400], [700]],
+    Helvetica: [[300], [400], [700], [300, 'italic'], [400, 'italic'], [700, 'italic']],
+    'Helvetica Neue': [[100], [200], [300], [400], [500], [700]],
+    'Avenir Next': [[275], [275, 'italic'], [400], [500], [600], [700], [900]],
+    'Hiragino Sans': [[100], [200], [300], [400], [600]]
+  };
+  const fm = loadedOnly();
+  const source = new StaticFontSource();
+  const loaded = new Map(); // Font -> { family, weight, italic }
+  const added = new Map();
+  for (const [family, faces] of Object.entries(families)) {
+    for (const [weight, style = 'normal'] of faces) {
+      const face = { family, weight, italic: style === 'italic' };
+      loaded.set(fm.load(bytes('KaTeX_Main-Regular.ttf'), { family, weight, style }), face);
+      added.set(source.add(bytes('KaTeX_Main-Regular.ttf'), { family, weight, style }), face);
+    }
+  }
+  const label = (f) => `${f.family} ${f.weight}${f.italic ? ' italic' : ''}`;
+  for (const family of Object.keys(families)) {
+    const faces = [...loaded.values()].filter((f) => f.family === family);
+    for (const italic of [false, true]) {
+      const style = italic ? 'italic' : 'normal';
+      for (let weight = 100; weight <= 900; weight += 10) {
+        const got = loaded.get(fm.match(family, { weight, style }));
+        const picks = cssPicks(faces, weight, italic);
+        const at = `${family} at ${weight}${italic ? ' italic' : ''}`;
+        assert.ok(
+          picks.includes(got),
+          `${at}: ${label(got)}, where CSS picks ${picks.map(label).join(' or ')}`
+        );
+        // a tie included, the face the source puts first
+        const [head] = source.matchSorted({ family, weight, style });
+        assert.equal(label(got), label(added.get(head.font)), at);
+      }
+    }
+  }
+});
+
+test('a loaded face is picked by style, then weight, then the order it was loaded in', () => {
+  const fm = loadedOnly();
+  const labels = new Map();
+  const load = (file, opts, label) => labels.set(fm.load(bytes(file), opts), label);
+  // loaded out of order, so the face that comes back is the ranking's
+  for (const weight of [700, 300, 500, 400]) {
+    load('KaTeX_Main-Regular.ttf', { family: 'Ladder', weight, style: 'normal' }, String(weight));
+  }
+  load('KaTeX_Main-Italic.ttf', { family: 'Ladder', weight: 450, style: 'italic' }, '450 italic');
+  load('KaTeX_SansSerif-Regular.ttf', { family: 'Ladder', weight: 400 }, 'second 400');
+  load('KaTeX_AMS-Regular.ttf', { family: 'Other', weight: 100 }, 'other');
+  const face = (family, weight, style = 'normal') => labels.get(fm.match(family, { weight, style }));
+
+  // each of these is nearer the other way: 420 is 20 from 400, 380 is 20
+  // from 400, 560 is 60 from 500
+  assert.equal(face('Ladder', 420), '500');
+  assert.equal(face('Ladder', 380), '300');
+  assert.equal(face('Ladder', 560), '700');
+  // the style before the weight: the italic is 250 off and still picked
+  assert.equal(face('Ladder', 700, 'italic'), '450 italic');
+  // two faces at one weight: the one loaded first
+  assert.equal(face('Ladder', 400), '400');
+  // a family named earlier in the list wins, whatever its weights
+  assert.equal(face('Other, Ladder', 700), 'other');
+  assert.equal(face('Missing, Ladder', 700), '700');
+  // and a fallback looks at the family's faces in the same order
+  assert.equal(labels.get(fm.fallbackFor(0x41, 'Ladder', { weight: 520 })), '700');
+});
+
+test('a loaded variable face holds every weight on its axis, beside static faces', () => {
+  const vfBytes = readFileSync(new URL('./fixtures/MonelogicsSubset[wght].ttf', import.meta.url));
+  // faces by label, not by object: a failed assert.equal between two Fonts
+  // inspects both fontkit trees for its diff and runs out of memory
+  const labels = new Map();
+  const load = (fm, data, opts, label) => labels.set(fm.load(data, opts), label);
+  const face = (fm, family, weight) => {
+    const font = fm.match(family, { weight });
+    return labels.get(font.variationOf ?? font);
+  };
+
+  const fm = loadedOnly();
+  load(fm, bytes('KaTeX_Main-Bold.ttf'), { family: 'Mixed' }, 'bold'); // 700
+  load(fm, vfBytes, { family: 'Mixed' }, 'variable'); // wght 100–900, OS/2 400
+  // 600 and 900 were the bold's while the face was ranked by its OS/2 weight
+  for (const weight of [100, 300, 520, 600, 900]) {
+    assert.equal(face(fm, 'Mixed', weight), 'variable', `at ${weight}`);
+  }
+  // a weight both hold is a tie, and a tie goes to the face loaded first
+  assert.equal(face(fm, 'Mixed', 700), 'bold');
+  // and the weight asked for is set on the axis
+  assert.deepEqual(fm.match('Mixed', { weight: 600 }).variationCoords, { wght: 600 });
+
+  // a weight given to load is the face's, as @font-face's descriptor is, so
+  // a variable face loaded at 400 is one face at 400…
+  const pinned = loadedOnly();
+  load(pinned, bytes('KaTeX_Main-Bold.ttf'), { family: 'Mixed' }, 'pinned bold');
+  load(pinned, vfBytes, { family: 'Mixed', weight: 400 }, 'pinned variable');
+  assert.equal(face(pinned, 'Mixed', 450), 'pinned variable');
+  assert.equal(face(pinned, 'Mixed', 600), 'pinned bold');
+  // …still drawn at the weight asked for, and alone in its family, the face
+  // every weight is set in
+  assert.deepEqual(pinned.match('Mixed', { weight: 450 }).variationCoords, { wght: 450 });
+  const alone = loadedOnly();
+  load(alone, vfBytes, { family: 'Alone', weight: 400 }, 'alone');
+  assert.equal(face(alone, 'Alone', 700), 'alone');
+  assert.deepEqual(alone.match('Alone', { weight: 700 }).variationCoords, { wght: 700 });
+});
+
 test('a plain-object source with data candidates satisfies the contract', () => {
   const data = bytes('KaTeX_Main-Regular.ttf');
   let calls = 0;

@@ -144,6 +144,21 @@ app.fonts.shape('Hello', { font, size: 24 });
 face, `{ family }` to register under an alias, and `{ weight, style }` to
 override what the file reports.
 
+Faces loaded into one family are matched as the font sources match theirs:
+the style asked for, italic or upright, and then the weight CSS's font
+matching picks, looking in a direction first as
+[described above](#using-css-style-font-names): up to 500 and then lighter
+for 400 to 500, lighter first below 400, heavier first above 500. So a
+regular and a bold loaded this way set 520 in the bold, as the same two
+files do found through fontconfig or handed over as a
+[font spec](#pluggable-font-sources), where `load` used to take the face
+*nearest* the weight. A variable face loaded without a `weight` holds every
+weight on its `wght` axis; a `weight` passed to `load` is the face's, as
+`@font-face`'s descriptor is, so a variable face loaded at 400 is matched as
+a face at 400 (and still drawn at the weight asked for). Faces alike in all
+of that go to the one loaded first, and of a family list, the first family
+with a face loaded is the one matched.
+
 ## Pluggable font sources
 
 Step 1 (lookup) is pluggable. All system-font resolution goes through a
