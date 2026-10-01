@@ -711,16 +711,16 @@ ctx.fillStyle = g;
   node's origin, and a scaled context scales the ramp with the shape. A
   transform that collapses (a zero scale) paints nothing, as the canvas spec
   says
-- A fill **scaled down far from the surface's origin** can paint nothing
-  too. The server samples a gradient at device coordinates through the
-  CTM's inverse, written in 16.16 fixed point, and that inverse's
-  translation is the device position times the downscale: a box at a
-  fortieth of its size at x 2,200 asks for 88,000, past the 32,767 the wire
-  carries. Such a fill is skipped rather than thrown. To draw it, paint the
-  box on a [`Surface`](surface.md) at its own size and `drawImage` the
-  surface under the transform: an image's transform carries where in the
-  image the drawn box starts, not where on the surface. Patterns share the
-  limit
+- Fills sample a gradient **from where user space's origin lands**, or
+  from the point of the surface nearest it. The picture transform — the
+  CTM's inverse, written in 16.16 fixed point — then carries gradient
+  coordinates where the paint is rather than the paint's position times the
+  CTM's downscale, so a box drawn at a fortieth of its size at x 2,200 is
+  drawn like one at the origin, where it used to ask for 88,000. What is
+  left of the limit is the gradient's own coordinates: an inverse that
+  still cannot be written — a scale below 1/32,768, or a surface tens of
+  thousands of units from both user space's origin and the gradient —
+  paints nothing rather than throwing
 - Past the outermost stops the gradient **clamps** to their colours, so a
   fill wider than the ramp keeps its end colours instead of fading to
   transparent
@@ -783,9 +783,13 @@ chart fills and any texture-shaped background.
 - The pattern is painted in **user space**, like the gradients above: the
   transform in force at fill time applies to the tile as well as to the
   shape, so a scaled context scales its grid. A transform that collapses (a
-  zero scale) paints nothing, as the canvas spec says, and so does one
-  scaled down far from the origin — see [Gradients](#gradients) for why,
-  and for drawing it through a `Surface` instead
+  zero scale) paints nothing, as the canvas spec says
+- A pattern is sampled from where its tile's origin lands, as a
+  [gradient](#gradients) is from user space's, so a tile scaled down far
+  across a wide window is drawn like one at the origin. A repeating or
+  reflecting tile is the same a whole number of tiles along, and is taken
+  from the one under the surface: a grid scrolled 100,000 pixels is still
+  the grid
 - Whole-pixel tiling samples with the `nearest` filter — the tile's own
   pixels, exactly — and anything else (a fractional offset, a scale, a
   rotation) resamples bilinearly

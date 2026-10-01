@@ -208,7 +208,7 @@ test('a degenerate pattern transform paints nothing rather than the last one', a
   tile.destroy();
 });
 
-test('a pattern filled scaled down far from the origin does not throw, and paints after', async () => {
+test('a pattern filled scaled down far from the origin is drawn there, and as itself after', async () => {
   const w = 2300;
   const pixmap = app.createPixmap({ width: w, height: H, depth: 24 });
   const ctx = pixmap.getContext('2d');
@@ -222,11 +222,10 @@ test('a pattern filled scaled down far from the origin does not throw, and paint
   console.error = (...args) => errors.push(args.join(' '));
   try {
     // A fortieth of its size at x 2,200: the picture transform is the
-    // inverse of the CTM, whose translation is that position times the
+    // inverse of the CTM, whose translation was that position times the
     // downscale — 88,000, past what 16.16 fixed point carries, and the
-    // request encoder threw on it. Every fill samples a pattern at device
-    // coordinates, so the fill is skipped rather than thrown out of the
-    // paint.
+    // request encoder threw on it. Sampled from where the tile's origin
+    // lands, it is 0 (test/style-origin.test.js).
     ctx.save();
     ctx.translate(2200, 40);
     ctx.scale(1 / 40, 1 / 40);
@@ -241,6 +240,12 @@ test('a pattern filled scaled down far from the origin does not throw, and paint
     assert.deepEqual(at(0, 0), RED, 'the red quadrant of the tile');
     assert.deepEqual(at(6, 6), BLUE, 'the blue one, a tile along');
     assert.deepEqual(at(2, 0), WHITE, 'a transparent one');
+    // ten tiles a pixel, red and blue and nothing: not white, wherever the
+    // samples fall
+    const far = await ctx.getImageData(2200, 40, 50, 20);
+    let inked = 0;
+    for (let i = 0; i < far.data.length; i += 4) if (far.data[i + 1] !== 255) inked++;
+    assert.equal(inked, 50 * 20, 'the far fill is painted, every pixel of it');
   } finally {
     console.error = report;
   }
