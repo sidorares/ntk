@@ -40,6 +40,9 @@ either a parsed DOM or a markup string.
     preserving aspect ratio) or `'fill'` (stretch)
   - `color` — what `currentColor` resolves to (default `'#000'`); see
     [Taking colour from the caller](#taking-colour-from-the-caller)
+  - `languages` — the languages `systemLanguage` is matched against, most
+    preferred first, like `navigator.languages`; see
+    [Conditional processing](#conditional-processing)
 - `view.setSvg(svgText)` — parse and adopt a document (a string containing
   an `<svg>` element). Re-renders in window mode
 - `view.setSvgDom(element)` — adopt an already-parsed htmlparser2 `<svg>`
@@ -56,6 +59,9 @@ either a parsed DOM or a markup string.
 - `view.naturalWidth` / `view.naturalHeight` — from the `width`/`height`
   attributes, falling back to the `viewBox` size
 - `view.viewBox` — `[minX, minY, width, height]` or `null`
+- `view.languages` — the `languages` option, lowercased, or the default
+  worked out from the runtime. Read when a document is adopted, for
+  `paintKind`, and on every draw
 
 The widget is static and safe by construction: no
 scripting, no network or filesystem access — documents are strings and
@@ -69,7 +75,9 @@ Elements:
   (+`rx`/`ry`), `circle`, `ellipse`, `line`, `polyline`, `polygon`
 - structure: `svg` (`viewBox`, `width`/`height`, presentation attributes),
   `g`, `defs`, `use` (`href`/`xlink:href` to a local `#id`, `x`/`y` offset,
-  `symbol` targets), `a` (rendered, not clickable)
+  `symbol` targets), `a` (rendered, not clickable), `switch` (draws its
+  first child whose [conditions](#conditional-processing) hold, through its
+  own `transform` and `opacity` as a `g` would)
 - a nested `svg` is a new viewport, not a group: `width` by `height` at
   `x`,`y`, each a length or a percentage of the viewport around it, and all
   of that viewport where unset. Its `viewBox` is fitted in as
@@ -126,6 +134,35 @@ external references, `preserveAspectRatio` on the root `svg` (whose
 `viewBox` is stretched to the box `draw` is given), a `symbol`'s `viewBox`,
 stroke dashing, and full `text` layout (`tspan`, `textPath`).
 
+## Conditional processing
+
+An element whose `requiredExtensions`, `requiredFeatures` or
+`systemLanguage` does not hold is not drawn, nor anything in it; one that
+carries none of them holds. A `switch` draws the first of its child elements
+that holds and none of the rest — that one as it says, so one that is
+`display: none` is chosen and draws nothing.
+
+- `requiredExtensions` never holds: `SvgView` supports no extension. That is
+  how an Illustrator export draws here, its own data first in a
+  `foreignObject` behind Adobe's extension and the drawing after it.
+- `requiredFeatures` holds unless it names an SVG 1.1 feature `SvgView`
+  draws nothing of — `#Extensibility` (`foreignObject`), `#Image`, `#Clip`,
+  `#Mask`, `#Filter`, `#Pattern`, `#Marker`, `#Font`, `#Script`,
+  `#Animation` and the like. SVG 2 dropped the attribute and browsers hold
+  every one; here a feature it lacks picks the author's fallback, which is
+  how a draw.io export's labels draw: as the `text` it writes after each
+  `foreignObject` for renderers without one.
+- `systemLanguage` holds where one of its comma-separated tags is one of the
+  view's `languages`, or one of them narrowed or widened by a subtag — `en`
+  matches `en-AU` and `en-AU` matches `en`. An empty one never holds. By
+  default those are `navigator.languages`, or else the runtime's locale,
+  each followed by its language alone: `['en-au', 'en']`. A host that knows
+  its UI's language passes it:
+
+```js
+const view = new SvgView(null, { languages: ['de-CH', 'de'] });
+```
+
 ## Taking colour from the caller
 
 An icon set is written without colours: every shape says
@@ -169,8 +206,8 @@ whether the colour belongs in its cache key:
 
 Opacity does not enter into it: `opacity`, `fill-opacity` and
 `stroke-opacity` scale coverage, which a mask carries perfectly well. What
-is not drawn at all — under `display: none`, or a shape whose `visibility`
-is `hidden` — commits to no colour.
+is not drawn at all — under `display: none`, a shape whose `visibility` is
+`hidden`, a `switch` child it does not choose — commits to no colour.
 
 ## SVG path data elsewhere
 

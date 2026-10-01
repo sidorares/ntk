@@ -358,6 +358,35 @@ test('SvgView: display, visibility, a style opacity and a nested <svg>, as a bro
   pixmap.destroy();
 });
 
+test('SvgView: a <switch> draws its first child that holds, through its own transform', async (t) => {
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx } = freshCtx(64);
+
+  // CSS Zen Garden 219's footer.svg, in small: an icon's path alone in a
+  // switch that places it; and Illustrator's, its own data first behind an
+  // extension no other renderer has
+  new SvgView(null)
+    .setSvg(`<svg width="64" height="64">
+      <rect width="64" height="64" fill="#ddf4ff"/>
+      <switch transform="matrix(2,0,0,2,8,8)"><path d="M0 0h8v8h-8z" fill="#cf222e"/></switch>
+      <switch>
+        <foreignObject requiredExtensions="http://ns.adobe.com/AdobeIllustrator/10.0/" width="1" height="1"/>
+        <rect x="32" y="32" width="24" height="24" fill="#1a7f37"/>
+        <rect x="32" y="32" width="24" height="24" fill="#cf222e"/>
+      </switch>
+    </svg>`)
+    .draw(ctx, 0, 0);
+
+  const image = await readPixels(ctx, 64, 64);
+  const back = [0xdd, 0xf4, 0xff];
+  assert.deepEqual(px(image, 64, 4, 4), back);
+  assert.deepEqual(px(image, 64, 10, 10), [0xcf, 0x22, 0x2e], 'the icon, moved to 8,8');
+  assert.deepEqual(px(image, 64, 22, 22), [0xcf, 0x22, 0x2e], 'and twice its size');
+  assert.deepEqual(px(image, 64, 26, 26), back);
+  assert.deepEqual(px(image, 64, 44, 44), [0x1a, 0x7f, 0x37], 'the first child that holds, and not the one after it');
+  pixmap.destroy();
+});
+
 test('a gradient and a pattern drawn small far from the origin paint as they do near it', async (t) => {
   if (skip) return t.skip(skip);
   // Each style samples from where its own origin lands, so the server sees
