@@ -358,6 +358,64 @@ test('SvgView: display, visibility, a style opacity and a nested <svg>, as a bro
   pixmap.destroy();
 });
 
+test('a gradient and a pattern drawn small far from the origin paint as they do near it', async (t) => {
+  if (skip) return t.skip(skip);
+  // Each style samples from where its own origin lands, so the server sees
+  // the same transform at x 2,200 as at x 100; at a thirty-second of their
+  // size they used to ask for 70,400, past what 16.16 carries
+  // (test/style-origin.test.js runs every path; this is pixman sampling).
+  const W = 2400;
+  const H = 48;
+  const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, 0, 4800, 1280);
+  g.addColorStop(0, 'red');
+  g.addColorStop(0.5, 'lime');
+  g.addColorStop(1, 'blue');
+  const tile = new Surface(app, { width: 160, height: 160 });
+  tile.render((c) => {
+    c.fillStyle = 'red';
+    c.fillRect(0, 0, 80, 80);
+    c.fillStyle = 'blue';
+    c.fillRect(80, 80, 80, 80);
+  });
+  const pattern = ctx.createPattern(tile, 'repeat');
+  const scene = (x) => {
+    ctx.save();
+    ctx.translate(x, 4);
+    ctx.scale(1 / 32, 1 / 32);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 960, 1280);
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 96;
+    ctx.beginPath();
+    ctx.moveTo(1120, 64);
+    ctx.lineTo(1600, 1216);
+    ctx.stroke();
+    ctx.fillStyle = pattern;
+    ctx.beginPath();
+    ctx.arc(2400, 640, 576, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.restore();
+  };
+  scene(100);
+  scene(2200);
+  const near = await ctx.getImageData(90, 0, 110, H);
+  const far = await ctx.getImageData(2190, 0, 110, H);
+  let inked = 0;
+  let differ = 0;
+  for (let i = 0; i < near.data.length; i += 4) {
+    if (near.data[i] !== 255 || near.data[i + 1] !== 255) inked++;
+    if (near.data.slice(i, i + 3).join() !== far.data.slice(i, i + 3).join()) differ++;
+  }
+  assert.ok(inked > 1000, `the scene near the origin is painted (${inked} pixels)`);
+  assert.equal(differ, 0, 'far from the origin it is painted the same');
+  tile.destroy();
+  pixmap.destroy();
+});
+
 test('createPattern: a tile repeats across a fill, on a real server', async (t) => {
   if (skip) return t.skip(skip);
   const { pixmap, ctx } = freshCtx();
