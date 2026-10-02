@@ -432,12 +432,37 @@ through it. Only the first step has a choice of where it happens.
   (`lib/trapezoid.js`) and sent as `AddTraps`/`Triangles`. Cost grows with
   geometric complexity: per-request overhead plus 40 bytes per trapezoid.
 - **Locally** — the geometry is rasterized into 8-bit coverage here
-  (`lib/rasterize.js`) and uploaded with one `PutImage`. Cost grows with
+  (`lib/precise.js`) and uploaded with one `PutImage`. Cost grows with
   area: one byte per pixel of the drawing's bounding box — or, under a clip,
   of the part of it inside the clip's extents, the only part uploaded and
   composited. The coverage is still rasterized over the whole box, so a
   drawing that different clips split across passes gets the same bytes in
   every one of them.
+
+**Both routes draw the same mask, to the byte.** The local rasterizer,
+`PreciseRasterizer`, samples the way RENDER's default poly-mode, Precise,
+defines: a grid of 17 × 15 sample points per pixel, each trapezoid or
+triangle added into the mask. It samples them from the same 16.16
+trapezoids and triangles the server route would send. That is how pixman
+rasterizes them, and pixman is what fb (Xvfb, XQuartz) and glamor (Xorg,
+Xwayland) use. So which route a drawing took never shows, wherever the same
+pixels are drawn more than once:
+
+- a pass over part of the window that strokes only the run of an edge inside
+  its clip, against a repaint that strokes all of it;
+- a stroke drawn straight to the window (no clip, no round cap or join, full
+  alpha, `source-over`, which skips the mask altogether), against the same
+  stroke under a clip;
+- a clip mask, against a fill.
+
+With the analytic `ScanlineRasterizer`, the default before it, the local
+route was a few levels away from the server at every edge, and those seams
+showed (issue #462). A server that does not rasterize with pixman can still
+differ from the local route; a pixman server cannot.
+
+`node-x11`'s in-process JS X server, which the hermetic tests and the
+website's playground run on, rasterizes trapezoids its own way, so there the
+two routes still differ by a few levels at the edges.
 
 The choice is per drawing, made by `routeRaster()` from the bounding-box area
 and the flattened edge count. Defaults, measured against XQuartz with shapes
@@ -611,6 +636,13 @@ app.rasterizer = null;          // send every drawing to the server
 setDefaultRasterizer(myRasterizer);
 ```
 
+The default is `PreciseRasterizer`. `ScanlineRasterizer`, the analytic
+one, computes each pixel's exact area instead. It is smoother along
+near-horizontal edges, which point sampling resolves to about 16 levels.
+But its masks are a few levels away from the server's at every edge, so a
+drawing it rasterizes and one the server rasterizes can show a seam where
+they meet. The same holds for any rasterizer of your own.
+
 A rasterizer is any object with one method:
 
 ```js
@@ -624,7 +656,8 @@ rasterize({ polys, triangles, width, height, rule, dx, dy }) → Uint8Array | Bu
 - `dx`/`dy` must be added to every coordinate. Geometry arrives in device
   space and the grid covers the drawing's bounding box; the offset maps one to
   the other. It is passed rather than pre-applied because pre-applying means
-  copying every point of every path on every frame;
+  copying every point of every path on every frame. The 2d context always
+  passes whole pixels;
 - return `width * height` bytes of 8-bit coverage, row-major and unpadded, or
   `null` to decline. Declining routes that drawing back to the server, so a
   partial implementation is safe — a rasterizer that only understands
@@ -662,10 +695,15 @@ simple, large shapes `routeRaster` already sends to the server, where a handful
 of trapezoids still beat uploading the coverage. So enabling shared memory does
 **not** change `DEFAULT_RASTER_POLICY`; the coverage path is unchanged.
 
-The default `ScanlineRasterizer` uses signed-area accumulation (the font-rs /
-stb_truetype v2 algorithm) — exact analytic antialiasing, no supersampling,
-no dependencies, and it works in a browser bundle. `CoverageAccumulator` is
-exported if you want to drive it directly.
+The default `PreciseRasterizer` is a port of pixman's trapezoid rasterizer
+(`lib/precise.js`), down to its rounding: it is measured byte-identical
+against a pixman server, and `test/raster-precise-live.test.js` checks it
+against whichever server `$DISPLAY` names. `ScanlineRasterizer` uses
+signed-area accumulation (the font-rs / stb_truetype v2 algorithm) — exact
+analytic antialiasing, no supersampling — and it is what glyph bitmaps are
+rasterized with, since a glyph has no server route to agree with. Both have
+no dependencies and work in a browser bundle. `CoverageAccumulator` is
+exported if you want to drive the analytic one directly.
 
 ## Path2D
 

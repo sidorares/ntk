@@ -112,6 +112,11 @@ lib/rasterize.js           pure-JS coverage rasterizer (signed-area
                            accumulation): glyph outlines and path/stroke
                            geometry -> a8; the pluggable Rasterizer seam and
                            the local/server routing policy
+lib/precise.js             PreciseRasterizer, the default for 2d masks: RENDER
+                           Precise rasterization as pixman does it, from the
+                           same 16.16 triangles/trapezoids the server route
+                           sends, so both routes give a mask the same bytes
+                           (issue #462)
 lib/maskcluster.js         one drawing's pieces -> the few mask boxes their
                            ink is really in: the gap partition that keeps a
                            path of N scattered subpaths off one union-sized
