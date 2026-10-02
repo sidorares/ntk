@@ -232,9 +232,11 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   with bilinear filtering. Respects the clip, `globalAlpha` and
   `globalCompositeOperation`. `image` can also be a [`Surface`](surface.md)
   (pixels the server drew, including a8 coverage surfaces that paint in the
-  current `fillStyle`), anything else exposing `width`/`height`/`picture(app)`,
-  another ntk 2d context, or a node-canvas-like object exposing
-  `image.context.getImageData()` (its pixels are uploaded on every call).
+  current `fillStyle` under any transform, a gradient or a pattern landing
+  where a fill of the same rectangle puts it), anything else exposing
+  `width`/`height`/`picture(app)`, another ntk 2d context, or a
+  node-canvas-like object exposing `image.context.getImageData()` (its
+  pixels are uploaded on every call).
   Every source is drawn alike, in all three forms: cropped, scaled, under
   the transform, clipped, faded by `globalAlpha` and composited with the op.
   A context is the pixels it has drawn, whatever its own clip; one drawing
