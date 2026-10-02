@@ -1,5 +1,17 @@
 # Changelog
 
+## [8.18.1](https://github.com/sidorares/ntk/compare/v8.18.0...v8.18.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* **text:** text drawn through the 2d context fades with globalAlpha, as fills and strokes do ([#509](https://github.com/sidorares/ntk/issues/509)) ([b1eda21](https://github.com/sidorares/ntk/commit/b1eda21ddcdd7c80895ea9e06ab154dce327698a))
+
+
+### Performance Improvements
+
+* **raster:** Precise masks and trapezoids cost less, with the same bytes ([#508](https://github.com/sidorares/ntk/issues/508)) ([bfc0a70](https://github.com/sidorares/ntk/commit/bfc0a70378da3c6040f94d07efb99b5730ba4751))
+
 ## [8.18.0](https://github.com/sidorares/ntk/compare/v8.17.8...v8.18.0) (2026-10-02)
 
 
