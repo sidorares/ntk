@@ -245,6 +245,13 @@ glyphs     = [{ id, ax, dx, dy }, …]            // drawing order
   is the picture the glyphs paint with — a solid
   (`ctx.createSolidPicture(r, g, b, a)`, premultiplied 0..1 floats) or a
   gradient.
+- `ctx.globalAlpha` applies, as it does to a fill. A solid from
+  `createSolidPicture` (or a colour `fillStyle`) takes it in its colour —
+  all four premultiplied components scaled — so a faded run is still the
+  one `CompositeGlyphs` below. A gradient, a pattern or a picture of your
+  own has no single colour to fold it into: those paint through a
+  surface-sized a8 mask with the alpha in it, as under a path clip. At `0`
+  nothing is sent.
 
 One call collapses into one `CompositeGlyphs` request on the bitmap path
 (with inline glyphset switches when runs mix faces or sizes), rides the
@@ -478,7 +485,8 @@ context's user space — the transform applies to the origin, so a paragraph
 in a translated context lands with the rest of the drawing — batching
 consecutive same-color runs into single requests. The context's shadow
 properties apply, one coverage surface per batch, so text that wraps casts a
-shadow the same way `fillText` does. Geometry and hit testing
+shadow the same way `fillText` does, and so does `globalAlpha`, which fades
+the text and its shadow as it fades a fill. Geometry and hit testing
 (`caretPosition`, `indexAt`, `lines[]`) are relative to that same origin.
 
 Line breaking is UAX#14 (`linebreak` package); `\n` forces breaks; a word

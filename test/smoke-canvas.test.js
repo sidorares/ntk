@@ -2,9 +2,21 @@
 // save/restore, arcs, Path2D, fill rules, clipping, globalAlpha, strokes
 // and the SVG widget. Runs against a real X server; skips without one.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { after, before, test } from 'node:test';
 
-import { blurCoverage, blurScale, createClient, Image, Path2D, Surface, SvgView } from '../lib/index.js';
+import {
+  blurCoverage,
+  blurScale,
+  createClient,
+  Image,
+  Path2D,
+  StaticFontSource,
+  Surface,
+  SvgView
+} from '../lib/index.js';
 import { withTimeout } from './helpers/async.js';
 
 let app = null;
@@ -206,6 +218,91 @@ test('globalAlpha: half-transparent fill blends with the background', async (t) 
   assert.ok(g > 90 && g < 170, `green blended toward white, got ${g}`);
   assert.ok(b > 90 && b < 170, `blue blended toward white, got ${b}`);
   pixmap.destroy();
+});
+
+test('globalAlpha: text fades as a fill does', async (t) => {
+  if (skip) return t.skip(skip);
+  // The hermetic run (test/text-alpha.test.js) holds every route text takes
+  // under globalAlpha to the JS server's arithmetic; this holds the two
+  // that differ most to a real RENDER's. A solid's alpha is folded into the
+  // glyphs' own source, and a gradient's goes into the a8 mask a path clip
+  // already needs. Each is compared with the same drawing at full opacity:
+  // at 0.5, every pixel is halfway between that and the background.
+  // A client of its own, with the fixture face, so the glyphs are the same
+  // on every machine and nothing is registered on the shared one.
+  const fontSource = new StaticFontSource();
+  const face = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'MonelogicsSubset[wght].ttf');
+  fontSource.add(readFileSync(face), { family: 'Fixture' });
+  const own = await withTimeout(createClient({ fontSource }), 5000, 'connecting to X server', (late) =>
+    late.close()
+  );
+  const W = 160;
+  const H = 64;
+  const paint = async (background, alpha, draw) => {
+    const pixmap = own.createPixmap({ width: W, height: H, depth: 24 });
+    const ctx = pixmap.getContext('2d');
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = alpha;
+    ctx.font = '40px Fixture';
+    draw(ctx);
+    const image = await ctx.getImageData(0, 0, W, H);
+    pixmap.destroy();
+    return image.data;
+  };
+  const halfway = (faded, opaque, bg, what) => {
+    let worst = 0;
+    let inked = 0;
+    for (let i = 0; i < opaque.length; i += 4) {
+      if (opaque[i] !== bg[0] || opaque[i + 1] !== bg[1] || opaque[i + 2] !== bg[2]) inked++;
+      for (let c = 0; c < 3; c++) {
+        worst = Math.max(worst, Math.abs(faded[i + c] - (bg[c] + opaque[i + c]) / 2));
+      }
+    }
+    assert.ok(inked > 50, `${what}: the opaque drawing inks something`);
+    assert.ok(worst <= 3, `${what}: every pixel is halfway to the opaque one, worst off by ${worst}`);
+  };
+
+  try {
+    const red = (ctx) => {
+      ctx.fillStyle = '#ff0000';
+      ctx.fillText('HHHH', 8, 48);
+    };
+    const opaque = await paint('white', 1, red);
+    const faded = await paint('white', 0.5, red);
+    let covered = 0;
+    for (let i = 0; i < opaque.length; i += 4) {
+      if (opaque[i + 1] !== 0) continue; // only pixels wholly inside a glyph
+      covered++;
+      const [r, g, b] = faded.slice(i, i + 3);
+      assert.ok(r === 255 && Math.abs(g - 0x80) <= 1 && Math.abs(b - 0x80) <= 1, `#ff8080, got ${[r, g, b]}`);
+    }
+    assert.ok(covered > 20, `some pixels are wholly inside a glyph (${covered})`);
+    halfway(faded, opaque, [255, 255, 255], 'fillText in a colour');
+
+    const clipped = (ctx) => {
+      ctx.beginPath();
+      ctx.ellipse(W / 2, 40, 50, 14, 0, 0, Math.PI * 2);
+      ctx.clip();
+      const g = ctx.createLinearGradient(0, 0, W, 0);
+      g.addColorStop(0, '#336699');
+      g.addColorStop(1, '#993366');
+      ctx.fillStyle = g;
+      const layout = own.fonts.layout([{ text: 'HHHH', family: 'Fixture', size: 40 }], {
+        family: 'Fixture',
+        size: 40
+      });
+      layout.draw(ctx, 8, 48 - layout.lines[0].baseline);
+    };
+    halfway(
+      await paint('#cc9966', 0.5, clipped),
+      await paint('#cc9966', 1, clipped),
+      [0xcc, 0x99, 0x66],
+      'a layout in a gradient under a path clip'
+    );
+  } finally {
+    await own.close();
+  }
 });
 
 test('stroke: lineWidth and clipped strokes honor the mask path', async (t) => {

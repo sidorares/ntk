@@ -159,6 +159,26 @@ describe('coverage surfaces', () => {
     assert.ok(r > 200, `colour survives the fold, got r=${r}`);
   });
 
+  test('the fold scales the whole premultiplied colour, as fillRect does', async () => {
+    // Blue at 0.5 over black is #000080. Scaling only the alpha of the
+    // premultiplied (0, 0, 1, 1) left (0, 0, 1, 0.5) — brighter than any
+    // colour can be — and drew #0000ff. Red over a transparent target, as
+    // above, cannot show it: the readback unpremultiplies it away.
+    const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });
+    const ctx = pixmap.getContext('2d');
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#0000ff';
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(block('a8'), 2, 2);
+    ctx.fillRect(20, 2, 8, 8);
+
+    const px = await readPixels(ctx);
+    assert.deepEqual(px(4, 4), px(22, 4), 'the coverage draw is the fill');
+    assert.ok(Math.abs(px(4, 4)[2] - 0x80) <= 1, `#000080, got ${px(4, 4)}`);
+    pixmap.destroy();
+  });
+
   test('a gradient fill is sampled where the coverage lands', async () => {
     const ctx = target();
     const g = ctx.createLinearGradient(0, 0, W, 0); // black at x=0, white at x=W

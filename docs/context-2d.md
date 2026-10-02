@@ -51,8 +51,9 @@ ctx.fillRect(0, 0, 100, 100);
   round a box far taller than the window costs what the window shows. A
   pattern that would still make more than 100,000 dashes there is stroked
   solid, as Chrome's Skia strokes one: dashes that fine are a tone
-- `ctx.globalAlpha` — multiplies fills, strokes, `fillRect` and `drawImage`
-  (not text)
+- `ctx.globalAlpha` — multiplies everything drawn: fills, strokes,
+  `fillRect`, `drawImage`, text (`fillText`, `drawGlyphs` and so
+  `TextLayout.draw`) and the shadows they cast. At `0` nothing is drawn
 - `ctx.shadowColor`, `ctx.shadowBlur`, `ctx.shadowOffsetX`,
   `ctx.shadowOffsetY` — drop shadows, off by default (a transparent
   `shadowColor`). See **Shadows** below
