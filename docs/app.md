@@ -93,6 +93,8 @@ paced slower can never reach the rate its display offers.
 - `app.createWindow(args) → Window` — see [window.md](window.md)
 - `app.rootWindow() → Window` — wrapper for the first screen's root window
 - `app.createPixmap(args) → Pixmap` — see [pixmap.md](pixmap.md)
+- `app.createSurface(args) → Surface` — `new Surface(app, args)`; see
+  [surface.md](surface.md)
 - `app.createColormap(visual, screen = 0) → id` — allocate a colormap for a
   visual (alloc None). Windows created with an explicit `visual` get one
   automatically, so this is only needed to share one between windows

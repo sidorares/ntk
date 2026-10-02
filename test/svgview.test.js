@@ -49,17 +49,30 @@ function mockCtx() {
       const [a, b, c, d, e, f] = this._m;
       return { a, b, c, d, e, f };
     },
+    globalCompositeOperation: 'source-over',
+    setTransform(a, b, c, d, e, f) {
+      this._m = [a, b, c, d, e, f];
+      calls.push(['setTransform', a, b, c, d, e, f]);
+    },
+    drawImage(image, x, y) {
+      calls.push(['drawImage', image, x, y, this.globalAlpha, this.globalCompositeOperation]);
+    },
     fillRect(x, y, w, h) {
       calls.push(['fillRect', x, y, w, h, this.fillStyle]);
     },
     fill(path, rule) {
-      calls.push(['fill', path, rule, this.fillStyle, this.globalAlpha, this._m.slice()]);
+      calls.push(['fill', path, rule, this.fillStyle, this.globalAlpha, this._m.slice(), this.globalCompositeOperation]);
     },
     stroke(path) {
       calls.push(['stroke', path, this.strokeStyle, this.lineWidth, this.globalAlpha]);
     },
     fillText(text, x, y) {
-      calls.push(['fillText', text, x, y, this.font, this.textAlign, this.fillStyle]);
+      calls.push(['fillText', text, x, y, this.font, this.textAlign, this.fillStyle, this.globalAlpha]);
+    },
+    // every character half an em wide, at the size the font names
+    measureText(text) {
+      const size = parseFloat(/([\d.]+)px/.exec(this.font)?.[1] ?? '10');
+      return { width: [...text].length * size * 0.5 };
     },
     clip(path) {
       calls.push(['clip', path, this._m.slice()]);
@@ -613,15 +626,278 @@ test('unsupported/non-rendered elements are skipped without errors', () => {
   assert.equal(of(ctx.calls, 'fill').length, 1);
 });
 
-test('text renders through fillText with anchor mapping', () => {
+test('text is anchored by its measured width, not by textAlign', () => {
   const view = new SvgView(null);
   view.setSvg('<svg viewBox="0 0 100 100"><text x="50" y="50" font-size="10" text-anchor="middle" fill="black">hi</text></svg>');
   const ctx = mockCtx();
   view.draw(ctx, 0, 0, 100, 100);
   const t = of(ctx.calls, 'fillText')[0];
   assert.equal(t[1], 'hi');
-  assert.equal(t[5], 'center');
+  // react-x11's native contexts draw every run from its left, whatever
+  // textAlign says, so the run is moved there instead
+  assert.equal(t[5], 'left');
+  assert.equal(t[2], 45, 'two characters of 5 centred on 50');
   assert.equal(t[4], '10px sans-serif'); // 10 * scale(1) at 100/100
+});
+
+// --- text: spans, chunks, white space, fonts ------------------------------
+
+/** The runs a drawing sets, as `{ text, x, y, font, fill }`. */
+const runs = (ctx) =>
+  of(ctx.calls, 'fillText').map(([, text, x, y, font, , fill]) => ({ text, x, y, font, fill }));
+
+const near = (got, want, what) => assert.ok(Math.abs(got - want) < 1e-6, `${what}: ${got}, want ${want}`);
+
+test("bun.sh's badge: two tspans are two chunks, each centred, in its own size and in capitals", () => {
+  const view = new SvgView(null).setSvg(
+    '<svg viewBox="0 0 100 100"><text x="50" y="46" text-anchor="middle" fill="#111" font-size="11" ' +
+      'font-weight="800" font-family="var(--font-sans)" letter-spacing="0.02em" style="text-transform:uppercase">' +
+      '<tspan x="50">replaces</tspan><tspan x="50" dy="1.15em" font-size="14">Node.js</tspan></text></svg>'
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 100, 100);
+  const all = runs(ctx);
+  const lines = [...new Set(all.map((r) => r.y))];
+  assert.equal(lines.length, 2, 'one line a chunk');
+  near(lines[0], 46, 'the first chunk at the text y');
+  // the second tspan's em is its own 14px
+  near(lines[1], 46 + 1.15 * 14, 'the second chunk a line below it');
+  const line = (y) => all.filter((r) => r.y === y);
+  assert.equal(line(lines[0]).map((r) => r.text).join(''), 'REPLACES');
+  assert.equal(line(lines[1]).map((r) => r.text).join(''), 'NODE.JS');
+  // a family that leans on a custom property is the one inherited
+  assert.equal(line(lines[0])[0].font, '800 11px sans-serif');
+  assert.equal(line(lines[1])[0].font, '800 14px sans-serif');
+  for (const [y, size, count] of [
+    [lines[0], 11, 8],
+    [lines[1], 14, 7]
+  ]) {
+    // spaced, each letter is a run, half an em wide and 0.02em of the
+    // text's 11px apart: an em is of the element it is set on, and what a
+    // span inherits is the length it came to
+    const step = size * 0.5 + 11 * 0.02;
+    const first = line(y)[0].x;
+    near(first, 50 - (count * step) / 2, `the chunk of ${count} centred on 50`);
+    line(y).forEach((r, i) => near(r.x, first + i * step, `letter ${i}`));
+  }
+  assert.equal(all[0].fill, '#111');
+});
+
+test('white space collapses across spans, and goes at either end', () => {
+  const view = new SvgView(null).setSvg(
+    '<svg width="100" height="20"><text x="0" y="10">  a \n\t <tspan>b</tspan>  c  </text></svg>'
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 100, 20);
+  assert.deepEqual(
+    runs(ctx).map((r) => [r.text, r.x]),
+    [
+      ['a ', 0],
+      ['b', 16],
+      [' c', 24]
+    ]
+  );
+
+  const kept = mockCtx();
+  new SvgView(null)
+    .setSvg('<svg width="100" height="20"><text xml:space="preserve" x="0" y="10"> a\n b </text></svg>')
+    .draw(kept, 0, 0, 100, 20);
+  assert.deepEqual(runs(kept).map((r) => r.text), [' a  b ']);
+});
+
+test('x, y, dx and dy place characters one by one, the innermost list winning', () => {
+  const view = new SvgView(null).setSvg(
+    '<svg width="100" height="20"><text x="0 10 20" y="5" dy="0 2">ab<tspan x="40">cd</tspan></text></svg>'
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 100, 20);
+  assert.deepEqual(
+    runs(ctx).map((r) => [r.text, r.x, r.y]),
+    [
+      ['a', 0, 5],
+      ['b', 10, 7],
+      // the tspan's own x for its first character, over the text's third
+      ['cd', 40, 7]
+    ]
+  );
+});
+
+test('a run is set in the weight, style and size it inherits or names', () => {
+  const ctx = mockCtx();
+  new SvgView(null)
+    .setSvg(
+      '<svg width="100" height="100" font-family="Inter, sans-serif">' +
+        '<text y="10" font-style="italic" font-weight="bold" font-size="2em">a</text>' +
+        '<g font-weight="bold"><text y="20" font-weight="bolder" font-size="12pt">b</text></g>' +
+        '<text y="30" style="font-size: 75%; font-weight: 300">c</text></svg>'
+    )
+    .draw(ctx, 0, 0, 100, 100);
+  assert.deepEqual(runs(ctx).map((r) => r.font), [
+    'italic bold 32px Inter, sans-serif',
+    '900 16px Inter, sans-serif',
+    '300 12px Inter, sans-serif'
+  ]);
+});
+
+test('a caller gives the text a font to inherit, as a page gives an inline svg', () => {
+  const ctx = mockCtx();
+  new SvgView(null)
+    .setSvg('<svg width="100" height="20"><text y="10">a</text><text y="20" font-family="var(--sans)">b</text></svg>')
+    .draw(ctx, 0, 0, 100, 20, { font: { family: '"Geist", sans-serif', size: 12, weight: 600, style: 'italic' } });
+  assert.deepEqual(runs(ctx).map((r) => r.font), [
+    'italic 600 12px "Geist", sans-serif',
+    'italic 600 12px "Geist", sans-serif'
+  ]);
+});
+
+test('glyphs are set at the size they are drawn, unless the context scales text itself', () => {
+  const doc = '<svg viewBox="0 0 50 50"><text x="25" y="10" font-size="10" text-anchor="middle">hi</text></svg>';
+  // ntk's own context: the 2x of the viewBox goes into the font size, and
+  // what is measured comes back out of it
+  const own = mockCtx();
+  new SvgView(null).setSvg(doc).draw(own, 0, 0, 100, 100);
+  assert.deepEqual(runs(own).map((r) => [r.font, r.x]), [['20px sans-serif', 20]]);
+
+  // a context that draws text through its transform, as CoreText does
+  const scaling = mockCtx();
+  scaling.scalesText = true;
+  new SvgView(null).setSvg(doc).draw(scaling, 0, 0, 100, 100);
+  assert.deepEqual(runs(scaling).map((r) => [r.font, r.x]), [['10px sans-serif', 20]]);
+});
+
+test('dominant-baseline moves the baseline; a span hidden or shown, and its own paint', () => {
+  const ctx = mockCtx();
+  new SvgView(null)
+    .setSvg(
+      '<svg width="100" height="100"><text x="0" y="50" font-size="10" dominant-baseline="central" fill="red" visibility="hidden">' +
+        'a<tspan fill="blue" visibility="visible">b</tspan></text></svg>'
+    )
+    .draw(ctx, 0, 0, 100, 100);
+  // central is half way down the font's extent: an em's, 0.8 up and 0.2
+  // down, where the context does not say
+  assert.deepEqual(runs(ctx).map((r) => [r.text, r.x, r.y, r.fill]), [['b', 5, 53, 'blue']]);
+});
+
+test('paint scan: a span in a paint of its own makes the text multi', () => {
+  const one = new SvgView(null).setSvg('<svg><text fill="red">a<tspan>b</tspan></text></svg>');
+  assert.equal(one.paintKind, 'mono');
+  assert.equal(one.soloPaint, 'red');
+  const two = new SvgView(null).setSvg('<svg><text fill="red">a<tspan fill="blue">b</tspan></text></svg>');
+  assert.equal(two.paintKind, 'multi');
+});
+
+// --- masks -------------------------------------------------------------------
+
+const MASKED =
+  '<svg viewBox="0 0 100 100"><mask id="m" maskUnits="userSpaceOnUse" x="10" y="10" width="20" height="20">' +
+  '<rect width="100" height="100" fill="white"/></mask>' +
+  '<rect width="100" height="100" fill="red" opacity="0.5" mask="url(#m)"/></svg>';
+
+test('a masked element is drawn on a surface, cut by its mask on a second, and composited at its opacity', () => {
+  const made = [];
+  const surface = (w, h) => {
+    const s = { w, h, ctx: mockCtx(), getContext: () => s.ctx, destroyed: false, destroy() { this.destroyed = true; } };
+    made.push(s);
+    return s;
+  };
+  const ctx = mockCtx();
+  new SvgView(null).setSvg(MASKED).draw(ctx, 5, 5, 200, 200, { surface });
+  assert.equal(made.length, 2);
+  const [content, cover] = made;
+  // the region, 10..30 of 100 units at 2x and 5px in: 25..65
+  assert.deepEqual([content.w, content.h, cover.w, cover.h], [40, 40, 40, 40]);
+  const red = of(content.ctx.calls, 'fill')[0];
+  assert.equal(red[3], 'red');
+  assert.equal(red[4], 1, 'the content at full strength: its opacity is the group');
+  assert.deepEqual(red[5], [2, 0, 0, 2, -20, -20], 'in the surface, where the device pixel 25,25 is 0,0');
+  // luminance: white over nothing erases nothing and adds all of itself
+  assert.deepEqual(
+    of(cover.ctx.calls, 'fill').map((f) => [f[3], f[6]]),
+    [
+      ['rgba(0, 0, 0, 1)', 'destination-out'],
+      ['rgba(0, 0, 0, 1)', 'lighter']
+    ]
+  );
+  assert.deepEqual(of(content.ctx.calls, 'drawImage').map((d) => [d[1], d[2], d[3], d[5]]), [[cover, 0, 0, 'destination-in']]);
+  assert.deepEqual(of(ctx.calls, 'drawImage').map((d) => [d[1], d[2], d[3], d[4]]), [[content, 25, 25, 0.5]]);
+  assert.equal(of(ctx.calls, 'fill').length, 0, 'nothing drawn straight onto the context');
+  assert.ok(made.every((s) => s.destroyed));
+});
+
+test('with no surface to draw on, a masked element is drawn cut to the region', () => {
+  const ctx = mockCtx();
+  new SvgView(null).setSvg(MASKED).draw(ctx, 0, 0, 100, 100);
+  const clip = of(ctx.calls, 'clip')[0];
+  assert.ok(clip, 'clipped');
+  const fills = of(ctx.calls, 'fill');
+  assert.equal(fills.length, 1, 'the mask content is not drawn');
+  assert.equal(fills[0][3], 'red');
+  assert.ok(ctx.calls.indexOf(clip) < ctx.calls.indexOf(fills[0]));
+});
+
+test("a luminance mask's content is drawn as the luminance it makes, an alpha one as it is", () => {
+  const cover = (type) => {
+    const made = [];
+    const surface = () => {
+      const s = { ctx: mockCtx(), getContext: () => s.ctx, destroy() {} };
+      made.push(s);
+      return s;
+    };
+    new SvgView(null)
+      .setSvg(
+        `<svg width="40" height="40"><mask id="m"${type}><rect width="40" height="40" fill="#808080" fill-opacity="0.5"/></mask>` +
+          '<rect width="40" height="40" fill="red" mask="url(#m)"/></svg>'
+      )
+      .draw(mockCtx(), 0, 0, 40, 40, { surface });
+    return of(made[1].ctx.calls, 'fill').map((f) => [f[3], f[4], f[6]]);
+  };
+  const grey = 0x80 / 255;
+  assert.deepEqual(cover(''), [
+    ['rgba(0, 0, 0, 1)', 0.5, 'destination-out'],
+    [`rgba(0, 0, 0, ${(0.2125 + 0.7154 + 0.0721) * grey})`, 0.5, 'lighter']
+  ]);
+  assert.deepEqual(cover(' style="mask-type: alpha"'), [['#808080', 0.5, 'source-over']]);
+});
+
+test('a mask in objectBoundingBox units is measured against the box of what it masks', () => {
+  const made = [];
+  const surface = (w, h) => {
+    const s = { w, h, ctx: mockCtx(), getContext: () => s.ctx, destroy() {} };
+    made.push(s);
+    return s;
+  };
+  const ctx = mockCtx();
+  new SvgView(null)
+    .setSvg(
+      '<svg width="200" height="200"><mask id="m" maskContentUnits="objectBoundingBox">' +
+        '<rect width="0.5" height="1" fill="white"/></mask>' +
+        '<g mask="url(#m)"><rect x="100" y="50" width="40" height="20" fill="red"/>' +
+        '<rect transform="translate(10 0)" x="130" y="50" width="20" height="40" fill="red"/></g></svg>'
+    )
+    .draw(ctx, 0, 0, 200, 200, { surface });
+  // the group's box is 100,50 to 160,90; the region 10% more each way
+  assert.deepEqual([made[0].w, made[0].h], [72, 48]);
+  assert.deepEqual(of(ctx.calls, 'drawImage').map((d) => [d[2], d[3]]), [[94, 46]]);
+  // and the content is set in the box's units
+  const fill = of(made[1].ctx.calls, 'fill')[0];
+  assert.deepEqual(fill[5], [60, 0, 0, 40, 6, 4]);
+});
+
+test('a mask that reaches itself draws what it holds once', () => {
+  const ctx = mockCtx();
+  const made = [];
+  const surface = () => {
+    const s = { ctx: mockCtx(), getContext: () => s.ctx, destroy() {} };
+    made.push(s);
+    return s;
+  };
+  new SvgView(null)
+    .setSvg(
+      '<svg width="40" height="40"><mask id="m"><rect width="40" height="40" fill="white" mask="url(#m)"/></mask>' +
+        '<rect width="40" height="40" fill="red" mask="url(#m)"/></svg>'
+    )
+    .draw(ctx, 0, 0, 40, 40, { surface });
+  assert.equal(made.length, 2);
 });
 
 test('nested svg documents inside html-ish wrappers still parse', () => {
