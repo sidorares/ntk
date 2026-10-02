@@ -32,6 +32,10 @@ const context = vm.createContext({
   clearInterval,
   queueMicrotask,
 });
+// and no SharedArrayBuffer: a page has one only when it is cross-origin
+// isolated, which GitHub Pages cannot make it. A fresh context carries its
+// own as an intrinsic, so the bundle would find one here and in no browser.
+vm.runInContext('delete globalThis.SharedArrayBuffer', context);
 vm.runInContext(fs.readFileSync(bundle, 'utf8'), context, { filename: 'ntk-demo-runtime.js' });
 
 const g = context.NtkDemo;
