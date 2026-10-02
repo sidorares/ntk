@@ -12,12 +12,14 @@
 // still pins both halves). What remains is the browser half, below, which is
 // ntk's alone. See docs/packaging.md.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 
-const libDir = join(dirname(dirname(fileURLToPath(import.meta.url))), 'lib');
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const libDir = join(root, 'lib');
 
 function sources(dir) {
   const out = [];
@@ -55,4 +57,22 @@ test('nothing in lib/ statically imports a node builtin', () => {
     [],
     "use globalThis.process?.getBuiltinModule?.('node:…') inside the function that needs it"
   );
+});
+
+test('every entry point loads in a page that is not cross-origin isolated', () => {
+  // A page has SharedArrayBuffer only when it is cross-origin isolated (the
+  // COOP and COEP headers), which most hosts never send — GitHub Pages, where
+  // the playground lives, cannot. A module that makes one at load is a
+  // ReferenceError before anything renders: fontconfig.js's prewarm nap was
+  // one, and node, which always has the global, never said so.
+  const { exports } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const imports = Object.values(exports).map(
+    (target) => `await import(${JSON.stringify(pathToFileURL(join(root, target)).href)});`
+  );
+  const probe = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', ['delete globalThis.SharedArrayBuffer;', ...imports].join('\n')],
+    { encoding: 'utf8' }
+  );
+  assert.equal(probe.status, 0, probe.stderr);
 });
