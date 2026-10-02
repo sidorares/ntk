@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.17.8](https://github.com/sidorares/ntk/compare/v8.17.7...v8.17.8) (2026-10-02)
+
+
+### Bug Fixes
+
+* **fonts:** ntk loads in a page that is not cross-origin isolated ([#499](https://github.com/sidorares/ntk/issues/499)) ([b2ba6bb](https://github.com/sidorares/ntk/commit/b2ba6bb80753efcb5929f011026f07fbda35b1ef))
+
 ## [8.17.7](https://github.com/sidorares/ntk/compare/v8.17.6...v8.17.7) (2026-10-01)
 
 
