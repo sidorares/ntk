@@ -67,6 +67,9 @@ jobs:
           node-version: 24
       - run: npm install -g npm@latest
       - run: npm ci
+      # lib/vendor/fontkit.js is the fork's release its header names, and
+      # package.json depends on what it imports (AGENTS.md, "The fontkit fork")
+      - run: node scripts/vendor-fontkit.mjs --check
       # From a release until the next release PR, the version package.json
       # names is on npm already, and a dry run refuses to publish over it as
       # the real one would. The rehearsal is of everything but the number:

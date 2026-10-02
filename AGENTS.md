@@ -131,6 +131,9 @@ lib/text/glyphs.js         glyph pages (compact ids) + CompositeGlyphs encoder,
                            bitmap/vector routing policy, glyph-page LRU
 lib/image.js               Image: PNG/JPEG decode (pngjs/jpeg-js), server upload cache
 lib/widgets/svgview.js     SvgView widget: static SVG via Path2D + 2d context
+lib/vendor/fontkit.js      the windowkit fork of fontkit, built; made by
+                           scripts/vendor-fontkit.mjs, never edited (see
+                           "The fontkit fork")
 test/                      node:test suite (see below)
 docs/                      public API documentation
 examples/                  runnable examples (own package.json, ESM)
@@ -233,7 +236,9 @@ What that means in practice:
   that npm could have installed it. CI's `publishable` job now does what the
   publish job does and then installs the packed result. What fontkit lacks
   is made here, around it (`lib/text/sfnt.js`, `lib/text/marks.js`), and
-  offered upstream (foliojs/fontkit#389); it is not waited for.
+  offered upstream (foliojs/fontkit#389); it is not waited for. What cannot
+  be made around it is the fork's, and ntk carries the fork's build: see
+  "The fontkit fork".
 - **ESM**, Node >= 18.19. No TypeScript for now (a possible later migration —
   keep JSDoc accurate instead). `process.getBuiltinModule` (Node >= 20.16) is
   reached through `lib/builtin.js`, which falls back to `createRequire` below
@@ -249,6 +254,33 @@ What that means in practice:
   test/packaging.test.js).
 - Server-side resources (windows, pixmaps, pictures, glyphsets) must offer
   `destroy()`, `Symbol.dispose` and a `FinalizationRegistry` GC fallback.
+
+## The fontkit fork
+
+ntk runs fontkit from [windowkit/fontkit](https://github.com/windowkit/fontkit),
+a fork carrying fixes upstream has not released (its WINDOWKIT.md lists
+them). The fork is not on npm, and a library cannot depend on it by URL or
+git ref (above), so ntk carries the fork's build in `lib/vendor/fontkit.js`
+and depends on what that build imports: restructure, brotli and the rest,
+all on npm, at the ranges the fork declares.
+
+- **Never edit `lib/vendor/fontkit.js`.** Change the fork, release it (a
+  `v<upstream version>-windowkit.<n>` tag; its release workflow builds the
+  tarball), then run `node scripts/vendor-fontkit.mjs <tag>` and
+  `npm install`. The script writes the file and package.json's
+  dependencies. CI runs it with `--check`, which makes the file again from
+  the release its header names and fails on any difference.
+- To try a fork change before it is released, `npm pack` the fork and hand
+  the script the tarball. CI refuses a file made that way: release first.
+- It is the fork's browser build (`dist/browser-module.mjs`), which has no
+  `open`/`openSync`: they are what imports `fs`, which `lib/` may not.
+  `Font.loadSync` reads the file itself and calls `create`. Tests that need
+  fontkit itself import `../lib/vendor/fontkit.js`, the copy ntk runs:
+  `fontkit` is not installed.
+- The way back to npm is one import and one dependency. When upstream
+  releases what the fork carries, or the fork is published, import
+  `fontkit` in `lib/text/font.js` again, delete `lib/vendor/` and the
+  script, and depend on fontkit in place of its dependencies.
 
 ## An error you hit is an error a consumer will hit
 
