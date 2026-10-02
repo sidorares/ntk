@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 import FontManager from '../lib/text/fontmanager.js';
+import * as fontkit from '../lib/vendor/fontkit.js';
 import { StaticFontSource } from '../lib/text/fontsource.js';
 
 const require = createRequire(import.meta.url);
@@ -235,8 +236,7 @@ test('caretPosition: a glyph first made without its characters still maps to the
   // and the hit test after it on the line landed a character over.
   const fm = manager();
   const face = fm.layout('x', style).lines[0].runs[0].run.font;
-  const fontkit = require('fontkit');
-  const e = fontkit.openSync(join(fontDir, 'KaTeX_Main-Regular.ttf')).glyphForCodePoint(0x65).id;
+  const e = fontkit.create(readFileSync(join(fontDir, 'KaTeX_Main-Regular.ttf'))).glyphForCodePoint(0x65).id;
   face.glyphExtents(e, 16);
   const layout = fm.layout('need', style);
   const glyphs = layout.lines[0].runs.flatMap((r) => r.run.glyphs);

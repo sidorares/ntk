@@ -7,12 +7,16 @@
 // shaping to a real face's.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import * as fontkit from 'fontkit';
+import * as fontkit from '../lib/vendor/fontkit.js';
 
 import Font from '../lib/text/font.js';
 import { markGlyphs, marksCover } from '../lib/text/marks.js';
+
+/** fontkit's font for a file: the build ntk carries has no openSync */
+const openSync = (file) => fontkit.create(readFileSync(file));
 
 // --- tables built by hand ---------------------------------------------------
 
@@ -248,7 +252,7 @@ function markedFace() {
     return null;
   }
   try {
-    return markGlyphs(fontkit.openSync(file)) ? file : null;
+    return markGlyphs(openSync(file)) ? file : null;
   } catch {
     return null;
   }
@@ -259,7 +263,7 @@ const needsFace = { skip: !face && 'no system face with mark lookups (DejaVu San
 
 /** Font over a fresh fontkit face, with the features each fontkit layout was asked with. */
 function watched(file) {
-  const fk = fontkit.openSync(file);
+  const fk = openSync(file);
   const asked = [];
   const layout = fk.layout;
   fk.layout = function (text, features, ...rest) {
@@ -272,7 +276,7 @@ function watched(file) {
 
 /** fontkit's own answer, on a face nothing else has touched. */
 function reference(file, text, size) {
-  const fk = fontkit.openSync(file);
+  const fk = openSync(file);
   const run = fk.layout(text);
   const s = size / fk.unitsPerEm;
   return run.glyphs.map((g, i) => [g.id, run.positions[i].xAdvance * s, run.positions[i].xOffset * s, run.positions[i].yOffset * s]);

@@ -15,14 +15,14 @@ const script = `
 import { createRequire } from 'node:module';
 import zlib from 'node:zlib';
 
+// brotli as ntk resolves it: the copy the fontkit build in lib/vendor/ imports
 const require = createRequire(${JSON.stringify(index)});
-const fromFontkit = createRequire(require.resolve('fontkit'));
-const dictionaryData = fromFontkit.resolve('brotli/dec/dictionary-data.js');
+const dictionaryData = require.resolve('brotli/dec/dictionary-data.js');
 const loaded = () => dictionaryData in require.cache;
 
 await import(${JSON.stringify(index)});
 const atImport = loaded();
-const standIn = require.cache[fromFontkit.resolve('brotli/dec/dictionary.js')].exports;
+const standIn = require.cache[require.resolve('brotli/dec/dictionary.js')].exports;
 
 // Words the encoder finds in the dictionary rather than earlier in the text.
 const text = Buffer.from(
@@ -32,7 +32,7 @@ const text = Buffer.from(
 const packed = zlib.brotliCompressSync(text, {
   params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
 });
-const decompress = fromFontkit('brotli/decompress.js');
+const decompress = require('brotli/decompress.js');
 const decodes = () => {
   try {
     return Buffer.from(decompress(packed, text.length)).equals(text);

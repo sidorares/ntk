@@ -54,6 +54,8 @@ register(${JSON.stringify(pathToFileURL(join(dir, 'hooks.mjs')).href)});
     for (const url of readFileSync(out, 'utf8').split('\n')) {
       const m = /\/node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(url);
       if (m) seen.add(m[1]);
+      // the font engine is a build ntk carries, not a package (lib/vendor/)
+      else if (url.endsWith('/lib/vendor/fontkit.js')) seen.add('fontkit');
     }
     return seen;
   } finally {
