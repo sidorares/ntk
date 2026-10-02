@@ -210,12 +210,18 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   a wide window is drawn like any other; an image scaled below 1/32,768 of
   its size — under a pixel across — draws nothing
 - `ctx.destroy()` / `Symbol.dispose` — release the context's server-side
-  resources: its GCs, its Picture and its masks. Solid-colour sources are
-  cached on the `App`, shared across contexts, and freed with `app.close()`.
-  Needed only for contexts created dynamically, such as one per
-  [`Surface`](surface.md); a context on a window lives as long as the window.
-  A context dropped without it still releases its GCs through a finalizer,
-  as `Pixmap` and `Picture` do for theirs
+  resources: its GCs, its Picture and its masks. Needed only for contexts
+  created dynamically, such as one per [`Surface`](surface.md); a context
+  on a window lives as long as the window. A context dropped without it
+  still releases its GCs through a finalizer, as `Pixmap` and `Picture` do
+  for theirs. Solid-colour sources are not the context's: they are cached
+  on the `App`, shared across contexts, and freed with `app.close()` — the
+  solids of `fillStyle`, `strokeStyle` and `createSolidPicture`, which
+  whoever asked for them may hold. The solids a drawing makes for itself, a
+  colour with `globalAlpha` folded into it, are held by nothing past the
+  call: the `App` keeps the 256 most recently used and frees the rest, so a
+  fade animated through a new alpha every frame holds no more of them
+  however long it runs
 ### Pixels
 
 Pixel access follows the canvas API: `ImageData` is straight
