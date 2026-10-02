@@ -142,7 +142,8 @@ lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
 lib/text/layout.js         TextLayout: UAX#14 wrapping, alignment, spans
 lib/text/glyphs.js         glyph pages (compact ids) + CompositeGlyphs encoder,
                            bitmap/vector routing policy, glyph-page LRU
-lib/image.js               Image: PNG/JPEG decode (pngjs/jpeg-js), server upload cache
+lib/image.js               Image: PNG/JPEG decode (pngjs/jpeg-js), a JPEG's EXIF
+                           orientation, server upload cache
 lib/widgets/svgview.js     SvgView widget: static SVG via Path2D + 2d context
 lib/vendor/fontkit.js      the windowkit fork of fontkit, built; made by
                            scripts/vendor-fontkit.mjs, never edited (see

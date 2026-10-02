@@ -23,10 +23,17 @@ wnd.map();
 
 ## API
 
-- `loadImage(source)` → `Promise<Image>` — `source` is a file path, a file
-  `URL`, or a `Buffer`/`Uint8Array` of encoded PNG/JPEG bytes
-- `decodeImage(buffer)` → `Image` — synchronous decode of in-memory bytes;
-  the format is sniffed from magic bytes
+- `loadImage(source, options?)` → `Promise<Image>` — `source` is a file
+  path, a file `URL`, or a `Buffer`/`Uint8Array` of encoded PNG/JPEG bytes
+- `decodeImage(buffer, options?)` → `Image` — synchronous decode of
+  in-memory bytes; the format is sniffed from magic bytes
+  - `options.imageOrientation` — `'from-image'` (the default) turns a JPEG
+    the way its EXIF Orientation says, see [Orientation](#orientation);
+    `'none'` keeps the pixels as stored. The names are canvas's
+    (`createImageBitmap`) and CSS's (`image-orientation`)
+- `exifOrientation(buffer)` → `1`–`8` — a JPEG's EXIF Orientation, `1` when
+  it has none (or the bytes are not a JPEG). What an app that decodes with
+  `imageOrientation: 'none'` needs to apply the turn itself
 - `new Image(imagedata)` — an `ImageData` from
   [`ctx.getImageData()`](context-2d.md) is already the right shape, so
   reading pixels back and turning them into a reusable server-side image
@@ -51,6 +58,36 @@ wnd.map();
   (safe: the image re-uploads if drawn again). Client-side pixel data stays
   usable; the server resources are also reclaimed by GC as a fallback (see
   [resource management](resource-management.md))
+
+## Orientation
+
+A camera held upright still reads its sensor sideways, and says so in the
+JPEG's EXIF Orientation tag rather than by turning the pixels. A browser
+applies the tag (CSS `image-orientation: from-image`, the default since
+2020), and so does `decodeImage`: a photo taken in portrait comes out
+portrait, with `width` and `height` swapped from the stored ones for the
+four orientations that turn a quarter.
+
+| Value | Stored pixels are shown | Size |
+| ----- | ----------------------- | ---- |
+| 1 | as stored | `w × h` |
+| 2 | mirrored left to right | `w × h` |
+| 3 | turned half way | `w × h` |
+| 4 | mirrored top to bottom | `w × h` |
+| 5 | transposed (mirrored, then turned a quarter anticlockwise) | `h × w` |
+| 6 | turned a quarter clockwise | `h × w` |
+| 7 | transversed (mirrored, then turned a quarter clockwise) | `h × w` |
+| 8 | turned a quarter anticlockwise | `h × w` |
+
+Only the tag is read — tag `0x0112` of IFD0 in the first APP1 segment that
+carries Exif, in either byte order — and a value it cannot read leaves the
+image as stored. The turn is one pass over the pixels, ~18ms at 12
+megapixels against ~800ms for jpeg-js to decode them. PNG has no
+orientation here: an `eXIf` chunk is not read.
+
+To keep the stored pixels — an editor that shows the tag, or an app that
+turns the image at draw time with a transform instead — decode with
+`{ imageOrientation: 'none' }` and read the value with `exifOrientation()`.
 
 ## Notes
 
