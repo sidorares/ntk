@@ -136,7 +136,7 @@ parser, say — can import just that piece, and loads only what it needs:
 | `ntk/gl`            | `GLError`, `GL_MODES`, `DEFAULT_GL_POLICY`, …           | —                           |
 | `ntk/shadow-math`   | `shadowSigma`, `shadowReach`, `blurScale`, …            | —                           |
 | `ntk/shadow-tiles`  | `planShadowTiles`, `shadowTileAlpha`, …                 | —                           |
-| `ntk/image`         | `Image`, `decodeImage`, `loadImage`                     | `jpeg-js`, `pngjs`          |
+| `ntk/image`         | `Image`, `decodeImage`, `loadImage`, `exifOrientation`  | `jpeg-js`, `pngjs`          |
 | `ntk/svg`           | `SvgView` (default export)                              | `htmlparser2`, `domutils`   |
 | `ntk/font`          | `Font` (default export)                                 | `fontkit`                   |
 | `ntk/xembed`        | the XEmbed protocol ([docs/xembed.md](docs/xembed.md))  | `x11`                       |

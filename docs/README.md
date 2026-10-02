@@ -29,7 +29,7 @@ matching file here (see AGENTS.md).
   including region clips (`ctx.clipRegion`) and the XFIXES `Region` objects
   `app.createRegion()` hands back
 - [Images](images.md) — PNG/JPEG loading (`loadImage`), the `Image` object,
-  `drawImage`
+  `drawImage`, a JPEG's EXIF orientation
 - [Surface](surface.md) — draw once, composite many times; a8 coverage
   surfaces for drawings that take their colour from the caller, and
   `blurCoverage`, the blur baked into pixels rather than left as a filter the
