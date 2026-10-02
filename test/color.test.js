@@ -289,7 +289,7 @@ test('the modern syntax paints what it says', async () => {
 });
 
 test('a colour string paints with one picture, however often it is set', () => {
-  // by its spelling (App#solidPictureOf), over the solid the numbers name
+  // by its spelling (App#styleSolid), over the solid the numbers name
   const pixmap = app.createPixmap({ width: W, height: H, depth: 24 });
   const ctx = pixmap.getContext('2d');
   ctx.fillStyle = 'rgba(10, 20, 30, 0.5)';
@@ -318,9 +318,19 @@ test('the pictures a colour string names go with the connection', async () => {
     fontSource: new StaticFontSource()
   });
   const pixmap = other.createPixmap({ width: W, height: H, depth: 24 });
-  pixmap.getContext('2d').fillStyle = 'rgb(1, 2, 3)';
+  const ctx = pixmap.getContext('2d');
+  ctx.fillStyle = 'rgb(1, 2, 3)';
   assert.ok(other._solidByName.has('rgb(1, 2, 3)'));
+  // and one let go of in the job that closes, which would be freed when
+  // the job has run, is freed with them
+  other._styleSolidLimit = 0;
+  const gone = ctx._backgroundPicture;
+  ctx.fillStyle = 'rgb(4, 5, 6)';
+  assert.ok(other._evictedSolids.includes(gone));
   await other.close();
   assert.equal(other._solidByName.size, 0);
   assert.equal(other._solidPictures.size, 0);
+  assert.equal(other._styleSolids.size, 0);
+  assert.equal(other._evictedSolids.length, 0);
+  assert.equal(gone._owned, false, 'freed, not only forgotten');
 });

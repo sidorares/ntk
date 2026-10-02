@@ -248,13 +248,18 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   on a window lives as long as the window. A context dropped without it
   still releases its GCs through a finalizer, as `Pixmap` and `Picture` do
   for theirs. Solid-colour sources are not the context's: they are cached
-  on the `App`, shared across contexts, and freed with `app.close()` — the
-  solids of `fillStyle`, `strokeStyle` and `createSolidPicture`, which
-  whoever asked for them may hold. The solids a drawing makes for itself, a
-  colour with `globalAlpha` folded into it, are held by nothing past the
-  call: the `App` keeps the 256 most recently used and frees the rest, so a
-  fade animated through a new alpha every frame holds no more of them
-  however long it runs
+  on the `App` and shared across contexts. Those `createSolidPicture`
+  hands out are freed with `app.close()` and not before, since whoever
+  asked for one may keep it — so one a frame for an animated colour adds
+  up, where the same colours set as `fillStyle` do not. The solids a
+  colour `fillStyle`, `strokeStyle` or `TextLayout` span paints with are
+  kept for the 1,024 colours most recently used and the rest freed; a
+  context keeps the style itself, and makes its solid again if it draws
+  with one that was. The solids a drawing makes for itself, a colour with
+  `globalAlpha` folded into it, are held by nothing past the call, and the
+  `App` keeps the 256 most recently used. So a colour animated through a
+  transition or a tween, or a fade through a new alpha every frame, holds
+  no more of them however long it runs
 ### Pixels
 
 Pixel access follows the canvas API: `ImageData` is straight
