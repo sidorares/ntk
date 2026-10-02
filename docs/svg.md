@@ -50,8 +50,19 @@ either a parsed DOM or a markup string.
   parses (lowercased tag/attribute names like `viewbox`, `lineargradient`)
 - `view.draw(ctx, x, y[, w, h][, opts])` — draw into any 2d context; `w`/`h`
   default to the natural size. The `viewBox` (when present) is scaled to the
-  target box. `opts.color` sets what `currentColor` resolves to for this draw
-  only, overriding the view's own `color`
+  target box. Options, each for this draw only:
+  - `color` — what `currentColor` resolves to, overriding the view's own
+    `color`
+  - `font` — `{ family, size, weight, style }`, any of them, the size in
+    user units: what the document's text inherits where it names no font of
+    its own. A host document hands an inline `<svg>` its font this way, as a
+    browser does; without it text starts from 16px `sans-serif`
+  - `surface(width, height)` — makes the offscreen surface a
+    [masked](#masks) element is drawn on: something with
+    `getContext('2d')` and `destroy()` that `ctx.drawImage` takes, or null.
+    A context of ntk's own needs none — it uses `app.createSurface` on its
+    app — but one that is not ntk's, react-x11's macOS context, has to be
+    handed one
 - `view.paintKind` / `view.soloPaint` — how many colours the document commits
   to, from the parse; see [Taking colour from the caller](#taking-colour-from-the-caller)
 - `view.render()` — window mode: clear the background and draw fitted;
@@ -92,8 +103,9 @@ Elements:
   where it sets none and whose stops it takes where it has none, through
   any number of them. A radial gradient under a `gradientTransform` that
   stretches it stays a circle, of the same area
-- `text` — basic: `x`, `y`, `font-size`, `font-family`, `text-anchor`,
-  solid `fill`; rendered through the shaped-text pipeline
+- `text`, with `tspan` (and `a` and `textPath`, read as a `tspan`) — see
+  [Text](#text)
+- `mask` — see [Masks](#masks)
 
 Presentation attributes (also inside inline `style="…"`, which wins):
 
@@ -129,10 +141,83 @@ outline icon would fill black, or paint nothing at all if its strokes enclose
 no area.
 
 Not supported (skipped silently): CSS stylesheets/`<style>`, `clipPath`,
-`mask`, `filter`, `pattern`, `marker`, animation/SMIL, `foreignObject`,
+`filter`, `pattern`, `marker`, animation/SMIL, `foreignObject`,
 external references, `preserveAspectRatio` on the root `svg` (whose
 `viewBox` is stretched to the box `draw` is given), a `symbol`'s `viewBox`,
-stroke dashing, and full `text` layout (`tspan`, `textPath`).
+stroke dashing, and of text: a path to set it along, `rotate`,
+`textLength`, `baseline-shift`, decorations, and stroked text.
+
+## Text
+
+A `<text>` is laid out as SVG 2's text layout has it, short of what a
+browser does for vertical and right-to-left writing:
+
+- **Spans.** `tspan`s nest, and each sets its own paint, `opacity`, font and
+  spacing for what it holds. A `tspan` that is `display: none` takes its text
+  out; one that is `visibility: hidden` keeps its place and draws nothing,
+  and one that says `visible` inside a hidden `text` is drawn.
+- **White space** collapses as CSS's `white-space: normal` collapses it: a
+  line break and a tab are a space, a run of spaces is one, across span
+  boundaries, and none is left at either end of the `text`. `xml:space=
+  "preserve"`, or a `white-space` of `pre`, `pre-wrap` or `break-spaces`,
+  keeps each.
+- **Positions.** `x`, `y`, `dx` and `dy` are lists, one value a character,
+  in user units, `em`, `ex`, the absolute units or a percentage of the
+  viewport; a character takes each from the innermost element that gives it
+  one. A `dy` of `1.15em` on a `tspan` is of that span's own font size.
+- **Chunks and anchoring.** A character with an absolute `x` or `y` starts
+  a text chunk, and each chunk is moved as its first character's
+  `text-anchor` says — measured, so the two `tspan`s of a badge are each
+  centred on their own `x`, whatever size each is set at. Nothing is left to
+  the context's `textAlign`, which a context that draws through CoreText or
+  DirectWrite does not have.
+- **Fonts.** `font-family`, `font-size` (lengths, percentages and keywords),
+  `font-weight` (`bolder` and `lighter` included) and `font-style`. A family
+  that leans on a custom property, `var(--sans)`, is the one inherited: there
+  are no custom properties here.
+- **Spacing and case.** `letter-spacing` and `word-spacing`, a length in
+  `em` coming to the element's own size and inherited as that length, and
+  `text-transform`.
+- **Baselines.** `dominant-baseline`, inherited, and `alignment-baseline` on
+  a span: `central`, `middle`, `hanging`, `mathematical` and the text edges,
+  from the font's ascent and descent where the context's `measureText` says
+  them and from an em's proportions where it does not.
+- **Size.** Glyphs are set at the size they are drawn. On ntk's own context,
+  whose glyphs are rasterized at the size they are shaped at and do not
+  scale with the transform, the transform's scale goes into the font size;
+  on a context with `scalesText`, the font is the size the document says and
+  the context scales it.
+
+## Masks
+
+An element with a `mask` (attribute or `style`) naming a `<mask>` is drawn
+as CSS Masking 1 has it:
+
+- the element on an offscreen surface, and the mask's content on a second,
+  through the same transform — device pixels, the part of the mask's region
+  the drawing can show
+- the second cuts the first with `destination-in`, and the first is
+  composited in the element's place at its `opacity`, which applies to what
+  the mask leaves of it as one group
+- `mask-type: alpha` takes the mask's alpha as it is; the default,
+  `luminance`, its luminance times its alpha. The content of a luminance mask
+  is drawn as the value it makes: each mark first erases its alpha from what
+  is under it (`destination-out`) and then adds its luminance times its alpha
+  (`lighter`), so a black shape over a white one hides what is under it, as
+  the colours composited would. A context with neither op adds the value
+  alone
+- `maskUnits` (`objectBoundingBox`, the default, or `userSpaceOnUse`) and
+  the region's `x`, `y`, `width` and `height` (-10%, -10%, 120% and 120%
+  where unset); `maskContentUnits`. An element whose bounding box has no
+  area is not drawn where either is `objectBoundingBox`, and a region of no
+  area shows nothing
+- what is in the mask inherits from the mask's ancestors, not from what it
+  masks, and a mask that reaches itself draws what it holds once
+
+The surfaces come from `opts.surface`, or from `app.createSurface` on a
+context of ntk's own. Where there is none, or the context cannot
+`destination-in`, the element is drawn as it is, cut to the mask's region.
+A mask that is not there, or that names something else, is no mask.
 
 ## Conditional processing
 
@@ -147,7 +232,7 @@ that holds and none of the rest — that one as it says, so one that is
   `foreignObject` behind Adobe's extension and the drawing after it.
 - `requiredFeatures` holds unless it names an SVG 1.1 feature `SvgView`
   draws nothing of — `#Extensibility` (`foreignObject`), `#Image`, `#Clip`,
-  `#Mask`, `#Filter`, `#Pattern`, `#Marker`, `#Font`, `#Script`,
+  `#Filter`, `#Pattern`, `#Marker`, `#Font`, `#Script`,
   `#Animation` and the like. SVG 2 dropped the attribute and browsers hold
   every one; here a feature it lacks picks the author's fallback, which is
   how a draw.io export's labels draw: as the `text` it writes after each

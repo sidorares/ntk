@@ -14,7 +14,7 @@ import { after, before, test } from 'node:test';
 
 import xserver from 'x11/lib/xserver/index.js';
 
-import { createClient, Image, StaticFontSource } from '../lib/index.js';
+import { createClient, Image, StaticFontSource, SvgView } from '../lib/index.js';
 
 const { createServer, createStreamPair } = xserver;
 
@@ -369,6 +369,68 @@ test("composite ops: 'source-over' blends, 'copy' replaces", async () => {
   assert.ok(over[2] > 200, 'source-over blue channel high');
   assert.ok(copy[2] > 120, 'copy blue channel present');
   assert.ok(over[0] - copy[0] > 80, 'the two ops differ');
+  wnd.destroy();
+});
+
+test('SvgView: a mask cuts what it masks, by alpha or by luminance, on the surfaces of the context it draws on', async () => {
+  const { wnd, ctx } = freshWindow(96, 32);
+  const red = '<rect width="32" height="32" fill="#ff0000" mask="url(#m)"/>';
+  // alpha: a disc, whatever its colour — the heart of Lovable's logo
+  new SvgView(null)
+    .setSvg(`<svg width="32" height="32"><mask id="m" style="mask-type:alpha"><circle cx="16" cy="16" r="10" fill="#0000ff"/></mask>${red}</svg>`)
+    .draw(ctx, 0, 0);
+  // luminance: white shows, and black over it hides again
+  new SvgView(null)
+    .setSvg(
+      '<svg width="32" height="32"><mask id="m"><rect width="32" height="32" fill="#fff"/>' +
+        `<rect width="16" height="32" fill="#000"/></mask>${red}</svg>`
+    )
+    .draw(ctx, 32, 0);
+  // and a grey half of the way
+  new SvgView(null)
+    .setSvg(`<svg width="32" height="32"><mask id="m"><rect width="32" height="32" fill="#808080"/></mask>${red}</svg>`)
+    .draw(ctx, 64, 0);
+
+  const image = await readPixels(ctx, 96, 32);
+  assert.deepEqual(px(image, 96, 16, 16), [255, 0, 0], 'inside the disc');
+  assert.deepEqual(px(image, 96, 2, 2), [255, 255, 255], 'outside it');
+  assert.deepEqual(px(image, 96, 32 + 8, 16), [255, 255, 255], 'under the black');
+  assert.deepEqual(px(image, 96, 32 + 24, 16), [255, 0, 0], 'under the white');
+  const grey = px(image, 96, 64 + 16, 16);
+  near(grey[0], 255, 4, 'half red: red');
+  near(grey[1], 128, 12, 'half red: green from the white under it');
+  wnd.destroy();
+});
+
+test("SvgView: a text's chunks are anchored where their text ends up", async () => {
+  const { wnd, ctx } = freshWindow(100, 100);
+  new SvgView(null)
+    .setSvg(
+      '<svg viewBox="0 0 100 100" width="100" height="100"><text x="50" y="40" text-anchor="middle" font-size="16" fill="#000">' +
+        '<tspan x="50">mmmm</tspan><tspan x="50" dy="30" font-size="24">ii</tspan></text></svg>'
+    )
+    .draw(ctx, 0, 0);
+  const image = await readPixels(ctx, 100, 100);
+  // the columns each line has ink in
+  const inked = (top, bottom) => {
+    let left = 100;
+    let right = -1;
+    for (let y = top; y < bottom; y++) {
+      for (let x = 0; x < 100; x++) {
+        if (px(image, 100, x, y)[0] < 128) {
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+        }
+      }
+    }
+    return [left, right];
+  };
+  const [l1, r1] = inked(25, 45);
+  const [l2, r2] = inked(50, 75);
+  assert.ok(r1 > l1 && r2 > l2, 'both lines drew');
+  near((l1 + r1) / 2, 50, 3, 'the first line centred');
+  near((l2 + r2) / 2, 50, 3, 'the second line centred, a line below');
+  assert.ok(r1 - l1 > 2 * (r2 - l2), 'four m are wider than two i');
   wnd.destroy();
 });
 
