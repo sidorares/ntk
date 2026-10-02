@@ -66,8 +66,11 @@ ctx.fillRect(0, 0, 100, 100);
 - `ctx.globalCompositeOperation` — Porter-Duff subset mapped to XRender ops:
   `source-over` (default), `copy`, `destination-over`, `source-in`,
   `destination-in`, `source-out`, `destination-out`, `source-atop`,
-  `destination-atop`, `xor`, `lighter`. With a shape/clip mask the op only
-  applies inside the mask coverage
+  `destination-atop`, `xor`, `lighter`. Everything drawn takes it: fills,
+  strokes, rectangles, images, text (`fillText`, `TextLayout.draw`) and the
+  shadows they cast. The ops that write where a drawing has no ink clear the
+  rest of the drawing's own box, not the surface — see
+  [Composite ops that clear](#composite-ops-that-clear)
 - `ctx.font` — the CSS `font` shorthand (`'bold italic 40px "DejaVu Sans"'`),
   resolved through fontconfig; see [fonts.md](fonts.md). Style, weight,
   `small-caps` and a stretch keyword come in any order before the size; a
@@ -105,6 +108,27 @@ The exception is the composite ops that paint where the clip is *not*:
 clear the rest of the drawing's box rather than leaving it alone. Under a
 clip they go through the mask, and the pixels inside the drawing but outside
 the clip come out cleared rather than kept.
+
+### Composite ops that clear
+
+`copy`, `source-in`, `destination-in`, `source-out` and `destination-atop`
+write where a drawing has no ink — the source, or nothing — so they clear
+pixels the drawing does not cover. How far that reaches is the drawing's own
+box: the rectangle `fillRect` or `drawImage` covers, and for a path, a stroke
+or text the box round its ink, out to whole pixels and one past them for the
+antialiased edge. Nothing outside that box changes, where a browser's canvas
+clears every pixel the clip lets through.
+
+Text clears the box round every glyph of the call, as a fill clears the box
+round every subpath, and applies the op once, through the coverage of all of
+them, on whichever route it takes: a glyph's ink is never cleared by the box
+of the glyph beside it. The clip cuts that box as it cuts a path fill's. A
+rectangular clip cuts it to the rectangle, so nothing outside the clip
+changes; a path clip cuts it to the path's bounding box, and inside that the
+pixels the path leaves out come out cleared. A `TextLayout` whose spans
+change colour draws once per colour, as that many `fillText`s would, so
+under `copy` each colour clears the rest of its own box, the text of the
+colours before it included.
 
 ## Color
 
@@ -1058,7 +1082,9 @@ no per-size server cache — see
 `app.textPolicy`.
 
 - `fillText(text, x, y)` — draws with the current `font` and `fillStyle`,
-  honoring `textAlign` / `textBaseline`
+  honoring `textAlign` / `textBaseline`, and composites as every other
+  drawing does: the clip, `globalAlpha`, `globalCompositeOperation` and the
+  shadow all apply
 - `measureText(text)` → canvas-style TextMetrics: `width`,
   `actualBoundingBox{Left,Right,Ascent,Descent}`,
   `fontBoundingBox{Ascent,Descent}`
