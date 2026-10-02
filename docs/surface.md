@@ -24,8 +24,8 @@ the stroker; compositing the result is one request.
 ## Coverage surfaces
 
 `format: 'a8'` stores **coverage** instead of colour. Drawn through
-`drawImage`, the surface becomes the *mask* and the context's current
-`fillStyle` becomes the source:
+`drawImage`, under any transform, the surface becomes the *mask* and the
+context's current `fillStyle` becomes the source:
 
 ```js
 const mask = new Surface(app, { width: 20, height: 20, format: 'a8' });

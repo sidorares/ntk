@@ -250,6 +250,85 @@ test('drawImage: a crop turned, or put off the pixel grid, is the crop and nothi
   redHalf.destroy();
 });
 
+test('drawImage: a coverage surface under a transform is painted in the fill style', async (t) => {
+  if (skip) return t.skip(skip);
+  // An a8 surface is a mask, and drawImage paints the fill style through
+  // it. Under a transform the mask was composited as the source instead,
+  // which RENDER reads as alpha over black: it came out black.
+  const disc = (c) => {
+    c.beginPath();
+    c.arc(10, 10, 8, 0, Math.PI * 2);
+    c.fill();
+  };
+  const square = new Surface(app, { width: 10, height: 10, format: 'a8' });
+  square.render((c) => { c.fillStyle = 'white'; c.fillRect(0, 0, 10, 10); });
+  const mask = new Surface(app, { width: 20, height: 20, format: 'a8' });
+  mask.render((c) => { c.fillStyle = 'white'; disc(c); });
+  const lime = new Surface(app, { width: 20, height: 20 }); // the disc as an image of the fill colour
+  lime.render((c) => { c.fillStyle = 'lime'; disc(c); });
+  const draw = async (img, setup, ...args) => {
+    const { pixmap, ctx } = freshCtx(80);
+    ctx.fillStyle = 'lime';
+    ctx.save();
+    setup(ctx);
+    ctx.drawImage(img, ...args);
+    ctx.restore();
+    const got = await readPixels(ctx, 80, 80);
+    pixmap.destroy();
+    return got;
+  };
+  const worst = (a, b) => {
+    let most = 0;
+    for (let i = 0; i < a.data.length; i += 4) {
+      for (let c = 0; c < 3; c++) most = Math.max(most, Math.abs(a.data[i + c] - b.data[i + c]));
+    }
+    return most;
+  };
+
+  const moved = await draw(square, (c) => c.translate(10, 10), 0, 0);
+  assert.deepEqual(px(moved, 80, 15, 15), [0, 255, 0], 'translated: lime');
+  assert.equal(worst(moved, await draw(square, () => {}, 10, 10)), 0, 'translated: as drawn at (10, 10)');
+
+  const turned = (c) => { c.translate(40, 10); c.rotate(Math.PI / 6); };
+  const region = await app.createRegion([{ x: 36, y: 18, width: 12, height: 30 }]);
+  for (const [what, setup, ...args] of [
+    ['turned 30°', turned, 0, 0, 30, 30],
+    ['skewed', (c) => c.transform(1, 0.3, -0.4, 1, 30, 10), 0, 0, 30, 30],
+    ['turned, clipped to a path', (c) => {
+      c.beginPath();
+      c.arc(40, 30, 12, 0, Math.PI * 2);
+      c.clip();
+      turned(c);
+    }, 0, 0, 40, 40],
+    ['turned, clipped to a region', (c) => { c.clipRegion(region); turned(c); }, 0, 0, 40, 40],
+    ['turned, at globalAlpha 0.4', (c) => { c.globalAlpha = 0.4; turned(c); }, 0, 0, 30, 30]
+  ]) {
+    const got = await draw(mask, setup, ...args);
+    // what an image of the fill colour with the same coverage paints, to
+    // the level: the alpha is applied in another order
+    assert.ok(worst(got, await draw(lime, setup, ...args)) <= 1, `${what}: as a lime image`);
+    let painted = 0;
+    for (let i = 0; i < got.data.length; i += 4) {
+      // lime over white keeps green at 255 and red equal to blue
+      assert.ok(got.data[i + 1] === 255 && got.data[i] === got.data[i + 2], `${what}: not lime over white`);
+      if (got.data[i] < 255) painted++;
+    }
+    assert.ok(painted > 100, `${what}: ${painted} pixels painted`);
+  }
+  const clipped = await draw(mask, (c) => { c.clipRegion(region); turned(c); }, 0, 0, 40, 40);
+  const whole = await draw(mask, turned, 0, 0, 40, 40);
+  for (let y = 0; y < 80; y++) {
+    for (let x = 0; x < 80; x++) {
+      const inside = x >= 36 && x < 48 && y >= 18 && y < 48;
+      assert.deepEqual(px(clipped, 80, x, y), inside ? px(whole, 80, x, y) : [255, 255, 255], `region at (${x}, ${y})`);
+    }
+  }
+  region.destroy();
+  square.destroy();
+  mask.destroy();
+  lime.destroy();
+});
+
 test('arc: filled circle has correct inside/outside pixels', async (t) => {
   if (skip) return t.skip(skip);
   const { pixmap, ctx } = freshCtx();
