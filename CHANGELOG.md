@@ -1,5 +1,24 @@
 # Changelog
 
+## [8.19.0](https://github.com/sidorares/ntk/compare/v8.18.1...v8.19.0) (2026-10-02)
+
+
+### Features
+
+* **text:** ctx.fadesGlyphs tells a renderer that the context's text fades with globalAlpha ([#511](https://github.com/sidorares/ntk/issues/511)) ([92d693a](https://github.com/sidorares/ntk/commit/92d693aa421880baec658e47b8a58a36faca5b3c))
+* **text:** drawGlyphs and drawTraps take a colour for their source, painted with a solid the app frees as colours change ([#517](https://github.com/sidorares/ntk/issues/517)) ([ca2ac39](https://github.com/sidorares/ntk/commit/ca2ac39daa961dd7946f05d7c62f5ff04693cb34))
+
+
+### Bug Fixes
+
+* **2d:** a crop drawn turned, skewed or off the pixel grid is the crop, and nothing beside it ([#518](https://github.com/sidorares/ntk/issues/518)) ([5a41676](https://github.com/sidorares/ntk/commit/5a416763284bf02f83d1c9624f69f2dfa52e34b4))
+* **2d:** copy and the other ops that clear change nothing outside the clip ([#520](https://github.com/sidorares/ntk/issues/520)) ([76cc27b](https://github.com/sidorares/ntk/commit/76cc27bc17933c49fd21c81aa20aac0a48f1f16a))
+* **2d:** coverage drawn under a transform is painted in the fill style, not black ([#519](https://github.com/sidorares/ntk/issues/519)) ([18bf4e7](https://github.com/sidorares/ntk/commit/18bf4e78d0aad7a48a0fb3799c759e553ea93e4b))
+* **2d:** drawImage of another 2d context draws where the call says, cropped, scaled and composited as it asks ([#515](https://github.com/sidorares/ntk/issues/515)) ([ef350ce](https://github.com/sidorares/ntk/commit/ef350ce60c600a39495bcd548afb67d8d8bfb820))
+* **canvas:** the solids a colour style paints with are kept in an LRU and freed, so an animated colour holds a bounded number of them ([#516](https://github.com/sidorares/ntk/issues/516)) ([0cf6375](https://github.com/sidorares/ntk/commit/0cf63752ac89f670a62b63c04fbcbb010bea4283))
+* **canvas:** the solids globalAlpha is folded into are kept in an LRU and freed, so an animated fade holds a bounded number of them ([#513](https://github.com/sidorares/ntk/issues/513)) ([587a21e](https://github.com/sidorares/ntk/commit/587a21e1e4e2cd09c69fde97896b47b85b5fc03b))
+* **text:** fillText and TextLayout.draw take globalCompositeOperation, and an op like copy clears the box round the text as a fill clears its own ([#514](https://github.com/sidorares/ntk/issues/514)) ([1ffb4e9](https://github.com/sidorares/ntk/commit/1ffb4e97004034b048878b54494abbbc621212be))
+
 ## [8.18.1](https://github.com/sidorares/ntk/compare/v8.18.0...v8.18.1) (2026-10-02)
 
 
