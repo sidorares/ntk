@@ -144,6 +144,13 @@ app.fonts.shape('Hello', { font, size: 24 });
 face, `{ family }` to register under an alias, and `{ weight, style }` to
 override what the file reports.
 
+A `.woff2` is decompressed when its first table is read, by the runtime's
+own Brotli where there is one — `node:zlib`, in Node, in Bun since 1.1.8 and
+in Deno — and by fontkit's JavaScript decoder in a browser, about six times
+slower. Font data that does not decompress to exactly the size its table
+directory gives is an error naming the file, as it is in browsers:
+`WOFF2 ./Inter.woff2: its font data does not decompress — …`.
+
 Faces loaded into one family are matched as the font sources match theirs:
 the style asked for, italic or upright, and then the weight CSS's font
 matching picks, looking in a direction first as
