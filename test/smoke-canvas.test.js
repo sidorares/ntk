@@ -150,6 +150,58 @@ test('transforms: a thumbnail rotated far from the origin lands where the matrix
   pixmap.destroy();
 });
 
+test('drawImage: another 2d context lands where the call puts it, as big and as turned as it says', async (t) => {
+  if (skip) return t.skip(skip);
+  // A cell in four colours, drawn into a grid the way a table draws its
+  // cells. Every copy of it used to land at the origin, whatever the call.
+  const cellPixmap = app.createPixmap({ width: 8, height: 8, depth: 24 });
+  const cell = cellPixmap.getContext('2d');
+  for (const [x, y, colour] of [
+    [0, 0, 'red'],
+    [4, 0, 'lime'],
+    [0, 4, 'blue'],
+    [4, 4, 'yellow']
+  ]) {
+    cell.fillStyle = colour;
+    cell.fillRect(x, y, 4, 4);
+  }
+  const { pixmap, ctx } = freshCtx();
+  ctx.drawImage(cell, 10, 10);
+  ctx.drawImage(cell, 30, 10);
+  ctx.drawImage(cell, 4, 0, 4, 4, 40, 40, 16, 16); // its lime quarter, at 4x
+  ctx.save();
+  ctx.translate(20, 40);
+  ctx.rotate(Math.PI / 2); // (u, v) lands at (20 - v, 40 + u)
+  ctx.drawImage(cell, 0, 0);
+  ctx.restore();
+  // and onto itself, four rows below where it reads: pixman goes row by row,
+  // and read in place the cell's bottom half came out a second top half
+  ctx.drawImage(ctx, 30, 10, 8, 8, 30, 14, 8, 8);
+
+  const image = await readPixels(ctx, 64, 64);
+  const [red, lime, blue, yellow, white] = [
+    [255, 0, 0],
+    [0, 255, 0],
+    [0, 0, 255],
+    [255, 255, 0],
+    [255, 255, 255]
+  ];
+  assert.deepEqual(px(image, 64, 11, 11), red, 'the first cell, where it was put');
+  assert.deepEqual(px(image, 64, 16, 16), yellow);
+  assert.deepEqual(px(image, 64, 2, 2), white, 'nothing at the origin');
+  assert.deepEqual(px(image, 64, 44, 44), lime, 'the crop, scaled');
+  assert.deepEqual(px(image, 64, 52, 52), lime);
+  assert.deepEqual(px(image, 64, 18, 41), red, 'turned: its top-left at the top right');
+  assert.deepEqual(px(image, 64, 18, 46), lime, 'its top-right below that');
+  assert.deepEqual(px(image, 64, 14, 41), blue, 'its bottom-left to the left');
+  assert.deepEqual(px(image, 64, 31, 15), red, 'the moved cell');
+  assert.deepEqual(px(image, 64, 31, 19), blue, 'its bottom half, as it was');
+  assert.deepEqual(px(image, 64, 35, 19), yellow);
+  cell.destroy();
+  cellPixmap.destroy();
+  pixmap.destroy();
+});
+
 test('arc: filled circle has correct inside/outside pixels', async (t) => {
   if (skip) return t.skip(skip);
   const { pixmap, ctx } = freshCtx();
