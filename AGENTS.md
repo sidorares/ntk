@@ -128,9 +128,10 @@ lib/text/brotlidictionary.js  imported ahead of fontkit: a require.cache
                            stand-in that keeps brotli's static dictionary
                            (WOFF2 only) from loading until the first
                            decompress (issue #427)
-lib/text/woff2.js          a WOFF2 face ntk opens decompresses with the
-                           runtime's own Brotli (node:zlib), fontkit's
-                           JS decoder where there is none
+lib/text/woff2.js          hands the vendored fontkit the runtime's Brotli
+                           (node:zlib) for WOFF2 through the fork's
+                           setBrotliDecompressor, brotli.js where there is
+                           none; a damaged WOFF2 throws at open, naming it
 lib/text/fontmanager.js    FontManager (app.fonts): match/load/fallback
 lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
 lib/text/layout.js         TextLayout: UAX#14 wrapping, alignment, spans
