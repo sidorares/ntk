@@ -76,7 +76,8 @@ ctx.fillRect(0, 0, 100, 100);
   `destination-atop`, `xor`, `lighter`. Everything drawn takes it: fills,
   strokes, rectangles, images, text (`fillText`, `TextLayout.draw`) and the
   shadows they cast. The ops that write where a drawing has no ink clear the
-  rest of the drawing's own box, not the surface — see
+  rest of the drawing's own box, not the surface, and no op changes a pixel
+  outside the clip — see
   [Composite ops that clear](#composite-ops-that-clear)
 - `ctx.font` — the CSS `font` shorthand (`'bold italic 40px "DejaVu Sans"'`),
   resolved through fontconfig; see [fonts.md](fonts.md). Style, weight,
@@ -110,11 +111,11 @@ rectangle on the next frame. A rounded box under a damage clip — a fill and a
 border, each of them corner glyphs plus strips — costs one clip request rather
 than four.
 
-The exception is the composite ops that paint where the clip is *not*:
-`copy`, `source-in`, `destination-in`, `source-out` and `destination-atop`
-clear the rest of the drawing's box rather than leaving it alone. Under a
-clip they go through the mask, and the pixels inside the drawing but outside
-the clip come out cleared rather than kept.
+Nothing outside the clip changes, whatever `globalCompositeOperation` is.
+The ops that write where a drawing has no ink — `copy`, `source-in`,
+`destination-in`, `source-out` and `destination-atop` — take a rectangle or a
+region the way every other op does, and a path clip after the op rather than
+through the mask: see [Composite ops that clear](#composite-ops-that-clear).
 
 ### Composite ops that clear
 
@@ -126,16 +127,27 @@ or text the box round its ink, out to whole pixels and one past them for the
 antialiased edge. Nothing outside that box changes, where a browser's canvas
 clears every pixel the clip lets through.
 
+Nor does anything outside the clip, as the canvas spec requires of every op.
+A rectangular clip or a region cuts the box these ops clear, as it cuts any
+drawing. A path clip is applied after the op, as a browser applies one: a
+pixel inside the clip gets what the op makes of it, a pixel outside keeps
+what it had, and a pixel on the clip's antialiased edge goes part of the
+way, as far as the clip covers it. RENDER has no operator for that: through
+a mask, `copy` is the source *times* the mask, so a clip folded into the
+mask would clear every pixel of the box it leaves out. Under a path clip
+these five ops draw onto a copy of their box instead, cut to the clip's
+bounding box, and bring the copy back through the clip's coverage, which
+costs a scratch pixmap the size of that box and three composites on top of
+the drawing's own. The other ops take a path clip in their mask, which for
+them comes to the same pixels at no extra cost.
+
 Text clears the box round every glyph of the call, as a fill clears the box
 round every subpath, and applies the op once, through the coverage of all of
 them, on whichever route it takes: a glyph's ink is never cleared by the box
 of the glyph beside it. The clip cuts that box as it cuts a path fill's. A
-rectangular clip cuts it to the rectangle, so nothing outside the clip
-changes; a path clip cuts it to the path's bounding box, and inside that the
-pixels the path leaves out come out cleared. A `TextLayout` whose spans
-change colour draws once per colour, as that many `fillText`s would, so
-under `copy` each colour clears the rest of its own box, the text of the
-colours before it included.
+`TextLayout` whose spans change colour draws once per colour, as that many
+`fillText`s would, so under `copy` each colour clears the rest of its own
+box, the text of the colours before it included.
 
 ## Color
 

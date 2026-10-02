@@ -258,7 +258,7 @@ glyphs     = [{ id, ax, dx, dy }, …]            // drawing order
   own box, so it would clear the ink of the glyph beside it and leave the
   rest of the run's box alone. Those ops paint through the scratch a8 mask
   instead, once, over the box round every glyph's ink, which is the box
-  they clear, as a fill clears its own
+  they clear — the part of it inside the clip, as a fill clears its own
   ([context-2d.md](context-2d.md#composite-ops-that-clear)). Every other op
   keeps the single `CompositeGlyphs`.
 - `ctx.globalAlpha` applies, as it does to a fill. A colour, or a solid

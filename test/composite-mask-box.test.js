@@ -204,14 +204,16 @@ test("a fractional fill is put on whole pixels, edge by edge, before its mask is
   assertSamePixels(await read(ctx), await read(ref), "fractional fill");
 });
 
-test("an unbounded op under a rect clip bounds the mask to its box too", async () => {
-  // `copy` keeps the mask (issue #307's guard: it writes where the mask is
-  // zero), so a rect clip lands here rather than on the boxed route — and
-  // the box it clears is still just the fill's
+test("an unbounded op under a poly clip writes no mask at all", async () => {
+  // `copy` writes where the mask is zero, so the clip cannot go in its mask
+  // without clearing the fill's box outside the clip: it is applied after
+  // the op instead, and the alpha is the 1x1 solid, so the scratch mask is
+  // never touched — the cost is a copy of the box, and that is bounded too
+  // (test/clip-composite-ops.test.js)
   const draw = (ctx) => {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(20, 20, 60, 60);
+    ctx.roundRect(20, 20, 80, 80, 20);
     ctx.clip();
     ctx.globalAlpha = 0.5;
     ctx.globalCompositeOperation = "copy";
@@ -222,18 +224,15 @@ test("an unbounded op under a rect clip bounds the mask to its box too", async (
 
   const ctx = freshCtx();
   const writes = maskWrites(ctx, () => draw(ctx));
-  assert.deepEqual(
-    writes.map((w) => w.box),
-    [
-      { x: 10, y: 10, w: 50, h: 50 },
-      { x: 10, y: 10, w: 50, h: 50 },
-    ],
-    "the composite box, not the surface",
-  );
+  assert.deepEqual(writes, [], "neither the alpha nor the clip in the scratch");
 
-  const ref = fullSurfaceCtx();
-  draw(ref);
-  assertSamePixels(await read(ctx), await read(ref), "copy under a rect clip");
+  const img = await read(ctx);
+  const at = (x, y) => [...img.data.slice((y * W + x) * 4, (y * W + x) * 4 + 3)];
+  // 127.5 rounds either way, by server
+  const [r, g, b] = at(40, 40);
+  assert.ok(r >= 127 && r <= 128 && g === 0 && b === 0, `inside the clip: half the source, ${[r, g, b]}`);
+  assert.deepEqual(at(15, 40), [255, 255, 255], "in the fill, left of the clip: kept");
+  assert.deepEqual(at(22, 22), [255, 255, 255], "in the fill, in the corner the clip rounds off: kept");
 });
 
 test("drawImage under a poly clip masks only the destination box", async () => {

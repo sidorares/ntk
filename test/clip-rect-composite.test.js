@@ -208,10 +208,10 @@ test("a non-rectangular clip still masks", async () => {
   assert.deepEqual(at(img, 22, 22), [255, 255, 255], "the rounded corner");
 });
 
-test("an op that writes where the mask is zero keeps the mask", async () => {
-  // `copy` is `dst = src IN mask`, so it *clears* the box outside the clip
-  // rather than leaving it alone: shrinking the box would leave those pixels
-  // behind. The guard keeps the mask, and with it the old pixels.
+test("an op that writes where the mask is zero is cut to the clip too", async () => {
+  // `copy` is `dst = src IN mask`, so through a mask holding the clip it
+  // cleared the box outside the clip; the canvas leaves those pixels alone,
+  // which is what the shrunk box does, for this op as for any other
   const ctx = freshCtx();
   const pixmaps = countingPixmaps(ctx, () => {
     ctx.save();
@@ -224,11 +224,17 @@ test("an op that writes where the mask is zero keeps the mask", async () => {
     ctx.globalCompositeOperation = "source-over";
     ctx.restore();
   });
-  assert.ok(pixmaps > 0, "copy is not mask-bounded, so it still needs one");
+  assert.equal(pixmaps, 0, "copy under a rectangle needs no mask either");
 
   const img = await read(ctx);
   assert.deepEqual(at(img, 30, 30), [255, 0, 0], "inside the clip: the source");
-  assert.deepEqual(at(img, 90, 90), [0, 0, 0], "outside it: cleared, not kept");
+  assert.deepEqual(at(img, 90, 90), [255, 255, 255], "outside it: kept");
+
+  const ref = freshCtx();
+  ref.globalCompositeOperation = "copy";
+  ref.fillStyle = "red";
+  ref.fillRect(20, 20, 40, 40);
+  assertSamePixels(img, await read(ref), "copy clipped vs copy of the intersection");
 });
 
 test("a fractional fill rect falls back rather than rounding the clip", async () => {

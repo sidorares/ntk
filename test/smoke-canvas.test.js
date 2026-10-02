@@ -557,6 +557,116 @@ test('globalCompositeOperation: text takes the op, and an op that clears clears 
   }
 });
 
+test('globalCompositeOperation: nothing outside the clip changes, whatever the op', async (t) => {
+  if (skip) return t.skip(skip);
+  // `copy` writes where its mask is zero, and with the clip in that mask it
+  // cleared what the clip left out of the drawing's box: under a rectangle
+  // for fillRect and a transformed drawImage, under a path for everything.
+  // The hermetic run (test/clip-composite-ops.test.js) takes every route
+  // and op that clears; this holds the clip kinds to a real RENDER's
+  // arithmetic, the region a JS server cannot make among them.
+  const S = 64;
+  const WHITE = [255, 255, 255];
+  const BLUE = [0, 0, 255];
+  const blue = new Image({
+    width: 10,
+    height: 10,
+    data: Buffer.alloc(10 * 10 * 4).fill(Buffer.from([0, 0, 255, 255]))
+  });
+  const draw = async (clip, paint) => {
+    const { pixmap, ctx } = freshCtx(S);
+    clip(ctx);
+    ctx.globalCompositeOperation = 'copy';
+    ctx.fillStyle = 'blue';
+    paint(ctx);
+    const image = await readPixels(ctx, S, S);
+    pixmap.destroy();
+    return image;
+  };
+  const rect = (x, y, w, h) => (ctx) => {
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+  };
+  const circle = (ctx) => {
+    ctx.beginPath();
+    ctx.arc(32, 32, 20, 0, Math.PI * 2);
+    ctx.clip();
+  };
+  const fillAll = (ctx) => ctx.fillRect(0, 0, S, S);
+
+  // a rectangle: the transformed drawImage and the fillRect
+  for (const [what, paint] of [
+    ['drawImage translated', (ctx) => (ctx.translate(10, 10), ctx.drawImage(blue, 0, 0))],
+    ['fillRect', (ctx) => ctx.fillRect(10, 10, 10, 10)]
+  ]) {
+    const image = await draw(rect(10, 10, 5, 5), paint);
+    assert.deepEqual(px(image, S, 12, 12), BLUE, `${what}: inside the clip`);
+    assert.deepEqual(px(image, S, 18, 18), WHITE, `${what}: outside it, kept`);
+  }
+
+  // a path: outside it nothing, inside it the source, and along its edge
+  // white taken towards blue by as much as the circle covers the pixel
+  const { pixmap, ctx } = freshCtx(S);
+  ctx.fillStyle = 'black';
+  ctx.fillRect(0, 0, S, S);
+  circle(ctx);
+  ctx.fillStyle = 'white';
+  fillAll(ctx);
+  const covered = (await readPixels(ctx, S, S)).data;
+  pixmap.destroy();
+  const image = await draw(circle, fillAll);
+  let edge = 0;
+  let worst = { off: 0 };
+  for (let p = 0; p < S * S; p++) {
+    const c = covered[p * 4] / 255;
+    if (c > 0 && c < 1) edge++;
+    const want = [255 * (1 - c), 255 * (1 - c), 255];
+    for (let k = 0; k < 3; k++) {
+      const off = Math.abs(image.data[p * 4 + k] - want[k]);
+      if (off > worst.off) worst = { off, x: p % S, y: Math.floor(p / S), c };
+    }
+  }
+  assert.ok(edge > 50, `the circle has an antialiased edge: ${edge} pixels`);
+  assert.ok(worst.off <= 1, `each pixel as far as the clip covers it: ${JSON.stringify(worst)}`);
+
+  // a region, which the server applies itself: alone, under a rectangle,
+  // and under a path, whose clip goes after the op through the region
+  try {
+    await withTimeout(app.fixes(), 5000, 'loading XFIXES');
+  } catch (err) {
+    t.diagnostic(`no XFIXES, so no region clips: ${err.message}`);
+    return;
+  }
+  const region = await app.createRegion([
+    { x: 8, y: 8, width: 16, height: 16 },
+    { x: 40, y: 40, width: 16, height: 16 }
+  ]);
+  try {
+    const alone = await draw((ctx) => ctx.clipRegion(region), fillAll);
+    assert.deepEqual(px(alone, S, 16, 16), BLUE, 'a region: the first square');
+    assert.deepEqual(px(alone, S, 48, 48), BLUE, 'a region: the second');
+    assert.deepEqual(px(alone, S, 32, 32), WHITE, 'a region: between them, kept');
+
+    const halved = await draw((ctx) => {
+      ctx.clipRegion(region);
+      rect(0, 0, 32, S)(ctx);
+    }, fillAll);
+    assert.deepEqual(px(halved, S, 16, 16), BLUE, 'region and rectangle: where both are');
+    assert.deepEqual(px(halved, S, 48, 48), WHITE, 'the region outside the rectangle: kept');
+
+    const rounded = await draw((ctx) => {
+      ctx.clipRegion(region);
+      circle(ctx);
+    }, fillAll);
+    assert.deepEqual(px(rounded, S, 20, 20), BLUE, 'region and path: where both are');
+    assert.deepEqual(px(rounded, S, 32, 32), WHITE, 'the path outside the region: kept');
+    assert.deepEqual(px(rounded, S, 9, 9), WHITE, 'the region outside the path: kept');
+  } finally {
+    region.destroy();
+  }
+});
+
 test('stroke: lineWidth and clipped strokes honor the mask path', async (t) => {
   if (skip) return t.skip(skip);
   const { pixmap, ctx } = freshCtx();
