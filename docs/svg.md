@@ -141,7 +141,7 @@ outline icon would fill black, or paint nothing at all if its strokes enclose
 no area.
 
 Not supported (skipped silently): CSS stylesheets/`<style>`, `clipPath`,
-`filter`, `pattern`, `marker`, animation/SMIL, `foreignObject`,
+`filter`, `pattern`, animation/SMIL, `foreignObject`,
 external references, `preserveAspectRatio` on the root `svg` (whose
 `viewBox` is stretched to the box `draw` is given), a `symbol`'s `viewBox`,
 stroke dashing, and of text: a path to set it along, `rotate`,
@@ -218,6 +218,38 @@ The surfaces come from `opts.surface`, or from `app.createSurface` on a
 context of ntk's own. Where there is none, or the context cannot
 `destination-in`, the element is drawn as it is, cut to the mask's region.
 A mask that is not there, or that names something else, is no mask.
+
+## Markers
+
+A `path`, `line`, `polyline` or `polygon` draws the `<marker>`s its
+`marker-start`, `marker-mid` and `marker-end` name — attributes, or in its
+`style`, where the `marker` shorthand sets all three — as SVG 2, 11.6 has
+them, over its fill and its stroke:
+
+- at its vertices: the first vertex of the path takes `marker-start`, the
+  last `marker-end`, and every one between `marker-mid` — where each
+  subpath starts, where each of its segments ends, and where a closed one
+  comes back to its start. An arc is one segment, so the curves it is drawn
+  as make no vertices inside it
+- each in a viewport of its own, `markerWidth` by `markerHeight` (3 by 3
+  where unset), in stroke widths unless `markerUnits` is `userSpaceOnUse`,
+  with the marker's `viewBox` fitted in as its `preserveAspectRatio` says
+  and the point `refX`,`refY` of it — a number, or `left`/`center`/`right`
+  and `top`/`center`/`bottom` of the box — on the vertex
+- turned by `orient`: an angle (degrees unless it names `rad`, `grad` or
+  `turn`), or the direction the path runs at the vertex for `auto` — the
+  bisector of the way it comes in and the way it goes out, at a vertex with
+  both, and a closed subpath comes into its start by its closing side — and
+  for `auto-start-reverse` the start's turned the other way, which is how
+  an arrow is put on both ends of a line with one marker
+- clipped to the viewport unless the marker's `overflow` is `visible` or
+  `auto`
+
+What is in a marker inherits from the marker's ancestors, not from the
+shape it is on, and is faded by the shape's `opacity`. A marker that
+reaches itself draws what it holds once. Markers count for
+[`paintKind`](#paintkind-which-documents-can-be-recoloured): a marker of
+another colour makes a drawing more than one.
 
 ## Conditional processing
 

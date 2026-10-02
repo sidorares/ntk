@@ -1124,3 +1124,134 @@ test('paint scan agrees with what the root actually paints', () => {
   assert.equal(strokeOnly.paintKind, 'mono');
   assert.equal(strokeOnly.soloPaint, '#333');
 });
+
+// --- markers -------------------------------------------------------------------
+
+/** samplelib.com's arrow, the marker that found this: a 10-unit triangle
+ * in a viewBox, its tip at refX 9, in an 8 by 8 viewport. */
+const ARROW = `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+  markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+  <path d="M 0 0 L 10 5 L 0 10 z" fill="#17a2b8"/></marker></defs>`;
+
+/** The matrices the marker's content was filled through, in order. */
+function markerFills(svg, fill = '#17a2b8') {
+  const view = new SvgView(null);
+  view.setSvg(svg);
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 200, 200);
+  return { ctx, fills: of(ctx.calls, 'fill').filter((c) => c[3] === fill) };
+}
+
+const round3 = (n) => Math.round(n * 1000) / 1000 + 0;
+const nearly = (actual, expected, message = 'where it lands') =>
+  assert.deepEqual(actual.map(round3), expected.map(round3), message);
+
+test('marker-end draws the marker on the last vertex, its reference point there, scaled by the stroke width', () => {
+  const { ctx, fills } = markerFills(`<svg viewBox="0 0 200 200">${ARROW}
+    <path d="M125 64 L142 64" stroke="#17a2b8" stroke-width="2" marker-end="url(#arrow)"/></svg>`);
+  assert.equal(fills.length, 1, 'one arrowhead');
+  const m = fills[0][5];
+  // the tip, (9, 5) in the viewBox, on the vertex
+  nearly(matApply(m, 9, 5), [142, 64], 'the reference point is on the vertex');
+  // the viewBox is fitted into 8 units, and those are stroke widths: a unit
+  // of the viewBox is 1.6 user units, pointing along the path, so its base,
+  // 9 units back from the tip, is 14.4 behind the vertex
+  nearly(matApply(m, 0, 5), [127.6, 64], 'scaled by the viewBox and the stroke width');
+  nearly(matApply(m, 0, 0), [127.6, 56]);
+  // cut to its viewport, 8 by 8 stroke widths
+  const clip = of(ctx.calls, 'clip').at(-1);
+  nearly(matApply(clip[2], 0, 0), [127.6, 56]);
+  nearly(matApply(clip[2], 8, 8), [143.6, 72]);
+});
+
+test('orient auto turns a marker to the path, and auto-start-reverse turns the start one back', () => {
+  const { fills } = markerFills(`<svg viewBox="0 0 200 200">${ARROW}
+    <line x1="50" y1="10" x2="50" y2="60" stroke="#000" stroke-width="1"
+      marker-start="url(#arrow)" marker-end="url(#arrow)"/></svg>`);
+  assert.equal(fills.length, 2);
+  const [start, end] = fills.map((f) => f[5]);
+  // going down at the end: the tip points down, its base 7.2 above it
+  nearly(matApply(end, 9, 5), [50, 60]);
+  nearly(matApply(end, 0, 5), [50, 52.8]);
+  // the start, reversed: pointing up, its base below the vertex
+  nearly(matApply(start, 9, 5), [50, 10]);
+  nearly(matApply(start, 0, 5), [50, 17.2]);
+});
+
+test('marker-mid goes on every vertex between, turned to the bisector of the turn', () => {
+  const { fills } = markerFills(`<svg viewBox="0 0 200 200">
+    <defs><marker id="dot" markerWidth="4" markerHeight="4" refX="2" refY="2"
+      orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M2 2 L4 2" fill="#f00"/></marker></defs>
+    <polyline points="0,0 10,0 10,10 20,10" fill="none" stroke="#000"
+      marker-mid="url(#dot)"/></svg>`, '#f00');
+  assert.equal(fills.length, 2, 'the two corners, and not the ends');
+  // at (10, 0) the path turns from east to south: the bisector points
+  // south-east, and the marker's (2,2)->(4,2) runs that way
+  const [first, second] = fills.map((f) => f[5]);
+  nearly(matApply(first, 2, 2), [10, 0]);
+  const [x, y] = matApply(first, 4, 2);
+  nearly([x - 10, y], [Math.SQRT2, Math.SQRT2], 'south-east');
+  nearly(matApply(second, 2, 2), [10, 10]);
+});
+
+test('a closed polygon ends where it starts, and comes back into its start by its closing side', () => {
+  const { fills } = markerFills(`<svg viewBox="0 0 200 200">
+    <defs><marker id="m" markerWidth="4" markerHeight="4" refX="0" refY="0"
+      orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L1 0" fill="#f00"/></marker></defs>
+    <polygon points="0,0 10,0 10,10" marker-start="url(#m)" marker-mid="url(#m)"
+      marker-end="url(#m)"/></svg>`, '#f00');
+  // the start, two corners, and the end back on the start
+  assert.equal(fills.length, 4);
+  const at = fills.map((f) => matApply(f[5], 0, 0).map((n) => Math.round(n)));
+  assert.deepEqual(at, [[0, 0], [10, 0], [10, 10], [0, 0]]);
+  // in from the closing side, going north-west, and out going east: the
+  // start's marker bisects them, pointing north-east
+  const [x, y] = matApply(fills[0][5], 1, 0);
+  assert.ok(x > 0 && y < 0, `north-east, not (${x}, ${y})`);
+});
+
+test('an arc is one segment: no vertex where it was cut into curves', () => {
+  const { fills } = markerFills(`<svg viewBox="0 0 200 200">
+    <defs><marker id="m" markerWidth="4" markerHeight="4" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L1 0 L1 1 Z" fill="#f00"/></marker></defs>
+    <path d="M0 50 A50 50 0 0 1 100 50 L120 50" fill="none" stroke="#000"
+      marker-mid="url(#m)"/></svg>`, '#f00');
+  assert.equal(fills.length, 1, 'the arc’s end, and nothing inside it');
+  nearly(matApply(fills[0][5], 0, 0), [100, 50]);
+});
+
+test('what is in a marker inherits from its own ancestors, not from the shape', () => {
+  const { fills } = markerFills(`<svg viewBox="0 0 200 200">
+    <defs fill="#00f"><marker id="m" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L1 0 L1 1 Z"/></marker></defs>
+    <path d="M0 0 L10 0" fill="#f00" stroke="#000" marker-end="url(#m)"/></svg>`, '#00f');
+  assert.equal(fills.length, 1, 'the marker filled blue, as its <defs> says');
+});
+
+test('a marker set by the marker shorthand in a style, one that reaches itself, and an overflow that shows it', () => {
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 200 200">
+    <defs><marker id="m" overflow="visible" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L5 0 L5 5 Z" fill="#f00" marker-end="url(#m)"/></marker></defs>
+    <polyline points="0,0 10,0 20,0" fill="none" stroke="#000" style="marker: url(#m)"/></svg>`);
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 200, 200);
+  const fills = of(ctx.calls, 'fill').filter((c) => c[3] === '#f00');
+  assert.equal(fills.length, 3, 'start, mid and end, each drawn once');
+  assert.equal(of(ctx.calls, 'clip').length, 0, 'overflow visible is not clipped');
+});
+
+test('paint scan: a marker of another colour makes a drawing more than one', () => {
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <defs><marker id="m"><path d="M0 0 L1 1" fill="#f00"/></marker></defs>
+    <path d="M2 2 L20 20" marker-end="url(#m)"/></svg>`);
+  assert.equal(view.paintKind, 'multi');
+  const plain = new SvgView(null);
+  plain.setSvg(`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <defs><marker id="m"><path d="M0 0 L1 1"/></marker></defs>
+    <path d="M2 2 L20 20" marker-end="url(#m)"/></svg>`);
+  assert.equal(plain.paintKind, 'mono', 'one inheriting the drawing’s paint is not');
+});
