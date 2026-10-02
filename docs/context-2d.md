@@ -198,12 +198,21 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   `drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)` — draws an ntk
   [`Image`](images.md) (decoded PNG/JPEG). The image uploads to the server
   once and is cached; scaling (and any affine transform) happens server-side
-  with bilinear filtering. Respects clip and `globalAlpha`. `image` can also
-  be a [`Surface`](surface.md) (pixels the server drew, including a8 coverage
-  surfaces that paint in the current `fillStyle`), anything else exposing
-  `width`/`height`/`picture(app)`, another ntk 2d context (server-side
-  composite of the whole drawable) or a node-canvas-like object exposing
-  `image.context.getImageData()` (pixels are uploaded). A rectangular clip
+  with bilinear filtering. Respects the clip, `globalAlpha` and
+  `globalCompositeOperation`. `image` can also be a [`Surface`](surface.md)
+  (pixels the server drew, including a8 coverage surfaces that paint in the
+  current `fillStyle`), anything else exposing `width`/`height`/`picture(app)`,
+  another ntk 2d context, or a node-canvas-like object exposing
+  `image.context.getImageData()` (its pixels are uploaded on every call).
+  Every source is drawn alike, in all three forms: cropped, scaled, under
+  the transform, clipped, faded by `globalAlpha` and composited with the op.
+  A context is the pixels it has drawn, whatever its own clip; one drawing
+  into an a8 coverage surface paints in the current `fillStyle`, as that
+  surface does; one that has been destroyed, or that draws on another X
+  connection, throws. Drawing the pixels being drawn into — a context onto
+  itself, another context on the same drawable, a Surface from inside its
+  own `render()` — reads a copy of the part it draws, so that the draw and
+  its shadow see those pixels as they were before the call. A rectangular clip
   is applied by the server or by narrowing the composite, never through a
   full-surface mask. Under a transform the server samples the image from
   the corner of the box it lands in, so a thumbnail drawn small far across

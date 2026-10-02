@@ -206,6 +206,12 @@ for an offscreen surface, minus the damage bookkeeping — a pixmap has no
 backing store or present path, so compositing the surface afterwards is the
 caller's normal job.
 
+`drawImage` of a surface into itself — from inside its own `render()`, or
+through any context on its pixmap — works too, scaled or turned as well as
+shifted: it reads a copy of the part it draws, so it sees the pixels as they
+were before the call. That copy is a pass over the pixels of its own; for a
+whole-pixel shift, `copyWithin` does the job in one request.
+
 ## API
 
 - `new Surface(app, { width, height, format })` — `format` is `'argb32'`

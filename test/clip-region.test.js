@@ -187,6 +187,53 @@ test('the other clip-rectangle fast paths leave the region alone', async (t) => 
   pixmap.destroy();
 });
 
+// drawImage of a context reads its picture, and between drawings a region
+// clip sits on that picture. glamor — Xorg's modesetting, Xwayland — cuts a
+// composite down to its source's clip, so the region has to be off the slot
+// while the context is read, and back on before it next draws. fb, which
+// this suite usually runs on, reads past a source's clip either way, so it
+// is the requests that are checked.
+test('a context drawn as an image is read without its region, which then comes back', async (t) => {
+  if (skip) return t.skip(skip);
+  const { pixmap, ctx: src } = freshCtx();
+  const region = await app.createRegion([{ x: 0, y: 0, width: 100, height: 100 }]);
+  src.clipRegion(region);
+  src.fillStyle = 'red';
+  src.fillRect(0, 0, W, H); // puts the region on the picture
+
+  const id = src._picture.id;
+  const fixes = src._fixes;
+  const Render = app.display.Render;
+  const saved = { clip: fixes.SetPictureClipRegion, composite: Render.Composite };
+  let slot = region.id;
+  const reads = [];
+  fixes.SetPictureClipRegion = function (pic, held) {
+    if (pic === id) slot = held;
+    return saved.clip.apply(this, arguments);
+  };
+  Render.Composite = function (op, from) {
+    if (from === id) reads.push(slot);
+    return saved.composite.apply(this, arguments);
+  };
+  const { pixmap: dstPixmap, ctx: dst } = freshCtx();
+  try {
+    dst.drawImage(src, 0, 0);
+  } finally {
+    fixes.SetPictureClipRegion = saved.clip;
+    Render.Composite = saved.composite;
+  }
+  assert.deepEqual(reads, [0], 'read with nothing in its clip slot');
+
+  src.fillStyle = 'blue';
+  src.fillRect(0, 0, W, H);
+  const image = await src.getImageData(0, 0, W, H);
+  assert.deepEqual(at(image, 50, 50), BLUE, 'its next drawing, inside the region');
+  assert.deepEqual(at(image, 150, 150), WHITE, 'and still clipped outside it');
+  region.destroy();
+  pixmap.destroy();
+  dstPixmap.destroy();
+});
+
 // Issue #308 made the picture clip lazy: a rectangle already in the slot is
 // not re-stamped. A region is never treated that way, because it is the
 // caller's and they may have edited it — server-side, invisibly to us —
