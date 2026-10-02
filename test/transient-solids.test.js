@@ -5,8 +5,8 @@
 // corner glyphs), or the alpha alone in a mask slot (fillRect, drawImage).
 // Each is a new premultiplied colour, so a new server-side solid, and an
 // animated fade asks for a new alpha nearly every frame. They used to go in
-// the cache that holds `fillStyle`'s solids, which never evicts, so every
-// fade left frames × colours of them on the server until app.close().
+// the cache `createSolidPicture` hands out from, which never evicts, so
+// every fade left frames × colours of them on the server until app.close().
 //
 // They live in a small LRU now, and an evicted one is freed. What could go
 // wrong is freeing one that something still means to use: its id goes back
@@ -161,6 +161,8 @@ async function fade(limit, afterFrame) {
       limit: app._transientSolidLimit,
       live: count(server, isSolid),
       held: app._solidPictures.size,
+      // fillStyle's, in an LRU of their own (test/style-solids.test.js)
+      styles: app._styleSolids.size,
       kept: app._transientSolids.size
     };
   } finally {
@@ -190,7 +192,7 @@ test('a fade keeps a bounded number of solids, and draws what keeping them all d
   const all = await fade(Infinity);
   // a solid per drawing per frame — what each fade used to leave behind
   assert.ok(all.kept >= FRAMES * 5, `the fade made ${all.kept} solids`);
-  assert.equal(all.live, all.held + all.kept, 'and the server holds them all');
+  assert.equal(all.live, all.held + all.styles + all.kept, 'and the server holds them all');
   // faded, each frame by its own alpha: the inside of the red square is the
   // background that much of the way to red
   const [bg, red] = [rgb(BACKGROUND), rgb(RED)];
@@ -207,16 +209,18 @@ test('a fade keeps a bounded number of solids, and draws what keeping them all d
     if (i % 25 !== 24) return;
     await roundTrip(app);
     const live = count(server, isSolid);
+    const styles = app._solidPictures.size + app._styleSolids.size;
     assert.ok(
-      live <= app._solidPictures.size + app._transientSolidLimit,
+      live <= styles + app._transientSolidLimit,
       `after frame ${i} the server holds ${live} solids`
     );
   });
   assert.ok(all.kept > 4 * bounded.limit, 'many times what the LRU holds');
   // full, and what it let go of freed on the server, not only forgotten
   assert.equal(bounded.kept, bounded.limit);
-  assert.equal(bounded.live, bounded.held + bounded.limit);
-  assert.ok(bounded.held < 20, `the styles are a handful (${bounded.held})`);
+  assert.equal(bounded.live, bounded.held + bounded.styles + bounded.limit);
+  const styles = bounded.held + bounded.styles;
+  assert.ok(styles < 20, `the styles are a handful (${styles})`);
   assertSamePixels(bounded.pixels, all.pixels, 'bounded');
 
   // Room for two: a drawing call uses one at a time, so this frees each
@@ -234,7 +238,8 @@ test('a solid a caller holds is never evicted', async () => {
     const pixmap = app.createPixmap({ width: CELL, height: CELL, depth: 24 });
     const ctx = pixmap.getContext('2d');
     ctx.font = '14px Fixture';
-    // handed out by createSolidPicture, and held by fillStyle
+    // handed out by createSolidPicture, and fillStyle's, which the solids a
+    // fade makes for itself do not push out
     const handed = ctx.createSolidPicture(0.25, 0.5, 0.75, 1);
     ctx.fillStyle = 'rgb(10, 200, 30)';
     const style = ctx._backgroundPicture;
@@ -297,7 +302,8 @@ test('on a server with no CreateSolidFill, an evicted solid takes its pixmap wit
     await roundTrip(app);
     const isSolidPixmap = (r) =>
       r.type === 'pixmap' && r.raster.width === 1 && r.raster.height === 1;
-    const held = [...app._solidPictures.values()].filter((p) => p._sourcePixmap).length;
+    const styles = [...app._solidPictures.values(), ...app._styleSolids.values()];
+    const held = styles.filter((p) => p._sourcePixmap).length;
     assert.equal(app._transientSolids.size, limit);
     assert.equal(count(server, isSolidPixmap), held + limit);
 
