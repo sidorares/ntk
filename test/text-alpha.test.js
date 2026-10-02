@@ -24,7 +24,7 @@ import { after, before, describe, test } from 'node:test';
 
 import xserver from 'x11/lib/xserver/index.js';
 
-import { createClient, StaticFontSource } from '../lib/index.js';
+import { createClient, StaticFontSource, Surface } from '../lib/index.js';
 import { cssColor, cssColorStraight } from '../lib/color.js';
 import { trapezoidize } from '../lib/trapezoid.js';
 
@@ -312,6 +312,21 @@ for (const [name, draw] of Object.entries(ENTRY_POINTS)) {
     });
   });
 }
+
+test('ctx.fadesGlyphs says so, for code handed a context it did not make', () => {
+  // a renderer fades text per drawing where this is true, and on a surface
+  // of its own where it is not: an older ntk, another backend's context
+  const pixmap = app.createPixmap({ width: 8, height: 8, depth: 24 });
+  const ctx = pixmap.getContext('2d');
+  assert.equal(ctx.fadesGlyphs, true);
+  assert.throws(() => {
+    ctx.fadesGlyphs = false;
+  }, TypeError);
+  pixmap.destroy();
+  const surface = new Surface(app, { width: 8, height: 8 });
+  surface.render((sctx) => assert.equal(sctx.fadesGlyphs, true, 'and on a surface'));
+  surface.destroy();
+});
 
 test('a picture the caller made fades through the mask, having no colour to fold', async () => {
   // a solid ntk made knows its colour; one made any other way is just a

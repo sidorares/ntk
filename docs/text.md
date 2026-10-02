@@ -251,7 +251,12 @@ glyphs     = [{ id, ax, dx, dy }, …]            // drawing order
   one `CompositeGlyphs` below. A gradient, a pattern or a picture of your
   own has no single colour to fold it into: those paint through a
   surface-sized a8 mask with the alpha in it, as under a path clip. At `0`
-  nothing is sent.
+  nothing is sent. `ctx.fadesGlyphs` is `true` to say so, for code that may
+  be handed a context whose text does not fade
+  ([context-2d.md](context-2d.md)). Each glyph composites on its own, as it
+  does at full opacity, so where two glyphs of a run overlap, the overlap
+  comes out denser than fading the finished text would leave it. Text that
+  has to fade as one picture is drawn on a surface and faded as a group.
 
 One call collapses into one `CompositeGlyphs` request on the bitmap path
 (with inline glyphset switches when runs mix faces or sizes), rides the
