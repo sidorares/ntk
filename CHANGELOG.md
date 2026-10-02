@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.21.0](https://github.com/sidorares/ntk/compare/v8.20.0...v8.21.0) (2026-10-02)
+
+
+### Features
+
+* **svg:** a path, line, polyline or polygon draws the markers its marker-start, marker-mid and marker-end name, at its vertices and turned the way the path runs, where every marker was skipped and an arrow was drawn as a bare line ([#525](https://github.com/sidorares/ntk/issues/525)) ([fa1b043](https://github.com/sidorares/ntk/commit/fa1b043e8069ef89b9cd3fececc812c2f81c54f2))
+* **svg:** a text is laid out with its tspans, each chunk anchored where its text ends up, and a mask cuts what it masks, where a text was drawn as one string and a mask was skipped ([#523](https://github.com/sidorares/ntk/issues/523)) ([82dff76](https://github.com/sidorares/ntk/commit/82dff76a38e963fc6f95280ae8aa0c36bb420c4f))
+
 ## [8.20.0](https://github.com/sidorares/ntk/compare/v8.19.0...v8.20.0) (2026-10-02)
 
 
