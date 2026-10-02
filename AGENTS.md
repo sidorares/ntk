@@ -124,6 +124,10 @@ lib/text/fontsource.js     pluggable FontSource seam and the font-spec
                            (default), StaticFontSource (data-based, browser-
                            safe), process-wide default override
 lib/text/font.js           Font: fontkit face — metrics, coverage, shaping
+lib/text/brotlidictionary.js  imported ahead of fontkit: a require.cache
+                           stand-in that keeps brotli's static dictionary
+                           (WOFF2 only) from loading until the first
+                           decompress (issue #427)
 lib/text/fontmanager.js    FontManager (app.fonts): match/load/fallback
 lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
 lib/text/layout.js         TextLayout: UAX#14 wrapping, alignment, spans
