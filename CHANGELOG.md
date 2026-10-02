@@ -1,5 +1,25 @@
 # Changelog
 
+## [8.18.0](https://github.com/sidorares/ntk/compare/v8.17.8...v8.18.0) (2026-10-02)
+
+
+### Features
+
+* **raster:** a mask drawn here is the server's to the byte, so the route a drawing takes never shows ([#507](https://github.com/sidorares/ntk/issues/507)) ([ac95874](https://github.com/sidorares/ntk/commit/ac95874f4d7cacec5b6c34d6f67c08d9f1578a81))
+
+
+### Bug Fixes
+
+* ntk/package.json resolves, for tools that read a dependency's version ([#506](https://github.com/sidorares/ntk/issues/506)) ([579ee0c](https://github.com/sidorares/ntk/commit/579ee0c35b7ec6114266f3b5a6d5c842b80fe644))
+* **raster:** a fill that crosses itself is cut at its crossings, so the server's trapezoids fill it as ntk's rasterizer does ([#505](https://github.com/sidorares/ntk/issues/505)) ([b852e3d](https://github.com/sidorares/ntk/commit/b852e3d21cfb8262cdd59b94101d9e84670a85ea))
+
+
+### Performance Improvements
+
+* **text:** a WOFF2 decompresses with the runtime's own Brotli, through the fork's setBrotliDecompressor ([#504](https://github.com/sidorares/ntk/issues/504)) ([4dd4474](https://github.com/sidorares/ntk/commit/4dd44747708cc9f4653413e0565d67ca839e461a))
+* **text:** brotli's static dictionary loads with the first WOFF2, not with ntk ([#501](https://github.com/sidorares/ntk/issues/501)) ([175696d](https://github.com/sidorares/ntk/commit/175696d5bdc28e332c247c2c8891e3e42767bfb8))
+* **text:** ntk runs the windowkit fork of fontkit from a build it carries, so a face's first shaping decodes its structs without Object.defineProperties ([#503](https://github.com/sidorares/ntk/issues/503)) ([1d2969b](https://github.com/sidorares/ntk/commit/1d2969b61ea89145089dd8a3a5d229f664ec941a)), closes [#437](https://github.com/sidorares/ntk/issues/437)
+
 ## [8.17.8](https://github.com/sidorares/ntk/compare/v8.17.7...v8.17.8) (2026-10-02)
 
 
