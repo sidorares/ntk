@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.20.0](https://github.com/sidorares/ntk/compare/v8.19.0...v8.20.0) (2026-10-02)
+
+
+### Features
+
+* **image:** a JPEG decodes the way up its EXIF Orientation says, as a browser shows it, where a phone photo came out on its side ([#521](https://github.com/sidorares/ntk/issues/521)) ([79484aa](https://github.com/sidorares/ntk/commit/79484aa7fc52254014039dbdbbe45981d0fadc20))
+
 ## [8.19.0](https://github.com/sidorares/ntk/compare/v8.18.1...v8.19.0) (2026-10-02)
 
 
