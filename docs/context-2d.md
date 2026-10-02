@@ -60,6 +60,13 @@ ctx.fillRect(0, 0, 100, 100);
   backend's context answers for itself; where this is not `true`, text has
   to be faded some other way, such as drawing it on a surface and fading
   that
+- `ctx.takesColorSources` — `true`: `drawGlyphs` and `drawTraps` take a
+  colour for `src` as well as a picture — a CSS colour string, a
+  premultiplied `[r, g, b, a]`, or `null` for `fillStyle` — and paint it
+  with a solid the `App` frees as colours change. A read-only feature test,
+  like `fadesGlyphs`: older ntk took a picture only, and a colour drew
+  nothing; where this is not `true`, make the source with
+  `createSolidPicture`. See [text.md](text.md#colouring-runs)
 - `ctx.shadowColor`, `ctx.shadowBlur`, `ctx.shadowOffsetX`,
   `ctx.shadowOffsetY` — drop shadows, off by default (a transparent
   `shadowColor`). See **Shadows** below
@@ -251,8 +258,9 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   on the `App` and shared across contexts. Those `createSolidPicture`
   hands out are freed with `app.close()` and not before, since whoever
   asked for one may keep it — so one a frame for an animated colour adds
-  up, where the same colours set as `fillStyle` do not. The solids a
-  colour `fillStyle`, `strokeStyle` or `TextLayout` span paints with are
+  up, where the same colours set as `fillStyle` or passed to `drawGlyphs`
+  do not. The solids a colour `fillStyle`, `strokeStyle` or `TextLayout`
+  span paints with, and a colour `drawGlyphs` or `drawTraps` is handed, are
   kept for the 1,024 colours most recently used and the rest freed; a
   context keeps the style itself, and makes its solid again if it draws
   with one that was. The solids a drawing makes for itself, a colour with
@@ -1126,7 +1134,14 @@ no per-size server cache — see
 - `drawGlyphs(op, src, positioned)` — ntk extension: composite glyph runs
   directly, shaped or hand-built. The run shape is public API, for
   renderers that position glyphs themselves (a terminal grid, a tabular
-  column) — see [text.md](text.md#glyph-runs)
+  column) — see [text.md](text.md#glyph-runs). `src` is a colour, `null`
+  for `fillStyle`, or a picture — see
+  [text.md](text.md#colouring-runs)
+- `drawTraps(op, src, traps)` — ntk extension: composite trapezoids under
+  the clip and `globalAlpha`, as `drawGlyphs` does glyphs, with `src` the
+  same. `traps` is a flat array of six device-space numbers a trapezoid,
+  as RENDER's `AddTraps` takes them: the left x, right x and y of its top
+  edge, then of its bottom edge
 
 Custom font files: `app.fonts.load(path)`, then use the family name in
 `ctx.font`. See [text.md](text.md) for the full text API and

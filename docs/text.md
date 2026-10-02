@@ -244,9 +244,13 @@ glyphs     = [{ id, ax, dx, dy }, …]            // drawing order
 - `op` is an XRender op (`ctx.Render.PictOp.Over` for normal text), and it
   is the call's own: `ctx.globalCompositeOperation` does not override it.
   `fillText` and `TextLayout.draw` pass the op that
-  `globalCompositeOperation` names. `src` is the picture the glyphs paint
-  with — a solid (`ctx.createSolidPicture(r, g, b, a)`, premultiplied 0..1
-  floats) or a gradient.
+  `globalCompositeOperation` names. `src` is what the glyphs paint with:
+  a colour — a CSS colour string, or a premultiplied `[r, g, b, a]` in
+  0..1, the two forms `fillStyle` takes — or `null` for the current
+  `fillStyle`; or a picture — a solid
+  (`ctx.createSolidPicture(r, g, b, a)`, premultiplied 0..1 floats) or a
+  gradient. For colours that change, pass the colour: see
+  [Colouring runs](#colouring-runs).
 - An op that writes where the glyphs have no ink — `Src`, `In`,
   `InReverse`, `Out` and `AtopReverse`, which are canvas's `copy`,
   `source-in`, `destination-in`, `source-out` and `destination-atop` — is
@@ -257,9 +261,9 @@ glyphs     = [{ id, ax, dx, dy }, …]            // drawing order
   they clear, as a fill clears its own
   ([context-2d.md](context-2d.md#composite-ops-that-clear)). Every other op
   keeps the single `CompositeGlyphs`.
-- `ctx.globalAlpha` applies, as it does to a fill. A solid from
-  `createSolidPicture` (or a colour `fillStyle`) takes it in its colour —
-  all four premultiplied components scaled — so a faded run is still the
+- `ctx.globalAlpha` applies, as it does to a fill. A colour, or a solid
+  from `createSolidPicture`, takes it in its colour — all four
+  premultiplied components scaled — so a faded run is still the
   one `CompositeGlyphs` below. A gradient, a pattern or a picture of your
   own has no single colour to fold it into: those paint through the scratch
   a8 mask with the alpha in it, as under a path clip, over the box round the
@@ -310,10 +314,49 @@ for (const ch of rowText) {
   // fallback face here (a run is one font); 0 draws the .notdef box
   glyphs.push({ id: id ?? 0, ax: cellW, dx: 0, dy: 0 });
 }
-ctx.drawGlyphs(ctx.Render.PictOp.Over, ctx.createSolidPicture(1, 1, 1, 1), [
+ctx.drawGlyphs(ctx.Render.PictOp.Over, '#e5e5e5', [
   { run: { font, size, glyphs }, x: originX, y: baselineY }
 ]);
 ```
+
+### Colouring runs
+
+A colour passed as `src` paints with a solid from the cache a colour
+`fillStyle` paints with: the 1,024 colours most recently used on the
+connection, the rest freed as others are asked for. A solid from
+`createSolidPicture` is held until `app.close()`, since whoever asked for
+it may keep it. A renderer that makes one for each colour it draws leaves
+one on the server for every colour it ever drew: a few dozen for a
+palette, and no bound at all for a terminal showing truecolor output or a
+colour animated through a tween. Pass those as colours:
+
+```js
+const Over = ctx.Render.PictOp.Over;
+ctx.drawGlyphs(Over, '#e5c07b', runs);               // a CSS colour
+ctx.drawGlyphs(Over, [0.45, 0.38, 0.24, 0.5], runs); // the same at half
+                                                     // opacity, premultiplied
+ctx.drawGlyphs(Over, null, runs);                    // the fillStyle
+```
+
+`drawTraps(op, src, traps)`, which composites trapezoids under the clip,
+takes `src` the same way.
+
+`ctx.takesColorSources` is `true` where `src` may be a colour. Older ntk
+took a picture only: a colour there draws nothing, and the server refuses
+it as a picture after the call has returned, so nothing you can catch says
+so. Code that may be handed a context it did not make — an older ntk's,
+another backend's — asks first, as it does `ctx.fadesGlyphs`:
+
+```js
+const src = ctx.takesColorSources
+  ? color
+  : ctx.createSolidPicture(r, g, b, a); // held until app.close()
+ctx.drawGlyphs(ctx.Render.PictOp.Over, src, runs);
+```
+
+A solid from `createSolidPicture` works as it always has. It is the one to
+take where you need a picture that outlives the call, such as a source for
+your own `Render` requests.
 
 ## API
 
