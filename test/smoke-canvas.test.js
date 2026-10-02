@@ -203,6 +203,53 @@ test('drawImage: another 2d context lands where the call puts it, as big and as 
   pixmap.destroy();
 });
 
+test('drawImage: a crop turned, or put off the pixel grid, is the crop and nothing beside it', async (t) => {
+  if (skip) return t.skip(skip);
+  // A 40x40 image, red on the left and blue on the right; the crop is the
+  // red half. Under a transform the composite covers the box around the
+  // turned rectangle, and its corners sampled the blue half beside the crop.
+  const image = (w, split) => {
+    const data = Buffer.alloc(w * 40 * 4);
+    for (let i = 0; i < w * 40; i++) data.set((i % w) < split ? [255, 0, 0, 255] : [0, 0, 255, 255], i * 4);
+    return new Image({ width: w, height: 40, data });
+  };
+  const halves = image(40, 20);
+  const redHalf = image(20, 20); // the crop, cut out into an image of its own
+  const draw = (ctx, setup, img, ...args) => {
+    ctx.save();
+    setup(ctx);
+    ctx.drawImage(img, ...args);
+    ctx.restore();
+  };
+  for (const [what, setup] of [
+    ['turned 30°', (c) => { c.translate(40, 10); c.rotate(Math.PI / 6); }],
+    ['moved a tenth of a pixel', (c) => c.translate(10.1, 10)]
+  ]) {
+    const { pixmap, ctx } = freshCtx(80);
+    draw(ctx, setup, halves, 0, 0, 20, 40, 0, 0, 20, 40);
+    const { pixmap: refPixmap, ctx: ref } = freshCtx(80);
+    draw(ref, setup, redHalf, 0, 0, 20, 40);
+    const got = await readPixels(ctx, 80, 80);
+    const want = await readPixels(ref, 80, 80);
+    let blue = 0;
+    let red = 0;
+    let differ = 0;
+    for (let i = 0; i < got.data.length; i += 4) {
+      // red over white keeps green and blue equal: any difference is blue
+      if (got.data[i + 2] !== got.data[i + 1]) blue++;
+      if (got.data[i] === 255 && got.data[i + 1] === 0) red++;
+      for (let c = 0; c < 3; c++) if (got.data[i + c] !== want.data[i + c]) differ++;
+    }
+    assert.equal(blue, 0, `${what}: pixels of the blue half beside the crop`);
+    assert.equal(differ, 0, `${what}: channels unlike the same pixels cut out`);
+    assert.ok(red > 700, `${what}: the crop is drawn, ${red} pixels of it`);
+    pixmap.destroy();
+    refPixmap.destroy();
+  }
+  halves.destroy();
+  redHalf.destroy();
+});
+
 test('arc: filled circle has correct inside/outside pixels', async (t) => {
   if (skip) return t.skip(skip);
   const { pixmap, ctx } = freshCtx();

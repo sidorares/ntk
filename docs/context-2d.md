@@ -248,7 +248,19 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   full-surface mask. Under a transform the server samples the image from
   the corner of the box it lands in, so a thumbnail drawn small far across
   a wide window is drawn like any other; an image scaled below 1/32,768 of
-  its size — under a pixel across — draws nothing
+  its size — under a pixel across — draws nothing. A crop (the 9-argument
+  form) under a transform that turns or skews it, or that puts its corners
+  between pixels, is drawn from a copy of the crop's own pixels — of the
+  part of them the surface and the clip let show — so it is drawn as those
+  pixels cut out into an image of their own would be: its edges fade out
+  over a pixel, as an image's own edges do, and nothing beyond the crop is
+  drawn. The copy is a pass over those pixels on the server, which costs
+  less than the turned composite itself unless a large crop is drawn at a
+  small fraction of its size: a 1600×1200 crop turned into an 80×60
+  thumbnail copies 1.9 million pixels to draw 4,800. Draw such a thumbnail
+  once into a [`Surface`](surface.md) at its own size, and turn that. An
+  axis-aligned transform that puts the corners on whole pixels takes no
+  copy, and neither does an uncropped image
 - `ctx.destroy()` / `Symbol.dispose` — release the context's server-side
   resources: its GCs, its Picture and its masks. Needed only for contexts
   created dynamically, such as one per [`Surface`](surface.md); a context
