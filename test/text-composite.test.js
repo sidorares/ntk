@@ -315,7 +315,7 @@ for (const [name, entry] of Object.entries(ENTRY_POINTS)) {
       }
     });
 
-    test('a path clip keeps every op to its box, and draws inside it what no clip draws', async () => {
+    test('a path clip keeps every op inside it, and draws inside it what no clip draws', async () => {
       for (const op of OPS) {
         const whole = await paint((ctx) => entry.draw(ctx, { op, style: COLOUR }));
         const clipped = await paint((ctx) => {
@@ -325,9 +325,8 @@ for (const [name, entry] of Object.entries(ENTRY_POINTS)) {
         const label = `${name}, ${op} under a path`;
         const outside = changed(clipped, outsideClipBox);
         assert.equal(outside, 0, `${label}: nothing outside the clip's box changes`);
-        if (!CLEARING.includes(op)) {
-          assert.equal(changed(clipped, wellOutsideClip), 0, `${label}: nor outside the clip`);
-        }
+        // the ops that clear too: the clip goes after them, not in their mask
+        assert.equal(changed(clipped, wellOutsideClip), 0, `${label}: nor outside the clip`);
         const inside = (image) => only(image, deepInsideClip);
         assertSame(inside(clipped), inside(whole), `${label}, inside it`);
       }
