@@ -124,6 +124,10 @@ lib/text/fontsource.js     pluggable FontSource seam and the font-spec
                            (default), StaticFontSource (data-based, browser-
                            safe), process-wide default override
 lib/text/font.js           Font: fontkit face — metrics, coverage, shaping
+lib/text/brotlidictionary.js  imported ahead of fontkit: a require.cache
+                           stand-in that keeps brotli's static dictionary
+                           (WOFF2 only) from loading until the first
+                           decompress (issue #427)
 lib/text/fontmanager.js    FontManager (app.fonts): match/load/fallback
 lib/text/shape.js          bidi (UAX#9) + itemization + shaping pipeline
 lib/text/layout.js         TextLayout: UAX#14 wrapping, alignment, spans
@@ -280,7 +284,11 @@ all on npm, at the ranges the fork declares.
 - The way back to npm is one import and one dependency. When upstream
   releases what the fork carries, or the fork is published, import
   `fontkit` in `lib/text/font.js` again, delete `lib/vendor/` and the
-  script, and depend on fontkit in place of its dependencies.
+  script, and depend on fontkit in place of its dependencies. Then
+  `lib/text/brotlidictionary.js` and its test resolve brotli from fontkit
+  again: they resolve it from ntk now, which is where the vendored build
+  finds it, and from anywhere else the stand-in guards a brotli nothing
+  loads.
 
 ## An error you hit is an error a consumer will hit
 
