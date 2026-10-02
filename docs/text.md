@@ -241,18 +241,30 @@ glyphs     = [{ id, ax, dx, dy }, …]            // drawing order
   passes.
 - `textRendering` (per run) overrides the bitmap/vector routing, as
   [above](#textrendering).
-- `op` is an XRender op (`ctx.Render.PictOp.Over` for normal text); `src`
-  is the picture the glyphs paint with — a solid
-  (`ctx.createSolidPicture(r, g, b, a)`, premultiplied 0..1 floats) or a
-  gradient.
+- `op` is an XRender op (`ctx.Render.PictOp.Over` for normal text), and it
+  is the call's own: `ctx.globalCompositeOperation` does not override it.
+  `fillText` and `TextLayout.draw` pass the op that
+  `globalCompositeOperation` names. `src` is the picture the glyphs paint
+  with — a solid (`ctx.createSolidPicture(r, g, b, a)`, premultiplied 0..1
+  floats) or a gradient.
+- An op that writes where the glyphs have no ink — `Src`, `In`,
+  `InReverse`, `Out` and `AtopReverse`, which are canvas's `copy`,
+  `source-in`, `destination-in`, `source-out` and `destination-atop` — is
+  not one `CompositeGlyphs`. That request composites each glyph over its
+  own box, so it would clear the ink of the glyph beside it and leave the
+  rest of the run's box alone. Those ops paint through the scratch a8 mask
+  instead, once, over the box round every glyph's ink, which is the box
+  they clear, as a fill clears its own
+  ([context-2d.md](context-2d.md#composite-ops-that-clear)). Every other op
+  keeps the single `CompositeGlyphs`.
 - `ctx.globalAlpha` applies, as it does to a fill. A solid from
   `createSolidPicture` (or a colour `fillStyle`) takes it in its colour —
   all four premultiplied components scaled — so a faded run is still the
   one `CompositeGlyphs` below. A gradient, a pattern or a picture of your
-  own has no single colour to fold it into: those paint through a
-  surface-sized a8 mask with the alpha in it, as under a path clip. At `0`
-  nothing is sent. `ctx.fadesGlyphs` is `true` to say so, for code that may
-  be handed a context whose text does not fade
+  own has no single colour to fold it into: those paint through the scratch
+  a8 mask with the alpha in it, as under a path clip, over the box round the
+  glyphs. At `0` nothing is sent. `ctx.fadesGlyphs` is `true` to say so, for
+  code that may be handed a context whose text does not fade
   ([context-2d.md](context-2d.md)). Each glyph composites on its own, as it
   does at full opacity, so where two glyphs of a run overlap, the overlap
   comes out denser than fading the finished text would leave it. Text that
@@ -491,8 +503,12 @@ in a translated context lands with the rest of the drawing — batching
 consecutive same-color runs into single requests. The context's shadow
 properties apply, one coverage surface per batch, so text that wraps casts a
 shadow the same way `fillText` does, and so does `globalAlpha`, which fades
-the text and its shadow as it fades a fill. Geometry and hit testing
-(`caretPosition`, `indexAt`, `lines[]`) are relative to that same origin.
+the text and its shadow as it fades a fill. So does
+`globalCompositeOperation`, batch by batch: under `copy` each colour clears
+the rest of the box round its own glyphs, as that many `fillText`s would,
+and a line the clip hides still counts towards that box. Geometry and hit
+testing (`caretPosition`, `indexAt`, `lines[]`) are relative to that same
+origin.
 
 Line breaking is UAX#14 (`linebreak` package); `\n` forces breaks; a word
 wider than `maxWidth` force-breaks at the widest grapheme prefix that fits;

@@ -17,6 +17,7 @@ import {
   Surface,
   SvgView
 } from '../lib/index.js';
+import { positionedRunsInk } from '../lib/text/glyphs.js';
 import { withTimeout } from './helpers/async.js';
 
 let app = null;
@@ -352,6 +353,79 @@ test('globalAlpha: text fades as a fill does', async (t) => {
       [0xcc, 0x99, 0x66],
       'a layout in a gradient under a path clip'
     );
+  } finally {
+    await own.close();
+  }
+});
+
+test('globalCompositeOperation: text takes the op, and an op that clears clears its box', async (t) => {
+  if (skip) return t.skip(skip);
+  // The hermetic run (test/text-composite.test.js) holds every op and route
+  // to the JS server's arithmetic; this holds the ones that clear, and one
+  // that erases, to a real RENDER's. Each is compared with a fill of the
+  // text's coverage: an a8 surface over the box round its ink, painted with
+  // the op by drawImage. fillText used to draw source-over whatever the op.
+  const fontSource = new StaticFontSource();
+  const face = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'MonelogicsSubset[wght].ttf');
+  fontSource.add(readFileSync(face), { family: 'Fixture' });
+  const own = await withTimeout(createClient({ fontSource }), 5000, 'connecting to X server', (late) =>
+    late.close()
+  );
+  const W = 160;
+  const H = 64;
+  const paint = async (draw) => {
+    // depth 32, so a cleared pixel reads transparent rather than black
+    const pixmap = own.createPixmap({ width: W, height: H, depth: 32 });
+    const ctx = pixmap.getContext('2d');
+    ctx.fillStyle = '#cc9966';
+    ctx.fillRect(0, 0, W, H);
+    draw(ctx);
+    const image = await ctx.getImageData(0, 0, W, H);
+    pixmap.destroy();
+    return image.data;
+  };
+  const text = (ctx, op, colour) => {
+    ctx.globalCompositeOperation = op;
+    ctx.fillStyle = colour;
+    ctx.font = '40px Fixture';
+    ctx.fillText('HHHH', 8, 48);
+  };
+
+  try {
+    // the box round the glyphs' ink, out to whole pixels and one past them
+    const run = own.fonts.match('Fixture').shape('HHHH', 40);
+    const ink = positionedRunsInk([{ run, x: 8, y: 48 }]);
+    const left = Math.floor(ink.minX) - 1;
+    const top = Math.floor(ink.minY) - 1;
+    const box = {
+      x: left,
+      y: top,
+      w: Math.ceil(ink.maxX) + 1 - left,
+      h: Math.ceil(ink.maxY) + 1 - top
+    };
+    const coverage = new Surface(own, { width: box.w, height: box.h, format: 'a8' });
+    coverage.render((sctx) => {
+      sctx.translate(-box.x, -box.y);
+      text(sctx, 'source-over', '#fff');
+    });
+    for (const op of ['copy', 'source-in', 'destination-in', 'destination-out']) {
+      const got = await paint((ctx) => text(ctx, op, '#336699'));
+      const want = await paint((ctx) => {
+        ctx.globalCompositeOperation = op;
+        ctx.fillStyle = '#336699';
+        ctx.drawImage(coverage, box.x, box.y);
+      });
+      let worst = 0;
+      for (let i = 0; i < got.length; i++) worst = Math.max(worst, Math.abs(got[i] - want[i]));
+      assert.ok(worst <= 1, `${op}: the text is a fill of its coverage, worst off by ${worst}`);
+      const at = (x, y) => [...got.slice((y * W + x) * 4, (y * W + x) * 4 + 4)];
+      const background = [0xcc, 0x99, 0x66, 255];
+      assert.deepEqual(at(box.x - 2, box.y + 5), background, `${op}: outside the box, kept`);
+      if (op !== 'destination-out') {
+        assert.equal(at(box.x, box.y)[3], 0, `${op}: inside it with no ink, cleared`);
+      }
+    }
+    coverage.destroy();
   } finally {
     await own.close();
   }
