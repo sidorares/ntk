@@ -10,6 +10,7 @@ import { after, before, test } from "node:test";
 import xserver from "x11/lib/xserver/index.js";
 
 import { createClient, StaticFontSource } from "../lib/index.js";
+import { crossingPoints, PENTAGRAM, xBars } from "./helpers/self-crossing.js";
 
 const W = 480;
 const H = 320;
@@ -34,19 +35,31 @@ const CURVE = [
 ];
 
 let app;
+// every drawing to the server's trapezoids, and every drawing to ntk's
+// rasterizer, whatever its size
+let serverRouted;
+let localRouted;
 
 before(async () => {
   const server = xserver.createServer({ width: 600, height: 400 });
-  const [serverEnd, clientEnd] = xserver.createStreamPair();
-  server.addClientStream(serverEnd);
-  app = await createClient({
-    stream: clientEnd,
-    fontSource: new StaticFontSource(),
+  const connect = (options) => {
+    const [serverEnd, clientEnd] = xserver.createStreamPair();
+    server.addClientStream(serverEnd);
+    return createClient({
+      stream: clientEnd,
+      fontSource: new StaticFontSource(),
+      ...options,
+    });
+  };
+  app = await connect();
+  serverRouted = await connect({ rasterizer: null });
+  localRouted = await connect({
+    rasterPolicy: { maxArea: Infinity, maxBytes: Infinity },
   });
 });
 
 after(async () => {
-  if (app) await app.close();
+  for (const a of [app, serverRouted, localRouted]) if (a) await a.close();
 });
 
 /** The curve stroked `dx` along, the way an edge is: round joins and caps. */
@@ -102,5 +115,81 @@ test("a stroke moved off the surface's edge is drawn as it was, moved", async ()
       0,
       `moved ${dx},${dy}: ${apart} pixels apart, by up to ${worst}`,
     );
+  }
+});
+
+// A fill that crosses itself. The server's route trapezoidizes it
+// (lib/trapezoid.js), which cut slabs only at vertex heights: two edges
+// crossing between them made a trapezoid with its sides crossed. MDN's
+// pentagram at 3x lost its arms and filled the gap between its legs, and an
+// "×" of two bars was 3,350 pixels wrong — at sizes where the drawing goes
+// to the server, while small enough to be rasterized here it was right.
+
+/** `trace` filled by `rule` in white on black, `w` by `h` */
+async function filled(a, w, h, trace, rule) {
+  const pixmap = a.createPixmap({ width: w, height: h, depth: 24 });
+  const ctx = pixmap.getContext("2d");
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+  trace(ctx);
+  ctx.fill(rule);
+  const { data } = await ctx.getImageData(0, 0, w, h);
+  pixmap.destroy?.();
+  return data;
+}
+
+function polygons(ctx, polys) {
+  for (const p of polys) {
+    ctx.moveTo(p[0], p[1]);
+    for (let i = 2; i < p.length; i += 2) ctx.lineTo(p[i], p[i + 1]);
+    ctx.closePath();
+  }
+}
+
+test("a fill that crosses itself is the same through the server's trapezoids", async () => {
+  const bars = xBars(110, 110, 190, 24);
+  const shapes = {
+    pentagram: {
+      size: 304,
+      trace: (ctx) => {
+        ctx.scale(3, 3);
+        polygons(ctx, [PENTAGRAM]);
+      },
+      crossings: crossingPoints([PENTAGRAM.map((v) => v * 3)]),
+    },
+    "×": {
+      size: 220,
+      trace: (ctx) => polygons(ctx, bars),
+      crossings: crossingPoints(bars),
+    },
+  };
+  for (const [name, { size, trace, crossings }] of Object.entries(shapes)) {
+    for (const rule of ["nonzero", "evenodd"]) {
+      const server = await filled(serverRouted, size, size, trace, rule);
+      const local = await filled(localRouted, size, size, trace, rule);
+      if (name === "pentagram" && rule === "nonzero") {
+        const at = (x, y) => server[(y * size + x) * 4];
+        assert.equal(at(36, 114), 255, "the left arm is filled");
+        assert.equal(at(150, 255), 0, "between the legs is not");
+      }
+      // The two antialias differently, by a few levels. Where a crossing
+      // puts winding 0 and 2 in one pixel ntk's signed areas cancel or
+      // clamp, so those pixels are left out; everywhere else they agree.
+      let apart = 0;
+      let first = null;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const i = (y * size + x) * 4;
+          if (Math.abs(server[i] - local[i]) <= 32) continue;
+          const c = (p) => Math.hypot(x + 0.5 - p[0], y + 0.5 - p[1]) < 2;
+          if (crossings.some(c)) continue;
+          apart++;
+          first ??= `${x},${y}: ${server[i]} vs ${local[i]}`;
+        }
+      }
+      assert.equal(apart, 0, `${name} ${rule}: ${apart} pixels apart, first ${first}`);
+    }
   }
 });

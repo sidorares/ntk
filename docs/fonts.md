@@ -10,9 +10,12 @@ The pipeline is pure JavaScript — no compiled modules:
    (fontconfig CLI). `fc-match -s` provides the full sorted fallback chain
    including each font's unicode coverage, cached per pattern.
 2. **Parsing** (`lib/text/font.js`):
-   [fontkit](https://www.npmjs.com/package/fontkit) parses
+   [fontkit](https://github.com/foliojs/fontkit) parses
    `.ttf`/`.otf`/`.woff`/`.woff2`/`.ttc` (collection faces are selected by
-   postscript name).
+   postscript name). ntk runs the
+   [windowkit fork](https://github.com/windowkit/fontkit), for fixes
+   upstream has not released, and carries its build in `lib/vendor/`
+   rather than installing it: fontkit's own dependencies are ntk's.
 3. **Rasterization** (`lib/rasterize.js`): glyph outlines are rasterized to
    8-bit alpha bitmaps by a small built-in scanline rasterizer (non-zero
    winding, signed-area accumulation — antialiasing is exact analytic

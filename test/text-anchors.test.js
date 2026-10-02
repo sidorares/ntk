@@ -7,17 +7,21 @@
 // face's own or put into a copy of one of its lookups.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import * as fontkit from 'fontkit';
+import * as fontkit from '../lib/vendor/fontkit.js';
 
 import Font from '../lib/text/font.js';
+
+/** fontkit's font for a file: the build ntk carries has no openSync */
+const openSync = (file) => fontkit.create(readFileSync(file));
 
 /** A system face by name, or null where fontconfig answers another. */
 function systemFace(name, postscript) {
   try {
     const file = execFileSync('fc-match', ['-f', '%{file}', name], { encoding: 'utf8' });
-    return fontkit.openSync(file).postscriptName === postscript ? file : null;
+    return openSync(file).postscriptName === postscript ? file : null;
   } catch {
     return null;
   }
@@ -35,9 +39,9 @@ test('a mark whose anchor its base leaves out is left where no attachment puts i
   // DejaVu Sans Mono's mark-to-base lookup holds NULLs for its precomposed
   // capitals: À with a combining grave above reaches one
   const text = 'À̀';
-  assert.throws(() => fontkit.openSync(mono).layout(text), /xCoordinate/, 'fontkit alone');
+  assert.throws(() => openSync(mono).layout(text), /xCoordinate/, 'fontkit alone');
   const font = Font.loadSync(mono);
-  assert.deepEqual(answer(font._layout(text, {})), answer(fontkit.openSync(mono).layout(text, { mark: false, mkmk: false })));
+  assert.deepEqual(answer(font._layout(text, {})), answer(openSync(mono).layout(text, { mark: false, mkmk: false })));
   // and a Lithuanian Į̃, which another lookup attaches, shapes too
   assert.doesNotThrow(() => font.shape('Į̃ ų̃ ė̃', 16));
 });
@@ -49,7 +53,7 @@ test('a face is watched for a NULL until its text reaches one, and only then pay
   font.shape('À̀', 16);
   assert.equal(Object.hasOwn(gposOf(font.fk), 'applyLookup'), true, 'from the first NULL on');
   // and what the face shapes after is fontkit's answer
-  assert.deepEqual(answer(font._layout('é x̃', {})), answer(fontkit.openSync(mono).layout('é x̃')));
+  assert.deepEqual(answer(font._layout('é x̃', {})), answer(openSync(mono).layout('é x̃')));
 });
 
 /**
@@ -58,7 +62,7 @@ test('a face is watched for a NULL until its text reaches one, and only then pay
  * to put in its place.
  */
 function editedSans(edit) {
-  const fk = fontkit.openSync(sans);
+  const fk = openSync(sans);
   const e = fk.glyphForCodePoint(0x65).id;
   const acute = fk.glyphForCodePoint(0x301).id;
   const index = (coverage, glyph) => {
@@ -94,7 +98,7 @@ function editedSans(edit) {
 
 test("a subtable that reaches a NULL did not apply, so the lookup's next one gets its turn", needsSans, () => {
   const text = 'é';
-  const reference = answer(fontkit.openSync(sans).layout(text));
+  const reference = answer(openSync(sans).layout(text));
   // the NULL ahead of the real subtable: the real one still attaches the
   // mark, where an early return that counted as applied left it unattached
   const font = new Font(editedSans((nulled, real) => [nulled, real]), sans);

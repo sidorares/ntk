@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-import * as fontkit from 'fontkit';
+import * as fontkit from '../lib/vendor/fontkit.js';
 
 import Font from '../lib/text/font.js';
 import { sfntOf, untransformGlyf } from '../lib/text/sfnt.js';
@@ -23,6 +23,9 @@ const FACES = [
   ['the variable fixture', (ext) => join(fixtures, `MonelogicsSubset[wght].${ext}`)],
   ['KaTeX Main', (ext) => join(katex, `KaTeX_Main-Regular.${ext}`)]
 ];
+
+/** fontkit's font for a file: the build ntk carries has no openSync */
+const openSync = (file) => fontkit.create(readFileSync(file));
 
 /** fontkit's font for bytes, as `Font` makes one */
 const parse = (bytes) => fontkit.create(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));
@@ -63,8 +66,8 @@ function glyphsOf(fk) {
 
 for (const [name, file] of FACES) {
   test(`${name}: a WOFF's sfnt is the font it was made from, table for table`, () => {
-    const original = tablesOf(fontkit.openSync(file('ttf')));
-    const rebuilt = parse(sfntOf(fontkit.openSync(file('woff'))));
+    const original = tablesOf(openSync(file('ttf')));
+    const rebuilt = parse(sfntOf(openSync(file('woff'))));
     assert.equal(rebuilt.type, 'TTF');
     const tables = tablesOf(rebuilt);
     assert.deepEqual(Object.keys(tables).sort(), Object.keys(original).sort());
@@ -75,13 +78,13 @@ for (const [name, file] of FACES) {
           : Buffer.from(tables[tag]).equals(Buffer.from(original[tag]));
       assert.ok(same, `table ${tag}`);
     }
-    assert.equal(rebuilt.head.indexToLocFormat, fontkit.openSync(file('ttf')).head.indexToLocFormat);
+    assert.equal(rebuilt.head.indexToLocFormat, openSync(file('ttf')).head.indexToLocFormat);
   });
 
   test(`${name}: a WOFF2's sfnt has the font's tables, and its glyphs written again`, () => {
-    const ttf = fontkit.openSync(file('ttf'));
+    const ttf = openSync(file('ttf'));
     const original = tablesOf(ttf);
-    const rebuilt = parse(sfntOf(fontkit.openSync(file('woff2'))));
+    const rebuilt = parse(sfntOf(openSync(file('woff2'))));
     assert.equal(rebuilt.type, 'TTF');
     const tables = tablesOf(rebuilt);
     assert.deepEqual(Object.keys(tables).sort(), Object.keys(original).sort());
@@ -110,15 +113,15 @@ test('the two faces have the glyphs this is for: composite, hinted and empty one
     }
     return found;
   };
-  const fixture = count(fontkit.openSync(FACES[0][1]('ttf')));
-  const main = count(fontkit.openSync(FACES[1][1]('ttf')));
+  const fixture = count(openSync(FACES[0][1]('ttf')));
+  const main = count(openSync(FACES[1][1]('ttf')));
   assert.ok(fixture.composite > 0, `composite glyphs in the fixture: ${fixture.composite}`);
   assert.ok(main.hinted > 0, `hinted glyphs in KaTeX Main: ${main.hinted}`);
   assert.ok(main.empty > 0, `empty glyphs in KaTeX Main: ${main.empty}`);
 });
 
 test('there is no sfnt to make of a font that is not in a container', () => {
-  assert.equal(sfntOf(fontkit.openSync(FACES[0][1]('ttf'))), null);
+  assert.equal(sfntOf(openSync(FACES[0][1]('ttf'))), null);
   assert.equal(sfntOf(null), null);
 });
 

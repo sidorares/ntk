@@ -13,13 +13,14 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-/** The packages under node_modules a fresh process loaded importing
- *  `specifier`. */
-function packagesLoadedBy(specifier) {
+/** The packages under node_modules a fresh process loaded running
+ *  `statement`, by default importing `specifier`. */
+function packagesLoadedBy(specifier, statement = `await import(${JSON.stringify(specifier)});`) {
   const dir = mkdtempSync(join(tmpdir(), 'ntk-subpaths-'));
   try {
     const out = join(dir, 'loaded.txt');
@@ -46,7 +47,7 @@ register(${JSON.stringify(pathToFileURL(join(dir, 'hooks.mjs')).href)});
         pathToFileURL(join(dir, 'register.mjs')).href,
         '--input-type=module',
         '-e',
-        `await import(${JSON.stringify(specifier)});`
+        statement
       ],
       { cwd: new URL('..', import.meta.url) }
     );
@@ -54,6 +55,8 @@ register(${JSON.stringify(pathToFileURL(join(dir, 'hooks.mjs')).href)});
     for (const url of readFileSync(out, 'utf8').split('\n')) {
       const m = /\/node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(url);
       if (m) seen.add(m[1]);
+      // the font engine is a build ntk carries, not a package (lib/vendor/)
+      else if (url.endsWith('/lib/vendor/fontkit.js')) seen.add('fontkit');
     }
     return seen;
   } finally {
@@ -82,6 +85,27 @@ for (const [specifier, allowed] of [
     }
   });
 }
+
+test('ntk/package.json resolves, for the tools that read a dependency\'s version, and loads nothing', () => {
+  // bundlers, React Native's resolver and version reporters read it this
+  // way, and an exports map that leaves it out is ERR_PACKAGE_PATH_NOT_EXPORTED.
+  // require, since node 18.19 has no import attribute to import JSON with;
+  // import.meta.resolve is the resolver that import goes through
+  const own = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const pkg = createRequire(import.meta.url)('ntk/package.json');
+  assert.strictEqual(pkg.name, 'ntk');
+  assert.strictEqual(pkg.version, own.version);
+  assert.strictEqual(
+    import.meta.resolve('ntk/package.json'),
+    new URL('../package.json', import.meta.url).href
+  );
+  const loaded = packagesLoadedBy(
+    'ntk/package.json',
+    `import { createRequire } from 'node:module';
+createRequire(import.meta.url)('ntk/package.json');`
+  );
+  assert.deepStrictEqual([...loaded], []);
+});
 
 test('the root still loads all of them', () => {
   const loaded = packagesLoadedBy('ntk');
