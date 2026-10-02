@@ -34,7 +34,8 @@
     "./shadow-tiles": "./lib/shadowtiles.js",
     "./image": "./lib/image.js",
     "./svg": "./lib/widgets/svgview.js",
-    "./font": "./lib/text/font.js"
+    "./font": "./lib/text/font.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "lib"

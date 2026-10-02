@@ -144,6 +144,10 @@ parser, say — can import just that piece, and loads only what it needs:
 Each is the same module the root re-exports, so importing a name both ways
 gives the same function or class: nothing is loaded, or instantiated, twice.
 
+`ntk/package.json` is exported too, for the tools that read a dependency's
+version or metadata that way — bundlers, React Native's resolver, version
+reporters. It loads nothing.
+
 ## 3d graphics
 
 Two backends, chosen by `glPolicy`

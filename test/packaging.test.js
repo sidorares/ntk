@@ -66,9 +66,10 @@ test('every entry point loads in a page that is not cross-origin isolated', () =
   // ReferenceError before anything renders: fontconfig.js's prewarm nap was
   // one, and node, which always has the global, never said so.
   const { exports } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-  const imports = Object.values(exports).map(
-    (target) => `await import(${JSON.stringify(pathToFileURL(join(root, target)).href)});`
-  );
+  // ./package.json is exported for tools to read, not as code to run
+  const imports = Object.values(exports)
+    .filter((target) => target.endsWith('.js'))
+    .map((target) => `await import(${JSON.stringify(pathToFileURL(join(root, target)).href)});`);
   const probe = spawnSync(
     process.execPath,
     ['--input-type=module', '-e', ['delete globalThis.SharedArrayBuffer;', ...imports].join('\n')],
