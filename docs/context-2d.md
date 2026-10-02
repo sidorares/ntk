@@ -54,6 +54,12 @@ ctx.fillRect(0, 0, 100, 100);
 - `ctx.globalAlpha` — multiplies everything drawn: fills, strokes,
   `fillRect`, `drawImage`, text (`fillText`, `drawGlyphs` and so
   `TextLayout.draw`) and the shadows they cast. At `0` nothing is drawn
+- `ctx.fadesGlyphs` — `true`: text honours `globalAlpha`, as above. A
+  read-only feature test for code handed contexts it did not make. Older
+  ntk drew glyphs at full opacity whatever the alpha, and another
+  backend's context answers for itself; where this is not `true`, text has
+  to be faded some other way, such as drawing it on a surface and fading
+  that
 - `ctx.shadowColor`, `ctx.shadowBlur`, `ctx.shadowOffsetX`,
   `ctx.shadowOffsetY` — drop shadows, off by default (a transparent
   `shadowColor`). See **Shadows** below
