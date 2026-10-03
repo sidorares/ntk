@@ -402,6 +402,36 @@ test('SvgView: a mask cuts what it masks, by alpha or by luminance, on the surfa
   wnd.destroy();
 });
 
+test('SvgView: a clip-path cuts to its clipPath, through a use as Illustrator writes one, and to the union of several shapes', async () => {
+  const { wnd, ctx } = freshWindow(128, 64);
+  // CSS Zen Garden 215's arm in its circle, in small: the circle in a
+  // <defs>, and a <use> of it in the clipPath
+  new SvgView(null)
+    .setSvg(
+      '<svg width="64" height="64" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><circle id="c" cx="32" cy="32" r="24"/></defs>' +
+        '<clipPath id="k"><use xlink:href="#c" overflow="visible"/></clipPath>' +
+        '<rect width="64" height="64" fill="#ff0000" clip-path="url(#k)"/></svg>'
+    )
+    .draw(ctx, 0, 0);
+  // two squares opposite ways round, whose overlap one path of both, filled
+  // nonzero, would leave out: drawn on the context's surfaces
+  new SvgView(null)
+    .setSvg(
+      '<svg width="64" height="64"><clipPath id="k"><path d="M8 8h32v32h-32z"/><path d="M24 24v32h32v-32z"/></clipPath>' +
+        '<rect width="64" height="64" fill="#0000ff" clip-path="url(#k)"/></svg>'
+    )
+    .draw(ctx, 64, 0);
+  const image = await readPixels(ctx, 128, 64);
+  assert.deepEqual(px(image, 128, 32, 32), [255, 0, 0], 'inside the circle');
+  assert.deepEqual(px(image, 128, 32, 4), [255, 255, 255], 'above it');
+  assert.deepEqual(px(image, 128, 12, 12), [255, 255, 255], 'in the corner it leaves out');
+  assert.deepEqual(px(image, 128, 64 + 12, 12), [0, 0, 255], 'the first square');
+  assert.deepEqual(px(image, 128, 64 + 32, 32), [0, 0, 255], 'where the two overlap');
+  assert.deepEqual(px(image, 128, 64 + 52, 52), [0, 0, 255], 'the second square');
+  assert.deepEqual(px(image, 128, 64 + 52, 12), [255, 255, 255], 'outside both');
+  wnd.destroy();
+});
+
 test("SvgView: a text's chunks are anchored where their text ends up", async () => {
   const { wnd, ctx } = freshWindow(100, 100);
   new SvgView(null)
