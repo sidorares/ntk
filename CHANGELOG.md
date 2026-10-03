@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.22.0](https://github.com/sidorares/ntk/compare/v8.21.1...v8.22.0) (2026-10-03)
+
+
+### Features
+
+* **svg:** a clip-path cuts what it is on to its clipPath, through a use in it as Illustrator writes one, where every clip path was skipped and a drawing spilled out of its circles ([#529](https://github.com/sidorares/ntk/issues/529)) ([d36e27f](https://github.com/sidorares/ntk/commit/d36e27f6c71b0a4eff8797c09d9b58057adfe0cc))
+
 ## [8.21.1](https://github.com/sidorares/ntk/compare/v8.21.0...v8.21.1) (2026-10-03)
 
 
