@@ -74,8 +74,8 @@ function mockCtx() {
       const size = parseFloat(/([\d.]+)px/.exec(this.font)?.[1] ?? '10');
       return { width: [...text].length * size * 0.5 };
     },
-    clip(path) {
-      calls.push(['clip', path, this._m.slice()]);
+    clip(path, rule) {
+      calls.push(['clip', path, this._m.slice(), rule]);
     },
     createLinearGradient(x1, y1, x2, y2) {
       const g = { type: 'linear', x1, y1, x2, y2, stops: [], addColorStop(o, c) { this.stops.push([o, c]); return this; } };
@@ -898,6 +898,321 @@ test('a mask that reaches itself draws what it holds once', () => {
     )
     .draw(ctx, 0, 0, 40, 40, { surface });
   assert.equal(made.length, 2);
+});
+
+// --- clip paths --------------------------------------------------------------
+
+/** Where a path lands under a matrix: the box of its points, to 1/100. */
+function landed(path, m) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const poly of flattenPath(path._cmds, m, 0.1)) {
+    for (let i = 0; i < poly.pts.length; i += 2) {
+      minX = Math.min(minX, poly.pts[i]);
+      maxX = Math.max(maxX, poly.pts[i]);
+      minY = Math.min(minY, poly.pts[i + 1]);
+      maxY = Math.max(maxY, poly.pts[i + 1]);
+    }
+  }
+  return [minX, minY, maxX, maxY].map((v) => Math.round(v * 100) / 100 + 0);
+}
+
+/** An `opts.surface` that keeps what it makes. */
+function surfaces() {
+  const made = [];
+  const surface = (w, h) => {
+    const s = { w, h, ctx: mockCtx(), getContext: () => s.ctx, destroyed: false, destroy() { this.destroyed = true; } };
+    made.push(s);
+    return s;
+  };
+  return { made, surface };
+}
+
+/** A 100 by 100 drawing of `body`, drawn at `size`, and what it did. */
+function clipped(body, size = 100, opts = {}) {
+  const ctx = mockCtx();
+  new SvgView(null)
+    .setSvg(`<svg width="100" height="100" xmlns:xlink="http://www.w3.org/1999/xlink">${body}</svg>`)
+    .draw(ctx, 0, 0, size, size, opts);
+  return ctx;
+}
+
+// how Illustrator exports a clip: the shape in a <defs>, and a <use> of it
+// in the clipPath, overflow and all — CSS Zen Garden 215's arm in a circle
+const ILLUSTRATOR =
+  '<path fill="#ccc" d="M0 0h100v100h-100z"/>' +
+  '<g><defs><circle id="SVGID_1_" cx="50" cy="50" r="40"/></defs>' +
+  '<clipPath id="SVGID_2_"><use xlink:href="#SVGID_1_" overflow="visible"/></clipPath>' +
+  '<g clip-path="url(#SVGID_2_)"><rect width="100" height="100" fill="#0f0"/></g>' +
+  '<path clip-path="url(#SVGID_2_)" fill="#00f" d="M0 60h100v40h-100z"/></g>';
+
+test('an element is cut to the clipPath its clip-path names, through a use in it as Illustrator writes one', () => {
+  const { made, surface } = surfaces();
+  const ctx = clipped(ILLUSTRATOR, 200, { surface });
+  const clips = of(ctx.calls, 'clip');
+  assert.equal(clips.length, 2, 'one for each element that names it');
+  for (const c of clips) assert.deepEqual(landed(c[1], c[2]), [20, 20, 180, 180], 'the circle, at 2x');
+  const fills = of(ctx.calls, 'fill');
+  assert.deepEqual(
+    fills.map((f) => f[3]),
+    ['#ccc', '#0f0', '#00f']
+  );
+  const at = (call) => ctx.calls.indexOf(call);
+  assert.ok(at(fills[0]) < at(clips[0]) && at(clips[0]) < at(fills[1]) && at(fills[1]) < at(clips[1]));
+  // each cut inside a save of its own, so that it ends with the element
+  const restores = ctx.calls.filter((c, i) => c[0] === 'restore' && i > at(fills[1]) && i < at(clips[1]));
+  assert.ok(restores.length > 0, 'the first cut is undone before the second');
+  assert.equal(of(ctx.calls, 'save').length, of(ctx.calls, 'restore').length);
+  assert.equal(made.length, 0, 'one shape is the context’s own clip, and needs no surface');
+});
+
+test('a clip-path in a style, or with its url quoted, cuts as the attribute does', () => {
+  for (const ref of ['style="clip-path: url(#k)"', `clip-path="url('#k')"`]) {
+    const ctx = clipped(`<clipPath id="k"><circle cx="50" cy="50" r="30"/></clipPath><rect width="100" height="100" fill="red" ${ref}/>`);
+    assert.deepEqual(of(ctx.calls, 'clip').map((c) => landed(c[1], c[2])), [[20, 20, 80, 80]], ref);
+  }
+});
+
+test('a clip-path naming nothing, something else, or a clipPath that is display: none itself, cuts nothing', () => {
+  // all three browsers draw the element whole, though CSS Masking 1 says a
+  // clipPath is there to reference whatever its display
+  for (const [defs, ref] of [
+    ['', 'url(#nope)'],
+    ['<linearGradient id="k"/>', 'url(#k)'],
+    ['<clipPath id="k" display="none"><rect width="5" height="5"/></clipPath>', 'url(#k)'],
+    ['<clipPath id="k"><rect width="5" height="5"/></clipPath>', 'none']
+  ]) {
+    const ctx = clipped(`${defs}<rect width="100" height="100" fill="red" clip-path="${ref}"/>`);
+    assert.equal(of(ctx.calls, 'clip').length, 0, defs || ref);
+    assert.equal(of(ctx.calls, 'fill').length, 1, defs || ref);
+  }
+  // and one inside something that is display: none cuts as any other
+  const ctx = clipped(
+    '<g display="none"><clipPath id="k"><rect width="5" height="5"/></clipPath></g>' +
+      '<rect width="100" height="100" fill="red" clip-path="url(#k)"/>'
+  );
+  assert.equal(of(ctx.calls, 'clip').length, 1);
+});
+
+test('a clipPath with nothing in it that clips lets nothing show', () => {
+  const defs =
+    '<defs><g id="g"><rect width="50" height="50"/></g><rect id="r" width="50" height="50"/></defs>' +
+    '<symbol id="s"><rect width="50" height="50"/></symbol>';
+  for (const inside of [
+    '',
+    // a group is no part of a clip, nor a use of one: Chrome and WebKit
+    '<g><rect width="50" height="50"/></g>',
+    '<use href="#g"/>',
+    '<use href="#s"/>',
+    '<rect width="50" height="50" visibility="hidden"/>',
+    '<rect width="50" height="50" display="none"/>',
+    '<use href="#r" visibility="hidden"/>',
+    '<rect width="50" height="50" stroke="#000" stroke-width="10" fill="none" opacity="0" visibility="collapse"/>'
+  ]) {
+    const ctx = clipped(`${defs}<clipPath id="k">${inside}</clipPath><rect width="100" height="100" fill="red" clip-path="url(#k)"/>`);
+    assert.equal(of(ctx.calls, 'fill').length, 0, inside || 'empty');
+  }
+  // nor does one with nothing in it whose own clip path is two shapes
+  const { made, surface } = surfaces();
+  const bare = clipped(
+    '<clipPath id="j"><rect width="50" height="50"/><rect x="50" width="50" height="50"/></clipPath>' +
+      '<clipPath id="k" clip-path="url(#j)"/><rect width="100" height="100" fill="red" clip-path="url(#k)"/>',
+    100,
+    { surface }
+  );
+  assert.equal(of(bare.calls, 'fill').length + made.length, 0);
+  // a clipPath that is hidden hides what is in it, which inherits it
+  const hidden = clipped('<clipPath id="k" visibility="hidden"><rect width="50" height="50"/></clipPath><rect width="100" height="100" fill="red" clip-path="url(#k)"/>');
+  assert.equal(of(hidden.calls, 'fill').length, 0);
+  // and in objectBoundingBox units, an element whose box has no area
+  const line = clipped(
+    '<clipPath id="k" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath>' +
+      '<line x1="10" y1="50" x2="90" y2="50" stroke="red" stroke-width="20" clip-path="url(#k)"/>'
+  );
+  assert.equal(of(line.calls, 'stroke').length, 0);
+});
+
+test('what is in a clipPath counts as it is filled, whatever its paint, its stroke or its opacity', () => {
+  const ctx = clipped(
+    '<clipPath id="k"><rect x="20" y="20" width="60" height="60" fill="none" stroke="#000" stroke-width="20" opacity="0"/></clipPath>' +
+      '<rect width="100" height="100" fill="red" clip-path="url(#k)"/>'
+  );
+  assert.deepEqual(of(ctx.calls, 'clip').map((c) => landed(c[1], c[2])), [[20, 20, 80, 80]]);
+  assert.equal(of(ctx.calls, 'stroke').length, 0);
+});
+
+test('a clipPath in objectBoundingBox units is set in the box of what it cuts, with its transform outside that', () => {
+  const ctx = clipped(
+    '<clipPath id="k" clipPathUnits="objectBoundingBox" transform="translate(10 10)"><rect width=".5" height=".5"/></clipPath>' +
+      '<rect x="20" y="20" width="60" height="60" fill="red" clip-path="url(#k)"/>'
+  );
+  assert.deepEqual(of(ctx.calls, 'clip').map((c) => landed(c[1], c[2])), [[30, 30, 60, 60]]);
+  // the box of a group is what is in it, through their transforms
+  const group = clipped(
+    '<clipPath id="k" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath>' +
+      '<g transform="translate(5 5)" clip-path="url(#k)"><rect x="10" y="10" width="20" height="20" fill="red"/>' +
+      '<rect transform="translate(40 0)" x="10" y="30" width="20" height="20" fill="red"/></g>'
+  );
+  const [clip] = of(group.calls, 'clip');
+  assert.deepEqual(landed(clip[1], clip[2]), [15, 15, 75, 55]);
+});
+
+test('what is in a clipPath is cut by its clip-rule, which it inherits from the clipPath, and not by its fill-rule', () => {
+  const rule = (on, own) =>
+    of(
+      clipped(`<clipPath id="k"${on}><path ${own} d="M10 10h80v80h-80zM30 30h40v40h-40z"/></clipPath><rect width="100" height="100" fill="red" clip-path="url(#k)"/>`)
+        .calls,
+      'clip'
+    )[0][3];
+  assert.equal(rule('', 'fill-rule="evenodd"'), 'nonzero');
+  assert.equal(rule('', 'clip-rule="evenodd"'), 'evenodd');
+  assert.equal(rule(' clip-rule="evenodd"', ''), 'evenodd');
+  assert.equal(rule(' clip-rule="evenodd"', 'style="clip-rule: nonzero"'), 'nonzero');
+  assert.equal(rule('', 'clip-rule="EvenOdd"'), 'evenodd');
+});
+
+test('a use in a clipPath is the shape it names, through its transform, its x and y, and the shape’s own transform', () => {
+  const ctx = clipped(
+    '<defs><rect id="c" width="30" height="20" transform="scale(2 1)"/></defs>' +
+      '<clipPath id="k"><use href="#c" x="10" y="5" transform="translate(20 20)" clip-rule="evenodd"/></clipPath>' +
+      '<rect width="100" height="100" fill="red" clip-path="url(#k)"/>'
+  );
+  const [clip] = of(ctx.calls, 'clip');
+  assert.deepEqual(landed(clip[1], clip[2]), [30, 25, 90, 45]);
+  assert.equal(clip[3], 'evenodd', 'the shape inherits the use’s clip-rule');
+});
+
+test("a clipPath's own clip-path is set where what it cuts is, and one on what is in it where that is", () => {
+  // where Chrome and Firefox set them; WebKit sets the first through the
+  // clipPath's transform
+  const ctx = clipped(
+    '<clipPath id="j"><rect width="50" height="100"/></clipPath>' +
+      '<clipPath id="k" transform="translate(30 0)" clip-path="url(#j)">' +
+      '<rect width="60" height="60" transform="translate(5 0)" clip-path="url(#j)"/></clipPath>' +
+      '<rect width="100" height="100" fill="red" clip-path="url(#k)"/>'
+  );
+  assert.deepEqual(
+    of(ctx.calls, 'clip').map((c) => landed(c[1], c[2])),
+    [
+      [35, 0, 95, 60],
+      [35, 0, 85, 100],
+      [0, 0, 50, 100]
+    ]
+  );
+  assert.equal(of(ctx.calls, 'fill').length, 1);
+});
+
+test('a clip path that reaches itself is left out, and the clip that named it kept', () => {
+  // as Chrome and WebKit leave it; Firefox draws nothing
+  for (const defs of [
+    '<clipPath id="k" clip-path="url(#k)"><circle cx="50" cy="50" r="30"/></clipPath>',
+    '<clipPath id="j" clip-path="url(#k)"><rect width="60" height="60"/></clipPath>' +
+      '<clipPath id="k" clip-path="url(#j)"><circle cx="50" cy="50" r="30"/></clipPath>',
+    '<clipPath id="k"><circle id="c" cx="50" cy="50" r="30" clip-path="url(#k)"/></clipPath>'
+  ]) {
+    const ctx = clipped(`${defs}<rect width="100" height="100" fill="red" clip-path="url(#k)"/>`);
+    assert.deepEqual(of(ctx.calls, 'clip').map((c) => landed(c[1], c[2])), [[20, 20, 80, 80]], defs);
+    assert.equal(of(ctx.calls, 'fill').length, 1);
+  }
+});
+
+test('a clipPath of more than one shape is their union: a coverage on one surface, cutting the element on another', () => {
+  const { made, surface } = surfaces();
+  const ctx = clipped(
+    '<clipPath id="k"><path d="M10 10h50v50h-50z"/><path d="M40 40v50h50v-50z" clip-rule="evenodd"/></clipPath>' +
+      '<rect width="100" height="100" fill="red" opacity="0.5" clip-path="url(#k)"/>',
+    200,
+    { surface }
+  );
+  assert.equal(made.length, 2);
+  const [content, cover] = made;
+  // the union's box, 10..90 of 100 at 2x
+  assert.deepEqual([content.w, content.h, cover.w, cover.h], [160, 160, 160, 160]);
+  const red = of(content.ctx.calls, 'fill');
+  assert.deepEqual(red.map((f) => [f[3], f[4]]), [['red', 1]], 'at full strength: its opacity is the group’s');
+  // the two paths opposite ways round, which one path of both, nonzero,
+  // would leave a hole where they overlap
+  assert.deepEqual(
+    of(cover.ctx.calls, 'fill').map((f) => [f[2], f[3], f[4], landed(f[1], f[5])]),
+    [
+      ['nonzero', '#000', 1, [0, 0, 100, 100]],
+      ['evenodd', '#000', 1, [60, 60, 160, 160]]
+    ]
+  );
+  assert.deepEqual(of(content.ctx.calls, 'drawImage').map((d) => [d[1], d[2], d[3], d[5]]), [[cover, 0, 0, 'destination-in']]);
+  assert.deepEqual(of(ctx.calls, 'drawImage').map((d) => [d[1], d[2], d[3], d[4]]), [[content, 20, 20, 0.5]]);
+  assert.equal(of(ctx.calls, 'fill').length, 0, 'nothing drawn straight onto the context');
+  assert.ok(made.every((s) => s.destroyed));
+
+  // with no surface, cut to both as one path
+  const bare = clipped(
+    '<clipPath id="k"><path d="M10 10h50v50h-50z"/><path d="M40 40v50h50v-50z"/></clipPath>' +
+      '<rect width="100" height="100" fill="red" clip-path="url(#k)"/>'
+  );
+  const clips = of(bare.calls, 'clip');
+  assert.deepEqual(clips.map((c) => [landed(c[1], c[2]), c[3]]), [[[10, 10, 90, 90], 'nonzero']]);
+  assert.equal(of(bare.calls, 'fill').length, 1);
+});
+
+test('a text in a clipPath cuts by its glyphs, whatever its fill', () => {
+  const { made, surface } = surfaces();
+  clipped(
+    '<clipPath id="k"><text x="5" y="50" font-size="20" fill="none">A<tspan fill="none">B</tspan></text></clipPath>' +
+      '<rect width="100" height="100" fill="red" clip-path="url(#k)"/>',
+    100,
+    { surface }
+  );
+  assert.equal(made.length, 2);
+  assert.deepEqual(
+    of(made[1].ctx.calls, 'fillText').map((t) => [t[1], t[6], t[7]]),
+    [
+      ['A', '#000', 1],
+      ['B', '#000', 1]
+    ]
+  );
+  assert.equal(of(made[0].ctx.calls, 'fill')[0][3], 'red');
+});
+
+test("a use's x and y move the clip path and the mask on it with what it draws", () => {
+  // SVG 1.1 puts them at the end of the transform of the group a use stands
+  // for, which carries its clip-path and its mask, as all three browsers do
+  const defs = '<defs><rect id="r" width="100" height="100" fill="red"/></defs>';
+  const ctx = clipped(`${defs}<clipPath id="k"><rect width="30" height="30"/></clipPath><use href="#r" x="20" y="10" clip-path="url(#k)"/>`);
+  assert.deepEqual(of(ctx.calls, 'clip').map((c) => landed(c[1], c[2])), [[20, 10, 50, 40]]);
+  const box = clipped(
+    `${defs}<clipPath id="k" clipPathUnits="objectBoundingBox"><rect width=".5" height=".5"/></clipPath>` +
+      '<use href="#r" x="20" y="10" clip-path="url(#k)"/>'
+  );
+  assert.deepEqual(of(box.calls, 'clip').map((c) => landed(c[1], c[2])), [[20, 10, 70, 60]]);
+
+  const { made, surface } = surfaces();
+  const masked = clipped(
+    `${defs}<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="30" height="30"><rect width="30" height="30" fill="white"/></mask>` +
+      '<use href="#r" x="20" y="10" mask="url(#m)"/>',
+    100,
+    { surface }
+  );
+  assert.deepEqual([made[0].w, made[0].h], [30, 30]);
+  assert.deepEqual(of(masked.calls, 'drawImage').map((d) => [d[2], d[3]]), [[20, 10]]);
+});
+
+test("a nested svg's clip-path is set inside its viewBox", () => {
+  // as Chrome and WebKit set it; Firefox sets it outside the viewBox
+  const ctx = clipped(
+    '<clipPath id="k"><rect width="20" height="20"/></clipPath>' +
+      '<svg x="20" y="20" width="80" height="80" viewBox="0 0 40 40" clip-path="url(#k)">' +
+      '<rect width="40" height="40" fill="red"/></svg>'
+  );
+  assert.deepEqual(
+    of(ctx.calls, 'clip').map((c) => landed(c[1], c[2])),
+    [
+      [20, 20, 100, 100],
+      [20, 20, 60, 60]
+    ],
+    'the viewport, then the clip path in it'
+  );
 });
 
 test('nested svg documents inside html-ish wrappers still parse', () => {

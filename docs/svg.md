@@ -85,8 +85,9 @@ Elements:
 - shapes: `path` (full path-data grammar, arcs included), `rect`
   (+`rx`/`ry`), `circle`, `ellipse`, `line`, `polyline`, `polygon`
 - structure: `svg` (`viewBox`, `width`/`height`, presentation attributes),
-  `g`, `defs`, `use` (`href`/`xlink:href` to a local `#id`, `x`/`y` offset,
-  `symbol` targets), `a` (rendered, not clickable), `switch` (draws its
+  `g`, `defs`, `use` (`href`/`xlink:href` to a local `#id`, `x`/`y` offset
+  — the last of its transforms, so its `clip-path` and its `mask` move with
+  it — `symbol` targets), `a` (rendered, not clickable), `switch` (draws its
   first child whose [conditions](#conditional-processing) hold, through its
   own `transform` and `opacity` as a `g` would)
 - a nested `svg` is a new viewport, not a group: `width` by `height` at
@@ -106,6 +107,7 @@ Elements:
 - `text`, with `tspan` (and `a` and `textPath`, read as a `tspan`) — see
   [Text](#text)
 - `mask` — see [Masks](#masks)
+- `clipPath` — see [Clip paths](#clip-paths)
 
 Presentation attributes (also inside inline `style="…"`, which wins):
 
@@ -140,8 +142,8 @@ leave them at SVG's initial values — `fill: #000`, `stroke: none` — and an
 outline icon would fill black, or paint nothing at all if its strokes enclose
 no area.
 
-Not supported (skipped silently): CSS stylesheets/`<style>`, `clipPath`,
-`filter`, `pattern`, animation/SMIL, `foreignObject`,
+Not supported (skipped silently): CSS stylesheets/`<style>`, a
+`clip-path` that is a CSS shape rather than a `url()`, `filter`, `pattern`, animation/SMIL, `foreignObject`,
 external references, `preserveAspectRatio` on the root `svg` (whose
 `viewBox` is stretched to the box `draw` is given), a `symbol`'s `viewBox`,
 stroke dashing, and of text: a path to set it along, `rotate`,
@@ -218,6 +220,43 @@ The surfaces come from `opts.surface`, or from `app.createSurface` on a
 context of ntk's own. Where there is none, or the context cannot
 `destination-in`, the element is drawn as it is, cut to the mask's region.
 A mask that is not there, or that names something else, is no mask.
+
+## Clip paths
+
+An element with a `clip-path` (attribute or `style`) naming a `<clipPath>`
+is cut to it as CSS Masking 1, 6 has it, in the user space the element
+draws in — after its `transform`, a `use`'s `x` and `y`, and for a nested
+`svg` its `viewBox`:
+
+- what cuts is the union of the clipPath's shapes and texts, and of the
+  shape or text each `use` in it names, through their transforms, each as
+  it is filled, whatever its fill, stroke or opacity: by its `clip-rule`
+  (`nonzero` or `evenodd`), which is inherited from the clipPath and what
+  it is in, and not by its `fill-rule`. A text cuts by its glyphs
+- anything else in it — a group, a `use` of a group or of a `symbol` —
+  counts for nothing, as in Chrome and WebKit; and so does what is
+  `display: none`, not visible, or whose conditions do not hold. A clipPath
+  with nothing in it that counts lets nothing show
+- `clipPathUnits`: `userSpaceOnUse`, the default, or `objectBoundingBox`, in
+  the bounding box of what it cuts. An element whose box has no area is not
+  drawn in the second. The clipPath's `transform` goes outside that
+- a `clip-path` on what is in the clipPath cuts that, in its own user space,
+  and one on the clipPath cuts the whole, in the user space of what it cuts
+  — as Chrome and Firefox set it. A clip path that leads back to itself is
+  left out, as Chrome and WebKit leave it, and the clip that named it kept
+
+A clip that is one shape, and what cuts it one shape at a time, is the
+context's own `clip()`, on any context. More than one is drawn as a mask is
+drawn: the element on a surface, and the clip's coverage on a second, from
+`opts.surface` or `app.createSurface` — see [Masks](#masks). Where there is
+none, the element is cut to the outlines of all its shapes as one path,
+which is their union wherever they do not overlap, and to a text's box.
+
+A `clip-path` naming something that is not there, or not a clipPath, cuts
+nothing, and so does one naming a clipPath that is `display: none` itself,
+as Chrome, Firefox and WebKit all have it; one inside something that is
+`display: none` cuts as any other. The root `svg`'s own `clip-path` is the
+caller's, as its `opacity` and `mask` are.
 
 ## Markers
 
