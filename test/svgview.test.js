@@ -1255,3 +1255,21 @@ test('paint scan: a marker of another colour makes a drawing more than one', () 
     <path d="M2 2 L20 20" marker-end="url(#m)"/></svg>`);
   assert.equal(plain.paintKind, 'mono', 'one inheriting the drawing’s paint is not');
 });
+
+test('a marker inside something display: none is drawn nowhere, and one that is display: none itself is drawn', () => {
+  // what Chrome, Firefox and WebKit agree on, and where Firefox stands
+  // alone, Chrome's and WebKit's: `display` does not apply to a marker
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 200 60">
+    <defs style="display:none"><marker id="a" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L5 0 L5 5 Z" fill="#f00"/></marker></defs>
+    <marker id="b" style="display:none" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L5 0 L5 5 Z" fill="#00f"/></marker>
+    <path d="M10 20 L90 20" stroke="#000" marker-end="url(#a)"/>
+    <path d="M10 45 L90 45" stroke="#000" marker-end="url(#b)"/></svg>`);
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0, 200, 60);
+  const fills = of(ctx.calls, 'fill');
+  assert.equal(fills.filter((c) => c[3] === '#f00').length, 0, 'not the one in the hidden <defs>');
+  assert.equal(fills.filter((c) => c[3] === '#00f').length, 1, 'the one hidden itself');
+});

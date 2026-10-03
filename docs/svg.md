@@ -246,7 +246,11 @@ them, over its fill and its stroke:
   `auto`
 
 What is in a marker inherits from the marker's ancestors, not from the
-shape it is on, and is faded by the shape's `opacity`. A marker that
+shape it is on, and is faded by the shape's `opacity`. A marker inside
+something that is `display: none` is not drawn, as Chrome, Firefox and
+WebKit all leave it; its own `display` is not asked, since the property
+does not apply to a marker, and Chrome and WebKit draw one that says
+`none`. A marker that
 reaches itself draws what it holds once. Markers count for
 [`paintKind`](#paintkind-which-documents-can-be-recoloured): a marker of
 another colour makes a drawing more than one.
