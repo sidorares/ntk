@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.21.1](https://github.com/sidorares/ntk/compare/v8.21.0...v8.21.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **svg:** a marker inside something display: none is drawn nowhere, and one that is display: none itself is drawn, as Chrome and WebKit have it, where a hidden marker was skipped and one in a hidden defs was drawn ([#526](https://github.com/sidorares/ntk/issues/526)) ([ae9d5f3](https://github.com/sidorares/ntk/commit/ae9d5f3379885b53ba4839410593257cb7dab147))
+
 ## [8.21.0](https://github.com/sidorares/ntk/compare/v8.20.0...v8.21.0) (2026-10-02)
 
 
