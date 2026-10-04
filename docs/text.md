@@ -491,7 +491,8 @@ const layout = app.fonts.layout(content, style, {
   maxLines: 2,        // cap the line count (default: unlimited)
   overflow: 'clip',   // clip | ellipsis — what the cap looks like
   wrap: true,         // false: a line to each forced break, cut at maxWidth by an ellipsis
-  overflowWrap: 'break-word' // break-word | normal — a word wider than the line
+  overflowWrap: 'break-word', // break-word | normal — a word wider than the line
+  justify: true       // true | 'last' | 'all' — lines set to fill maxWidth
 });
 ```
 
@@ -507,6 +508,24 @@ for a fallback there rather than a phrase run past the edge. A line that
 runs past the container starts at its start edge whatever `align` says, as
 CSS Text 3 has it, so a right-aligned long word is not pushed out of the
 container's left side.
+
+`justify` sets lines to fill `maxWidth`, what each leaves of it shared
+equally among its word separators — each space and no-break space a
+glyph's advance wider, the white space a line ends on hanging and taking
+none, as CSS Text 3 has `text-justify: auto` for the scripts that space
+their words. `true` justifies every line but the paragraph's last and each
+a forced break ends — a line feed, a carriage return or U+2029; a line
+separator, U+2028, is not one — as `text-align: justify` does; `'last'`
+justifies only those, and `'all'` every line. A line with no separator, or
+none of the width to spare, keeps `align`'s place, as the lines not
+justified do; a line an ellipsis ends is not justified. The breaks are the
+ones the layout makes at its width: justification comes after them, so a
+paragraph laid out again at another width is broken and spaced again from
+the shaping it kept, and not shaped again. The runs of a justified line
+carry the wider advances, so `caretPosition`, `indexAt`, `draw` and
+`coverage` all see the spacing. `fonts.justifies` is true where `layout`
+takes the option, which a caller that justifies text some other way for an
+engine without it can ask.
 
 `wrap: false` lays the text out a line to each forced break however wide
 it is — CSS's `white-space: nowrap` or `pre` — and with
