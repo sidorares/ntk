@@ -167,6 +167,26 @@ test('empty text: caret at the aligned line origin', () => {
   assert.equal(center.indexAt(50, 0), 0);
 });
 
+test('empty text in an rtl paragraph: caret at the start edge, the right', () => {
+  // bidi-js finds no paragraph in an empty text, and the base level read
+  // as 0 for want of one put the caret of an empty right-to-left field at
+  // the left — where the same field holding a line break had it at the right
+  const fm = manager();
+  const rtl = { direction: 'rtl', maxWidth: 100 };
+  const empty = fm.layout('', style, rtl);
+  assert.equal(empty.baseLevel, 1);
+  assert.equal(empty.lines[0].x, 100);
+  assert.equal(empty.caretPosition(0).x, 100);
+  assert.equal(empty.indexAt(100, 0), 0);
+  assert.equal(fm.layout('\n', style, rtl).caretPosition(0).x, 100);
+  assert.equal(fm.layout([], style, rtl).caretPosition(0).x, 100);
+  assert.equal(fm.layout('', style, { ...rtl, align: 'end' }).caretPosition(0).x, 0);
+  assert.equal(fm.shape('', { ...style, direction: 'rtl' }).baseLevel, 1);
+  // with no strong character to find, 'auto' is left-to-right (UAX#9 P3)
+  assert.equal(fm.layout('', style, { direction: 'auto', maxWidth: 100 }).caretPosition(0).x, 0);
+  assert.equal(fm.layout('', style, { direction: 'ltr', maxWidth: 100 }).caretPosition(0).x, 0);
+});
+
 test('caretPosition clamps out-of-range indices', () => {
   const fm = manager();
   const layout = fm.layout('ab', style);

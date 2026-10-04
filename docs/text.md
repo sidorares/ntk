@@ -710,6 +710,10 @@ Conventions:
   the index after it belongs to the next line. An index at a soft-wrap
   boundary maps to the start of the wrapped line. (A final `\n` does not
   create a trailing empty line — the layout has none.)
+- **Empty text** has one line, and its caret sits where `align` puts that
+  line: for `direction: 'rtl'` the default `'start'` is the right edge, as
+  for any right-to-left paragraph. Under `'auto'` there is no strong
+  character to decide by, and the paragraph is left-to-right.
 
 #### Coverage
 
