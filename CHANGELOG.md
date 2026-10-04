@@ -1,5 +1,17 @@
 # Changelog
 
+## [8.23.0](https://github.com/sidorares/ntk/compare/v8.22.0...v8.23.0) (2026-10-04)
+
+
+### Features
+
+* **text:** `justify` sets a layout's lines to fill its width, sharing what each leaves among its word separators after the lines are broken, so a paragraph justified again at another width is not shaped again ([#531](https://github.com/sidorares/ntk/issues/531)) ([de3f4e9](https://github.com/sidorares/ntk/commit/de3f4e93a51b903eb38b83e91639422c7197fd88))
+
+
+### Bug Fixes
+
+* **text:** an empty text laid out right-to-left is a right-to-left paragraph, so the caret of an empty rtl field sits at its right edge, where the line and its caret were set at the left ([#533](https://github.com/sidorares/ntk/issues/533)) ([515ea65](https://github.com/sidorares/ntk/commit/515ea65ffdb3afa2ddaad87f22a9de9fabe61551))
+
 ## [8.22.0](https://github.com/sidorares/ntk/compare/v8.21.1...v8.22.0) (2026-10-03)
 
 
