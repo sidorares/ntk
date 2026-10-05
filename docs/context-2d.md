@@ -557,6 +557,19 @@ through it. Only the first step has a choice of where it happens.
   drawing that different clips split across passes gets the same bytes in
   every one of them.
 
+**A path clip's coverage takes the local route** up to the policy's
+`maxBytes`, however many edges it has; only a fill is routed by its cost.
+The server route is `AddTraps` into the pixmap the coverage lands on, and
+`AddTraps` adds into a picture that exists, which glamor — Xwayland's, and
+Xorg's on most GPUs — has no GPU path for: it reads the pixmap back,
+rasterizes in software and uploads it again, a GPU sync for every clip. A
+row of a list cut to a rounded rectangle, 378×27, took 5.6 ms that way on a
+virgl Xwayland and 0.14 ms locally; pixman takes 0.03 ms less for it on the
+server. And the clip mask itself, the size of the surface, is kept across
+the restores that take a path clip off the stack, as the fill mask is, and
+cleared only where the clip before it wrote: eight such rows made and
+cleared sixteen surface-sized pixmaps a frame.
+
 **Both routes draw the same mask, to the byte.** The local rasterizer,
 `PreciseRasterizer`, samples the way RENDER's default poly-mode, Precise,
 defines: a grid of 17 × 15 sample points per pixel, each trapezoid or
