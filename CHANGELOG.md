@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.23.2](https://github.com/sidorares/ntk/compare/v8.23.1...v8.23.2) (2026-10-05)
+
+
+### Performance Improvements
+
+* **context:** a path clip's coverage is rasterized here and its mask kept across restores, so rows cut to rounded rectangles cost Xwayland 1.2 ms a frame where they cost 53 ([#536](https://github.com/sidorares/ntk/issues/536)) ([0d5e155](https://github.com/sidorares/ntk/commit/0d5e155e278ffb8956319fdafdbda4a1318e1fac))
+
 ## [8.23.1](https://github.com/sidorares/ntk/compare/v8.23.0...v8.23.1) (2026-10-05)
 
 
