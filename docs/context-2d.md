@@ -294,6 +294,39 @@ to the anchor point, but glyphs are not rotated/scaled — size text via
   `App` keeps the 256 most recently used. So a colour animated through a
   transition or a tween, or a fade through a new alpha every frame, holds
   no more of them however long it runs
+### How an image is read
+
+A picture's transform, filter and repeat are properties of the picture on
+the server, not of a composite: a scaled `drawImage` reads its image
+through a scale, the `bilinear` filter and a padded edge, a turned one
+through its matrix and no repeat, and one at its own size as stored. An
+`Image`'s and a `Surface`'s picture is set to what a draw reads it through
+only where that differs from what it has, and is left so for the next draw
+— it is not put back after each. So a surface drawn through a perspective a
+tile at a time, each tile its own matrix, costs a transform and a composite
+a tile, where it cost five requests: its transform and its filter set, the
+composite, and both put back. Changing them back and forth is what was
+expensive, and differently on each server: over 256 composites, putting
+the filter back cost Xwayland's glamor 36 ms where the composites cost
+0.6, and putting the transform back cost pixman 7 ms where they cost 1.6.
+
+What a draw left is put back where the pixels are read as they are: by a
+`drawImage` at the image's own size, and by `image.picture(app)` and
+`surface.picture(app)`, which hand the picture out as stored. What was set
+on the picture — `setFilter`, `setBlurFilter`, `setTransform`, `setRepeat`
+— is not put back: a filter hung on a surface stays on it through a draw
+of it at its own size, as it always did. A picture ntk does not keep — a 2d
+context drawn as an image, or a caller's handed in through a `picture(app)`
+of its own ([Drawing sources in general](surface.md#drawing-sources-in-general))
+— is put back as stored after each draw that read it some other way, as
+every picture used to be.
+
+A `Picture` keeps what it was last sent through those four methods, and
+sends nothing when asked for what it has; `picture.plain()` sets all three
+as stored. Changing them with `Render.SetPictureTransform` or
+`Render.SetPictureFilter` directly leaves it believing what it last sent:
+go through the picture.
+
 ### Pixels
 
 Pixel access follows the canvas API: `ImageData` is straight

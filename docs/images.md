@@ -46,9 +46,13 @@ wnd.map();
 - `image.width`, `image.height` — pixel dimensions
 - `image.data` — non-premultiplied RGBA bytes (`Buffer`)
 - `image.picture(app)` → [`Picture`](../lib/picture.js) — the cached
-  server-side picture for that app's display (uploaded on first call).
-  `ctx.drawImage` uses this internally; it is public for manual Render
-  compositing
+  server-side picture for that app's display (uploaded on first call),
+  public for manual Render compositing. It comes back read as stored —
+  no transform, the `nearest` filter, no repeat — whatever a scaled or
+  turned `drawImage` last read it through, and with anything set on it
+  through the picture's own `setTransform`, `setFilter`, `setBlurFilter`
+  or `setRepeat` still on it; see
+  [How an image is read](context-2d.md#how-an-image-is-read)
 - `image.pixmap(app)` → [`Pixmap`](pixmap.md) — the drawable those pixels
   were uploaded to (uploading on first call, like `picture`). It is what
   building a *second* picture over the same upload needs:

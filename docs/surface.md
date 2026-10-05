@@ -230,7 +230,9 @@ whole-pixel shift, `copyWithin` does the job in one request.
   in place by an integer `(dx, dy)`, server-side; see
   [Scrolling and panning](#scrolling-and-panning-copywithin)
 - `surface.picture(app)` — the server-side Picture, mirroring
-  `Image.picture(app)`. Throws for a different connection
+  `Image.picture(app)`: read as stored, with anything set on it kept (see
+  [How an image is read](context-2d.md#how-an-image-is-read)). Throws for
+  a different connection
 - a surface is also what [`ctx.createPattern`](context-2d.md#patterns) tiles:
   drawn once, then repeated across a fill by the server. A background grid,
   a checkerboard or a hatch is a tile-sized surface and one composite,
@@ -272,7 +274,11 @@ ctx.drawImage({ width, height, picture: (app) => somePicture }, x, y);
 
 That is the whole contract — `width`, `height`, `picture(app)`, plus an
 optional `format: 'a8'` to be treated as coverage. A caller keeping its own
-cache of rendered things can satisfy it without ntk knowing the type.
+cache of rendered things can satisfy it without ntk knowing the type. The
+picture stays the caller's: a scaled or turned draw sets its transform,
+filter and repeat for the composite and puts each back as stored after it.
+(An `Image`'s or a `Surface`'s own picture is not put back after each draw;
+see [How an image is read](context-2d.md#how-an-image-is-read).)
 
 ## Context lifetime
 
