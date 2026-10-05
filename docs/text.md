@@ -104,6 +104,19 @@ XRender glyph ids are client-assigned, and ntk exploits that:
   at a second width, and keeping it cost a UI's labels a quarter of their
   layout time. What is kept costs about 60 bytes of heap a character — 36
   MB for that 600 KB document, nothing for a UI's labels.
+- A layout asked for its first lines (`maxLines`) of a paragraph nobody has
+  prepared prepares the start of it, and lays the lines out from that,
+  where every line kept is decided before the start ends: two lines past
+  the last kept one are filled before the start is trusted, and a start
+  that falls short is made four times longer, up to the whole. The start is
+  kept like a paragraph, for the next layout of the same text to fill or to
+  prepare further; a layout of the whole paragraph prepares it whole and
+  keeps that instead. Only text nothing can make right-to-left is cut, so
+  its levels are 0 wherever the cut falls. A paragraph laid out a line at a
+  time beside a float — the rest of it, one line of it, as an HTML renderer
+  does — prepared the whole rest at each line, the paragraph's square; a
+  thirty-sentence paragraph so laid out with nothing kept took 3.7 ms, and
+  takes 1.0.
 
 For scale: a 60-character line of 16px Latin text is ~70 bytes of
 `CompositeGlyphs` after warm-up. The one-time glyph upload for a full
@@ -633,6 +646,9 @@ if (layout.truncated) showTooltip(title);   // there was more to say
 - **`layout.truncated`** says whether anything was dropped — the signal for
   a tooltip, an expander, or a "show more" affordance. It is `true` for a
   `'clip'` cut as well.
+- With a `maxWidth`, the text past the cut is not prepared at all, past a
+  couple of lines' margin (see "Wire efficiency" above): the first lines
+  of a long text cost about what those lines do, not what the text does.
 
 Details worth knowing before relying on it:
 

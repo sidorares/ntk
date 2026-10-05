@@ -968,6 +968,147 @@ test('TextLayout: a pair either side of a kernAcross span is kerned, as it is un
   assert.ok(Math.abs(bold - (bare('x ') + bare('A'))) < 1e-6, `${bold}`);
 });
 
+// A layout asked for its first lines prepares the start of the text and
+// fills that (`_firstLines`): <Html> lays a paragraph beside a float out a
+// line at a time, the rest of the paragraph for one line of it, and each
+// prepared the whole rest again. What it keeps has to be what the whole
+// paragraph's first lines are, line for line and run for run.
+const PARAGRAPH = Array.from(
+  { length: 40 },
+  (_, i) => `Sentence ${i} of a long paragraph, with words of several lengths in it.`
+).join(' ');
+
+/** Each `_prepare` a layout makes, by the length of the text it prepared. */
+function preparedLengths(run) {
+  const lengths = [];
+  const inner = TextLayout.prototype._prepare;
+  TextLayout.prototype._prepare = function (content, ...rest) {
+    const text = typeof content === 'string' ? content : content.map((s) => s.text).join('');
+    lengths.push(text.length);
+    return inner.call(this, content, ...rest);
+  };
+  try {
+    return { result: run(), lengths };
+  } finally {
+    TextLayout.prototype._prepare = inner;
+  }
+}
+
+/** A layout's lines as numbers to compare, the last `ellipsis`'s aside. */
+function linesOf(layout, count = layout.lines.length) {
+  return layout.lines.slice(0, count).map((line) => ({
+    x: line.x,
+    y: line.y,
+    width: line.width,
+    advance: line.advance,
+    height: line.height,
+    baseline: line.baseline,
+    start: line.start,
+    end: line.end,
+    runs: line.runs.map((r) => [r.x, r.width, r.start, r.end, !!r.ellipsis, r.run.glyphs.length])
+  }));
+}
+
+test('TextLayout: a layout asked for its first lines prepares the start of the text, and lays them out as the whole', () => {
+  const style = { family: 'Test', size: 16 };
+  for (const options of [
+    { maxWidth: 300, maxLines: 1 },
+    { maxWidth: 300, maxLines: 3 },
+    { maxWidth: 300, maxLines: 2, justify: true },
+    { maxWidth: 300, maxLines: 2, overflow: 'ellipsis' },
+    { maxWidth: 220, maxLines: 4, fit: 'items' }
+  ]) {
+    // two font managers, so the whole paragraph prepared for the reference is
+    // no kept paragraph the subject finds
+    const { result: part, lengths } = preparedLengths(() => new TextLayout(fixedFonts(), PARAGRAPH, style, options));
+    const whole = new TextLayout(fixedFonts(), PARAGRAPH, style, { ...options, maxLines: undefined });
+    const label = JSON.stringify(options);
+    assert.ok(lengths.length && lengths.every((n) => n < PARAGRAPH.length), `${label}: the start prepared, ${lengths}`);
+    assert.equal(part.truncated, true, label);
+    assert.equal(part.lines.length, options.maxLines, label);
+    const kept = options.overflow === 'ellipsis' ? options.maxLines - 1 : options.maxLines;
+    assert.deepEqual(linesOf(part, kept), linesOf(whole, kept), `${label}: the whole's lines`);
+    if (options.overflow === 'ellipsis') {
+      const last = part.lines[part.lines.length - 1];
+      assert.equal(last.start, whole.lines[kept].start, `${label}: the cut line starts where the whole's does`);
+      assert.ok(last.runs.some((r) => r.ellipsis), `${label}: and ends in an ellipsis`);
+    }
+    // a caret goes where the whole would put it, the text being the whole
+    const at = part.lines[0].end - 1;
+    assert.deepEqual(part.caretPosition(at), whole.caretPosition(at), `${label}: a caret`);
+  }
+});
+
+test('TextLayout: the start of a span list is its spans up to the cut, the last cut short', () => {
+  const style = { family: 'Test', size: 16 };
+  const words = PARAGRAPH.split(/(?<= )/);
+  const spans = words.map((text, i) => ({ text, color: i % 2 ? '#f00' : '#00f', size: 14 + (i % 3) }));
+  const options = { maxWidth: 260, maxLines: 2 };
+  const { result: part, lengths } = preparedLengths(() => new TextLayout(fixedFonts(), spans, style, options));
+  const whole = new TextLayout(fixedFonts(), spans, style, { maxWidth: 260 });
+  assert.ok(lengths.every((n) => n < PARAGRAPH.length), `the start prepared, ${lengths}`);
+  assert.deepEqual(linesOf(part), linesOf(whole, 2));
+  assert.deepEqual(
+    part.lines[0].runs.map((r) => r.span.color),
+    whole.lines[0].runs.map((r) => r.span.color),
+    'the spans the runs came from'
+  );
+});
+
+test('TextLayout: text that may be right-to-left is prepared whole for its first lines', () => {
+  // a cut could change the levels of what is kept; nothing is cut
+  const style = { family: 'Test', size: 16 };
+  const text = `${PARAGRAPH} שלום`;
+  const { lengths } = preparedLengths(() => new TextLayout(fixedFonts(), text, style, { maxWidth: 300, maxLines: 1 }));
+  assert.deepEqual(lengths, [text.length]);
+  const rtl = preparedLengths(
+    () => new TextLayout(fixedFonts(), PARAGRAPH, style, { maxWidth: 300, maxLines: 1, direction: 'rtl' })
+  );
+  assert.deepEqual(rtl.lengths, [PARAGRAPH.length], 'and so is a paragraph set right to left');
+});
+
+test('TextLayout: a start too short for the lines asked for is made longer until it is not', () => {
+  // letters set closer than a quarter of an em apart fill a line with more
+  // of them than the first guess holds
+  const style = { family: 'Test', size: 16, letterSpacing: -4 };
+  const options = { maxWidth: 300, maxLines: 2 };
+  const { result: part, lengths } = preparedLengths(() => new TextLayout(fixedFonts(), PARAGRAPH, style, options));
+  const whole = new TextLayout(fixedFonts(), PARAGRAPH, style, { maxWidth: 300 });
+  assert.ok(lengths.length >= 2, `tried again: ${lengths}`);
+  assert.ok(lengths[1] > lengths[0], `longer: ${lengths}`);
+  assert.deepEqual(linesOf(part), linesOf(whole, 2));
+});
+
+test("TextLayout: the start prepared for a paragraph's first lines is kept, for the next layout of it", () => {
+  // the same line of a paragraph at the next width of a drag is the same
+  // text, and fills from the start kept for it; a layout that needs more of
+  // it prepares more, and one of the whole paragraph prepares it whole —
+  // which a layout of its first lines then fills as it is
+  const fonts = fixedFonts();
+  const style = { family: 'Test', size: 16 };
+  const at = (options) => preparedLengths(() => new TextLayout(fonts, PARAGRAPH, style, options));
+  const reference = (options) => new TextLayout(fixedFonts(), PARAGRAPH, style, { ...options, maxLines: undefined });
+  const same = (layout, options) =>
+    assert.deepEqual(linesOf(layout), linesOf(reference(options), options.maxLines), JSON.stringify(options));
+
+  const first = at({ maxWidth: 300, maxLines: 1 });
+  assert.equal(first.lengths.length, 1);
+  assert.ok(first.lengths[0] < PARAGRAPH.length, 'the start');
+  const next = at({ maxWidth: 304, maxLines: 1 });
+  assert.deepEqual(next.lengths, [], 'filled from the start kept');
+  same(next.result, { maxWidth: 304, maxLines: 1 });
+
+  const more = at({ maxWidth: 300, maxLines: 12 });
+  assert.ok(more.lengths.length >= 1 && more.lengths[0] > first.lengths[0], `more of it: ${more.lengths}`);
+  same(more.result, { maxWidth: 300, maxLines: 12 });
+
+  const whole = at({ maxWidth: 300 });
+  assert.deepEqual(whole.lengths, [PARAGRAPH.length], 'the whole, for a layout of the whole');
+  const after = at({ maxWidth: 296, maxLines: 1 });
+  assert.deepEqual(after.lengths, [], 'and the whole kept, for the first lines too');
+  same(after.result, { maxWidth: 296, maxLines: 1 });
+});
+
 test('TextLayout: a pair across a spaced space is kerned once, however far it is spaced', () => {
   // A justified line spaces each of its spaces by its own share, and a share
   // is new at each line and each width. The kern a pair makes is the same
