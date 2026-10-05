@@ -968,6 +968,46 @@ test('TextLayout: a pair either side of a kernAcross span is kerned, as it is un
   assert.ok(Math.abs(bold - (bare('x ') + bare('A'))) < 1e-6, `${bold}`);
 });
 
+test('TextLayout: a pair across a spaced space is kerned once, however far it is spaced', () => {
+  // A justified line spaces each of its spaces by its own share, and a share
+  // is new at each line and each width. The kern a pair makes is the same
+  // at every one of them — spacing is added to each glyph alike and drops
+  // out of the difference — but the memo was keyed by the spacing, so every
+  // pair of every justified line laid out again was shaped again, three
+  // strings at a time.
+  const fonts = fixedFonts();
+  const inner = fonts._shapeCached;
+  fonts._shapeCached = function (text, ...rest) {
+    const out = inner.call(this, text, ...rest);
+    const kern = (text.includes(' A') ? 2 : 0) + (text.includes('A ') ? 3 : 0);
+    if (!kern) return out;
+    const runs = out.runs.map((r, i) => (i ? r : { ...r, width: r.width - kern }));
+    return { ...out, width: out.width - kern, runs };
+  };
+  const style = { family: 'Test', size: 16 };
+  fonts.match('Test', style).mayKern = () => true;
+  const spaced = (text, by) =>
+    text
+      .split(/( )/)
+      .filter(Boolean)
+      .map((t) => (t === ' ' ? { text: t, letterSpacing: by, kernAcross: true } : { text: t }));
+  const plain = new TextLayout(fonts, 'x A x', style).width;
+  const kerns = () => fonts._kerns.size;
+  new TextLayout(fonts, spaced('x A x', 0.5), style);
+  const pairs = kerns();
+  for (const by of [0.75, 1.25, 2, 3.5, 7]) {
+    const width = new TextLayout(fonts, spaced('x A x', by), style).width;
+    // the kern is the one the pair makes unspaced, at every spacing
+    assert.ok(Math.abs(width - (plain + 2 * by)) < 1e-6, `${width} at ${by}`);
+  }
+  assert.equal(kerns(), pairs, 'each pair asked once, at the first spacing');
+  // what a new spacing shapes is its space, and no pair of letters
+  const words = () => [...fonts._shapeCache.values()].reduce((n, group) => n + group.size, 0);
+  const before = words();
+  new TextLayout(fonts, spaced('x A x', 9), style);
+  assert.equal(words() - before, 1, 'one word shaped: the space, spaced');
+});
+
 test('TextLayout: a line of Arial with its spaces spaced for justifying keeps their pairs', needsFonts, (t) => {
   const fonts = new FontManager();
   const face = fonts.match('Arial', { size: 11 });
