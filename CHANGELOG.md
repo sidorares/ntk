@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.23.3](https://github.com/sidorares/ntk/compare/v8.23.2...v8.23.3) (2026-10-05)
+
+
+### Performance Improvements
+
+* **text:** a pair across a spaced-out span is kerned once, whatever its spacing, where a justified line's every pair was shaped again at every width it was laid out at ([#538](https://github.com/sidorares/ntk/issues/538)) ([bd7bf9c](https://github.com/sidorares/ntk/commit/bd7bf9cd9dfec19025c87dc09505256771a54820))
+
 ## [8.23.2](https://github.com/sidorares/ntk/compare/v8.23.1...v8.23.2) (2026-10-05)
 
 
