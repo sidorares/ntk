@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.23.1](https://github.com/sidorares/ntk/compare/v8.23.0...v8.23.1) (2026-10-05)
+
+
+### Performance Improvements
+
+* **context:** a picture keeps what a draw read it through, so a surface drawn a tile at a time costs two requests a tile where it cost five ([#534](https://github.com/sidorares/ntk/issues/534)) ([b69f80f](https://github.com/sidorares/ntk/commit/b69f80f87bcb90bc9a18d005cb97964c789aa782))
+
 ## [8.23.0](https://github.com/sidorares/ntk/compare/v8.22.0...v8.23.0) (2026-10-04)
 
 
