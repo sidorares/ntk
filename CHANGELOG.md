@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.23.4](https://github.com/sidorares/ntk/compare/v8.23.3...v8.23.4) (2026-10-22)
+
+
+### Bug Fixes
+
+* an unknown fill or stroke style says what it was given and what is taken, and where a null comes from ([#542](https://github.com/sidorares/ntk/issues/542)) ([79db5a1](https://github.com/sidorares/ntk/commit/79db5a158089c5a8ac5ff65b2d4022b342497b33))
+
 ## [8.23.3](https://github.com/sidorares/ntk/compare/v8.23.2...v8.23.3) (2026-10-05)
 
 
