@@ -31,6 +31,10 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # A run takes two minutes, most of it apt. Without a limit a stalled one
+    # holds the runner, and the checks of the PR it hit, for GitHub's six
+    # hours: `node --test` has no limit of its own on a file that never exits
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +53,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends xvfb fontconfig fonts-dejavu-core
       - run: npm ci
       - name: Run tests under Xvfb
-        run: xvfb-run -a npm test
+        # The slowest test takes two seconds here; one that never settles
+        # fails by name after a minute instead of holding its file open. A
+        # file that finishes and still does not exit is named by
+        # test/helpers/exit-watchdog.js. 18.19 predates --test-timeout.
+        run: xvfb-run -a npm test -- ${{ matrix.node != '18.19' && '--test-timeout=60000' || '' }}
 
   # What the release's publish job does, as far as the upload, and then what
   # an application does with the result. The test jobs install with the npm

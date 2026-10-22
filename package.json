@@ -68,7 +68,7 @@
     "x11-dri": ">=0.5.0 <1"
   },
   "scripts": {
-    "test": "NTK_STRICT_COLORS=1 node --test",
+    "test": "NTK_STRICT_COLORS=1 node --import ./test/helpers/exit-watchdog.js --test",
     "check-release-message": "node scripts/check-release-message.mjs"
   },
   "devDependencies": {
