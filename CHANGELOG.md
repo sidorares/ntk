@@ -1,5 +1,17 @@
 # Changelog
 
+## [8.25.0](https://github.com/sidorares/ntk/compare/v8.24.0...v8.25.0) (2026-10-22)
+
+
+### Features
+
+* **svg:** stroke-dasharray and stroke-dashoffset dash a stroke ([#548](https://github.com/sidorares/ntk/issues/548)) ([b4bbd38](https://github.com/sidorares/ntk/commit/b4bbd387fb9d897c037d3f1e7acf2a9c32ce51e9))
+
+
+### Bug Fixes
+
+* **test:** a stray X error no longer holds smoke.test.js open for six hours ([#546](https://github.com/sidorares/ntk/issues/546)) ([c38ce15](https://github.com/sidorares/ntk/commit/c38ce15ef282ed0c0315bc133632cc4f485f58bd))
+
 ## [8.24.0](https://github.com/sidorares/ntk/compare/v8.23.4...v8.24.0) (2026-10-22)
 
 
