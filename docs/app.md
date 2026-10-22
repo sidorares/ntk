@@ -111,7 +111,7 @@ paced slower can never reach the rate its display offers.
   the axis behind a wheel delta, and it must not cost a round trip per
   event; pass `{ refresh: true }` to re-read it
 - `app.composite()` / `app.damage()` / `app.xfixes()` / `app.shape()` /
-  `app.xinput() → Promise<ext|null>` — the raw node-x11 extension objects,
+  `app.xinput()` / `app.xv() → Promise<ext|null>` — the raw node-x11 extension objects,
   each `null` where the server has none. See [Extensions](#extensions)
 - `app.createRegion(rects) → Promise<Region>` — a server-side XFIXES region
   of the given rectangles (`{x, y, width, height}` or ntk's own
@@ -174,6 +174,10 @@ const shape = await app.shape();
   server that answers the extension query but speaks XI1 only, and every XI2
   request needs it, so callers check both. The escape hatch for the XI2
   requests ntk does not wrap (grabs, device properties, barriers)
+- `app.xv() → Promise<ext|null>` — **XVideo**: adaptors that convert and
+  scale a YCbCr frame on the GPU. Present is not usable — Xvfb and XQuartz
+  answer the extension and then "no adaptors present" — so the way in is
+  [`openVideoPort`](xv.md), which asks the rest and declines with `null`
 
 The requests themselves are node-x11's, unwrapped: this is a discovery and
 caching seam, not a second API over the extensions. See node-x11's

@@ -24,7 +24,8 @@ const EXTENSIONS = [
   ['damage', 'DAMAGE', ['Create', 'Subtract']],
   ['xfixes', 'XFIXES', ['CreateRegion', 'SetPictureClipRegion', 'SetWindowShapeRegion']],
   ['shape', 'SHAPE', ['GetRectangles', 'SelectInput']],
-  ['xinput', 'XInputExtension', ['ListInputDevices']]
+  ['xinput', 'XInputExtension', ['ListInputDevices']],
+  ['xv', 'XVideo', ['QueryAdaptors', 'QueryImageAttributes', 'ShmPutImage']]
 ];
 
 let app = null;
