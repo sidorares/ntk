@@ -37,14 +37,30 @@ before(async () => {
   };
   app.X.on('end', () => drop('the server closed the connection'));
   app.X.on('close', () => drop('the connection closed'));
-  // node-x11 emits transport failures here; App installs its own listener for
-  // protocol errors, so this one only sees what that does not route
-  app.X.on('error', (err) => drop(`connection error: ${err.message}`));
+  // node-x11 emits two kinds of 'error', and every listener hears both:
+  // transport failures, and X protocol errors no request callback claimed.
+  // App's listener warns about the second kind; a stray BadWindow from a
+  // request racing a destroy says nothing about the connection, which is
+  // still open. Only the protocol kind carries the opcode it answers.
+  app.X.on('error', (err) => {
+    if (err.majorOpcode === undefined) drop(`connection error: ${err.message}`);
+  });
 });
 
 after(async () => {
   clearInterval(keepalive);
-  if (app && !lost) await app.close();
+  if (!app) return;
+  try {
+    // a dropped connection cannot answer close()'s round trip
+    if (!lost) await withTimeout(app.close(), 5000, 'closing the X connection');
+  } finally {
+    // Whatever close() managed, the socket goes with the file. An open one
+    // holds the event loop, and `node --test` reports a file only once its
+    // process exits: this one then printed nothing, every file after it
+    // queued behind it, and CI ran to its six-hour limit. A connection
+    // counted lost while still open is how that happened.
+    app.X.stream.destroy();
+  }
 });
 
 /** Fail with the reason the connection went away, rather than letting the

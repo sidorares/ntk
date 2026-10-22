@@ -364,6 +364,11 @@ README.md holds only the pitch and short samples — details belong in docs/.
 - X-dependent tests skip automatically when `$DISPLAY` is absent/unreachable.
   Locally: any X server (XQuartz works). CI runs `xvfb-run -a npm test`
   (`.github/workflows/ci.yml`).
+- A test file that finishes but never exits holds `node --test` up silently:
+  the runner prints a file only once its process is gone. `npm test` loads
+  `test/helpers/exit-watchdog.js`, which fails such a file after 30 seconds
+  and names what held it open (`Socket (Pipe)` is an X connection left
+  open). Close what a file opened in `after`, even when a test failed.
 - When touching rendering code, extend the smoke test with a pixel-level
   assertion — that is what caught real bugs during modernization.
 
