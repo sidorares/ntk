@@ -482,3 +482,24 @@ test('setTransform rejects a matrix it cannot use', () => {
   assert.throws(() => pattern.setTransform([1, 0, 0, 1]), /finite numbers/);
   tile.destroy();
 });
+
+test('an unknown style says what it was given, what is taken, and where a null comes from', () => {
+  const ctx = freshCtx();
+  const before = ctx.fillStyle;
+  assert.throws(
+    () => {
+      ctx.fillStyle = null;
+    },
+    (err) =>
+      /fillStyle takes a CSS colour string/.test(err.message) &&
+      /was given null/.test(err.message) &&
+      /createPattern\(\)/.test(err.message),
+  );
+  assert.throws(
+    () => {
+      ctx.strokeStyle = 42;
+    },
+    /strokeStyle takes .* was given number 42\.$/,
+  );
+  assert.equal(ctx.fillStyle, before, "and the style stays what it was");
+});
