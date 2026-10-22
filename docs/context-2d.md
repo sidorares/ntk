@@ -24,7 +24,9 @@ ctx.fillRect(0, 0, 100, 100);
 - `ctx.width`, `ctx.height` — drawable size
 - `ctx.fillStyle`, `ctx.strokeStyle` — a CSS color string, a premultiplied
   `[r, g, b, a]` array (0..1 floats), a `CanvasGradient`, a `CanvasPattern`,
-  or a `Picture`.
+  or a `Picture`. Any other value — a `null` from `createPattern()`, which
+  answers null for a source it cannot use, among them — throws, naming the
+  property and what it was given, and leaves the style as it was.
   Named colors, `rgb[a]()`, `hsl[a]()` and hex in all four lengths
   (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) are accepted; anything
   unparseable throws rather than drawing something arbitrary. The
