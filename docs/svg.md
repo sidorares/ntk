@@ -123,6 +123,12 @@ Presentation attributes (also inside inline `style="…"`, which wins):
   drawn. It is inherited, and a shape inside a hidden group that says
   `visibility="visible"` is drawn again
 - `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-miterlimit`
+- `stroke-dasharray` and `stroke-dashoffset`, inherited, in user units: a
+  list of lengths split on commas or white space, an odd count repeated as
+  `setLineDash` repeats it. A negative length, or one that is a percentage
+  or in another unit than `px`, makes the declaration an error, which
+  leaves what is inherited; lengths that come to nothing draw the stroke
+  solid, as `none` does
 - `transform` — `matrix`, `translate`, `scale`, `rotate` (incl. the
   3-argument center form), `skewX`, `skewY`, in any list combination
 - `color` (for `currentColor`)
@@ -146,7 +152,7 @@ Not supported (skipped silently): CSS stylesheets/`<style>`, a
 `clip-path` that is a CSS shape rather than a `url()`, `filter`, `pattern`, animation/SMIL, `foreignObject`,
 external references, `preserveAspectRatio` on the root `svg` (whose
 `viewBox` is stretched to the box `draw` is given), a `symbol`'s `viewBox`,
-stroke dashing, and of text: a path to set it along, `rotate`,
+a dash length that is a percentage, and of text: a path to set it along, `rotate`,
 `textLength`, `baseline-shift`, decorations, and stroked text.
 
 ## Text

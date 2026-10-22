@@ -142,6 +142,44 @@ test('rect/circle/path elements fill with inherited styles', () => {
   assert.equal(strokes[0][3], 3);
 });
 
+test('stroke-dasharray and stroke-dashoffset dash a stroke, are inherited, and leave what is stroked after them solid', () => {
+  // a dotted border drawn as a rect (diabrowser.com's privacy card), and
+  // the forms the property comes in: commas, an odd count, `none`, a
+  // pattern of nothing, and an error, which leaves what is inherited
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 100 100">
+    <g stroke="black" stroke-dasharray="1 6" stroke-dashoffset="3.5" fill="none">
+      <rect width="10" height="10"/>
+      <rect width="10" height="10" style="stroke-dasharray: 4, 2, 1; stroke-dashoffset: -2px"/>
+      <rect width="10" height="10" stroke-dasharray="none"/>
+      <rect width="10" height="10" stroke-dasharray="0 0"/>
+      <rect width="10" height="10" stroke-dasharray="2 -1"/>
+    </g>
+    <rect width="10" height="10" fill="none" stroke="red"/>
+  </svg>`);
+  const ctx = mockCtx();
+  const calls = [];
+  let dash = [];
+  ctx.lineDashOffset = 0;
+  ctx.setLineDash = (segments) => {
+    dash = segments.slice();
+  };
+  const stroke = ctx.stroke;
+  ctx.stroke = function (path) {
+    calls.push([dash, this.lineDashOffset]);
+    stroke.call(this, path);
+  };
+  view.draw(ctx, 0, 0, 100, 100);
+  assert.deepEqual(calls, [
+    [[1, 6], 3.5],
+    [[4, 2, 1], -2],
+    [[], 0],
+    [[], 0],
+    [[1, 6], 3.5],
+    [[], 0],
+  ]);
+});
+
 test('viewBox scaling reaches the context transform', () => {
   const view = new SvgView(null);
   view.setSvg('<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>');
