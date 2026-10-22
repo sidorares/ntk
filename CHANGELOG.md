@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.24.0](https://github.com/sidorares/ntk/compare/v8.23.4...v8.24.0) (2026-10-22)
+
+
+### Features
+
+* **xv:** openVideoPort puts a YCbCr frame through an Xv adaptor into a VideoTarget, a redirected window nothing shows, since no textured adaptor draws into a pixmap ([#544](https://github.com/sidorares/ntk/issues/544)) ([e488582](https://github.com/sidorares/ntk/commit/e488582fff14750a08ce3569dcb2ff1ef176489f))
+
 ## [8.23.4](https://github.com/sidorares/ntk/compare/v8.23.3...v8.23.4) (2026-10-22)
 
 
