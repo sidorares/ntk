@@ -21,7 +21,8 @@ const ACCESSORS = [
   ['damage', 'damage'],
   ['xfixes', 'fixes'],
   ['shape', 'shape'],
-  ['xinput', 'xinput']
+  ['xinput', 'xinput'],
+  ['xv', 'xv']
 ];
 
 /**

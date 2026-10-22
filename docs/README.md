@@ -14,7 +14,7 @@ matching file here (see AGENTS.md).
 
 - [Getting started](getting-started.md) — installation, requirements, first window
 - [App](app.md) — connecting to the X server, the `App` factory object,
-  extension discovery (`composite`/`damage`/`xfixes`/`shape`/`xinput`)
+  extension discovery (`composite`/`damage`/`xfixes`/`shape`/`xinput`/`xv`)
 - [Window](window.md) — window creation, properties, methods, events,
   keyboard input, smooth scrolling (XI2), frame pacing / event coalescing,
   `requestAnimationFrame`
@@ -34,6 +34,9 @@ matching file here (see AGENTS.md).
   surfaces for drawings that take their colour from the caller, and
   `blurCoverage`, the blur baked into pixels rather than left as a filter the
   server re-runs per composite — and, past σ 8, run at reduced scale
+- [XVideo](xv.md) — `openVideoPort`: YCbCr frames converted and scaled by
+  the server's adaptor, through shared memory, into a redirected
+  `VideoTarget` that nothing shows until it is composited
 - [Fonts](fonts.md) — font lookup, loading, rasterization pipeline
 - [Text](text.md) — shaping (kerning/bidi/fallback), TextLayout,
   wire-efficiency design, the vector (trapezoid) path for large/animated sizes
