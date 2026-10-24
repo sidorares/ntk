@@ -63,6 +63,9 @@ either a parsed DOM or a markup string.
     A context of ntk's own needs none — it uses `app.createSurface` on its
     app — but one that is not ntk's, react-x11's macOS context, has to be
     handed one
+  - `foreignObject(element, ctx, box)` — draws what a `<foreignObject>`
+    holds, where the drawing reaches it; see
+    [Foreign objects](#foreign-objects)
 - `view.paintKind` / `view.soloPaint` — how many colours the document commits
   to, from the parse; see [Taking colour from the caller](#taking-colour-from-the-caller)
 - `view.render()` — window mode: clear the background and draw fitted;
@@ -108,6 +111,8 @@ Elements:
   [Text](#text)
 - `mask` — see [Masks](#masks)
 - `clipPath` — see [Clip paths](#clip-paths)
+- `foreignObject` — what it holds is drawn by the caller; see
+  [Foreign objects](#foreign-objects)
 
 Presentation attributes (also inside inline `style="…"`, which wins):
 
@@ -149,7 +154,7 @@ outline icon would fill black, or paint nothing at all if its strokes enclose
 no area.
 
 Not supported (skipped silently): CSS stylesheets/`<style>`, a
-`clip-path` that is a CSS shape rather than a `url()`, `filter`, `pattern`, animation/SMIL, `foreignObject`,
+`clip-path` that is a CSS shape rather than a `url()`, `filter`, `pattern`, animation/SMIL,
 external references, `preserveAspectRatio` on the root `svg` (whose
 `viewBox` is stretched to the box `draw` is given), a `symbol`'s `viewBox`,
 a dash length that is a percentage, and of text: a path to set it along, `rotate`,
@@ -317,7 +322,9 @@ that holds and none of the rest — that one as it says, so one that is
   `#Animation` and the like. SVG 2 dropped the attribute and browsers hold
   every one; here a feature it lacks picks the author's fallback, which is
   how a draw.io export's labels draw: as the `text` it writes after each
-  `foreignObject` for renderers without one.
+  `foreignObject` for renderers without one. A draw handed
+  `opts.foreignObject` draws one, and `#Extensibility` holds in it: the
+  object is drawn, and the fallback is not.
 - `systemLanguage` holds where one of its comma-separated tags is one of the
   view's `languages`, or one of them narrowed or widened by a subtag — `en`
   matches `en-AU` and `en-AU` matches `en`. An empty one never holds. By
@@ -328,6 +335,47 @@ that holds and none of the rest — that one as it says, so one that is
 ```js
 const view = new SvgView(null, { languages: ['de-CH', 'de'] });
 ```
+
+## Foreign objects
+
+What a `<foreignObject>` holds is another language — HTML, in a host
+document's inline `<svg>`, where Mermaid sets its labels and draw.io its
+text — and `SvgView` draws none of it. A caller that can draw it hands
+`draw` an `opts.foreignObject(element, ctx, box)`, which is called for each
+object where the drawing reaches it in its order, over what is drawn
+before it and under what is drawn after:
+
+```js
+view.draw(ctx, x, y, w, h, {
+  foreignObject(element, ctx, { x, y, width, height, opacity }) {
+    // ctx is in the object's user space: lay out and draw what `element`
+    // holds in the rectangle `x`, `y`, `width` by `height`
+  }
+});
+```
+
+- `element` is the object as the view holds it — the element of the tree
+  it was handed (`setSvgDom`), or a `<use>`'s target, once for each
+  `<use>` of it.
+- `ctx` is the context the drawing draws on, in the object's user space:
+  its own `transform` and every one around it in force, the `viewBox`
+  among them, and cut to a `clip-path` on it or on a group around it,
+  which it draws through as the drawing does — on a surface, for a clip
+  of more than one shape or a mask. Its `globalAlpha` is what the
+  `opacity`s down to it come to. The context is restored after the call,
+  whatever it set.
+- `box` is the object's rectangle: its `x` and `y`, 0 where unset, and its
+  `width` and `height`, each a length or a percentage of the viewport,
+  and `opacity`, the alpha above. It is the object's bounding box too,
+  which a clip path or a mask in `objectBoundingBox` units is of, whether
+  or not the draw was handed the hook.
+
+An object with no `width` or `height`, or `auto` for either, draws
+nothing, and so does one that is hidden (`visibility`) or not displayed;
+it is not handed over. Where no hook is given an object draws nothing, as
+before, and `#Extensibility` does not hold in a `requiredFeatures` (see
+[Conditional processing](#conditional-processing)). What the hook draws is
+the caller's, so an object commits to no paint in `paintKind`.
 
 ## Taking colour from the caller
 
