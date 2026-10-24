@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.26.0](https://github.com/sidorares/ntk/compare/v8.25.0...v8.26.0) (2026-10-24)
+
+
+### Features
+
+* **svg:** a foreignObject is handed to the caller to draw, where the drawing reaches it ([#549](https://github.com/sidorares/ntk/issues/549)) ([a41df75](https://github.com/sidorares/ntk/commit/a41df75258a70a666131720f44089c745d80159a))
+
 ## [8.25.0](https://github.com/sidorares/ntk/compare/v8.24.0...v8.25.0) (2026-10-22)
 
 
