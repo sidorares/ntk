@@ -1626,3 +1626,124 @@ test('a marker inside something display: none is drawn nowhere, and one that is 
   assert.equal(fills.filter((c) => c[3] === '#f00').length, 0, 'not the one in the hidden <defs>');
   assert.equal(fills.filter((c) => c[3] === '#00f').length, 1, 'the one hidden itself');
 });
+
+// --- foreignObject, drawn by the caller -------------------------------------
+
+/** A drawing of `body`, `size` across a 100 by 100 viewBox, with what its
+ *  draw handed `opts.foreignObject`: each object as `{ id, box, m, alpha,
+ *  at }` — its id, its box, the context's matrix and alpha when handed
+ *  over, and how many calls the context had then. */
+function foreign(body, { size = 100, hook = true, ...opts } = {}) {
+  const ctx = mockCtx();
+  const objects = [];
+  const view = new SvgView(null).setSvg(`<svg viewBox="0 0 100 100">${body}</svg>`);
+  view.draw(ctx, 0, 0, size, size, {
+    ...opts,
+    ...(hook && {
+      foreignObject(element, c, box) {
+        assert.equal(c, ctx, 'the context it draws on');
+        objects.push({ id: element.attribs.id, box, m: c._m.slice(), alpha: c.globalAlpha, at: ctx.calls.length });
+        // the caller's own state, which the drawing does not keep
+        c.globalAlpha = 0.25;
+        c.transform(3, 0, 0, 3, 0, 0);
+      }
+    })
+  });
+  return { ctx, objects, view };
+}
+
+test('a foreignObject is handed to the caller where the drawing reaches it, in its user space', () => {
+  const { ctx, objects } = foreign(
+    '<rect width="100" height="100" fill="#100"/>' +
+      '<g transform="translate(10 20)">' +
+      '<foreignObject id="a" x="5" y="5" width="40" height="30"><div>html</div></foreignObject></g>' +
+      '<rect width="10" height="10" fill="#200"/>',
+    { size: 200 }
+  );
+  assert.equal(objects.length, 1);
+  const [object] = objects;
+  assert.equal(object.id, 'a');
+  assert.deepEqual(object.box, { x: 5, y: 5, width: 40, height: 30, opacity: 1 });
+  // its corner in its user space lands through the viewBox and the group
+  assert.deepEqual(matApply(object.m, 5, 5), [30, 50]);
+  assert.deepEqual(matApply(object.m, 45, 35), [110, 110]);
+  // between the rect before it and the one after it
+  const fills = of(ctx.calls, 'fill');
+  const at = (call) => ctx.calls.indexOf(call);
+  assert.ok(at(fills[0]) < object.at && object.at <= at(fills[1]), 'in the drawing’s order');
+  // and what it left on the context is gone
+  assert.equal(fills[1][4], 1, 'the alpha after it');
+  assert.deepEqual(matApply(fills[1][5], 10, 10), [20, 20], 'the matrix after it');
+});
+
+test('a foreignObject is handed its opacity, and its size as a percentage of the viewport', () => {
+  const { objects } = foreign(
+    '<g opacity="0.5"><foreignObject id="a" opacity="0.5" width="50%" height="25%"/></g>' +
+      '<svg x="50" width="50" height="50" viewBox="0 0 10 10">' +
+      '<foreignObject id="b" x="10%" width="100%" height="100%"/></svg>'
+  );
+  assert.deepEqual(
+    objects.map(({ id, box, alpha }) => [id, box, alpha]),
+    [
+      ['a', { x: 0, y: 0, width: 50, height: 25, opacity: 0.25 }, 0.25],
+      // of the nested viewport, inside its viewBox
+      ['b', { x: 1, y: 0, width: 10, height: 10, opacity: 1 }, 1]
+    ]
+  );
+});
+
+test('a foreignObject of no size, hidden, or not displayed is not handed over, and none draws anything without the hook', () => {
+  const { objects } = foreign(
+    '<foreignObject id="none"/>' +
+      '<foreignObject id="auto" width="auto" height="10"/>' +
+      '<foreignObject id="negative" width="-10" height="10"/>' +
+      '<foreignObject id="hidden" visibility="hidden" width="10" height="10"/>' +
+      '<g display="none"><foreignObject id="undisplayed" width="10" height="10"/></g>' +
+      '<foreignObject id="shown" width="10" height="10"/>'
+  );
+  assert.deepEqual(
+    objects.map((o) => o.id),
+    ['shown']
+  );
+  const { ctx } = foreign('<foreignObject width="10" height="10" fill="#f00"/>', { hook: false });
+  assert.deepEqual(of(ctx.calls, 'fill'), []);
+});
+
+test('a foreignObject is cut to a clip-path around it, and its box is what objectBoundingBox units are of', () => {
+  const { ctx, objects } = foreign(
+    '<clipPath id="half" clipPathUnits="objectBoundingBox"><rect width=".5" height="1"/></clipPath>' +
+      '<g clip-path="url(#half)"><foreignObject id="a" x="20" y="10" width="60" height="40"/></g>'
+  );
+  assert.equal(objects.length, 1);
+  const clips = of(ctx.calls, 'clip');
+  assert.equal(clips.length, 1);
+  assert.deepEqual(landed(clips[0][1], clips[0][2]), [20, 10, 50, 50], 'the left half of its box');
+  assert.ok(ctx.calls.indexOf(clips[0]) < objects[0].at, 'cut before it is handed over');
+});
+
+test('where a foreignObject is drawn, a switch draws one that asks for Extensibility ahead of its fallback', () => {
+  // how draw.io writes a label: HTML for a renderer with foreignObject,
+  // and the text for one without
+  const body =
+    '<switch><g requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">' +
+    '<foreignObject id="label" width="10" height="10"/></g>' +
+    '<text x="1" y="8">label</text></switch>';
+  const drawn = foreign(body);
+  assert.deepEqual(
+    drawn.objects.map((o) => o.id),
+    ['label']
+  );
+  assert.deepEqual(of(drawn.ctx.calls, 'fillText'), []);
+  const fallback = foreign(body, { hook: false });
+  assert.deepEqual(
+    of(fallback.ctx.calls, 'fillText').map((call) => call[1]),
+    ['label']
+  );
+});
+
+test('paint scan: a foreignObject commits to no paint of its own', () => {
+  const view = new SvgView(null).setSvg(`<svg viewBox="0 0 10 10" fill="currentColor">
+    <path d="M0 0h10v10z"/><foreignObject width="10" height="10" fill="#f00"/></svg>`);
+  assert.equal(view.paintKind, 'mono');
+  assert.equal(view.soloPaint, 'currentColor');
+});
