@@ -60,7 +60,7 @@
     "pngjs": "^7.0.0",
     "restructure": "^3.0.0",
     "tiny-inflate": "^1.0.3",
-    "unicode-properties": "^1.4.0",
+    "unicode-properties": "^2.0.1",
     "unicode-trie": "^2.0.0",
     "x11": "^4.1.0"
   },
