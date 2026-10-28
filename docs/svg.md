@@ -107,6 +107,7 @@ Elements:
   where it sets none and whose stops it takes where it has none, through
   any number of them. A radial gradient under a `gradientTransform` that
   stretches it stays a circle, of the same area
+- `pattern` as a fill — see [Patterns](#patterns)
 - `text`, with `tspan` (and `a` and `textPath`, read as a `tspan`) — see
   [Text](#text)
 - `mask` — see [Masks](#masks)
@@ -116,7 +117,8 @@ Elements:
 
 Presentation attributes (also inside inline `style="…"`, which wins):
 
-- `fill`, `stroke` — colors, `none`, `currentColor`, `url(#gradient)`
+- `fill`, `stroke` — colors, `none`, `currentColor`, `url(#gradient)`;
+  `fill` also `url(#pattern)`
 - `fill-rule` (`nonzero`/`evenodd`), `fill-opacity`, `stroke-opacity`,
   `opacity` (multiplies down the tree) — each a number or a percentage
 - `display: none`: the element and everything in it are left out, whatever
@@ -154,7 +156,8 @@ outline icon would fill black, or paint nothing at all if its strokes enclose
 no area.
 
 Not supported (skipped silently): CSS stylesheets/`<style>`, a
-`clip-path` that is a CSS shape rather than a `url()`, `filter`, `pattern`, animation/SMIL,
+`clip-path` that is a CSS shape rather than a `url()`, `filter`, a `pattern` as a
+stroke or on text, animation/SMIL,
 external references, `preserveAspectRatio` on the root `svg` (whose
 `viewBox` is stretched to the box `draw` is given), a `symbol`'s `viewBox`,
 a dash length that is a percentage, and of text: a path to set it along, `rotate`,
@@ -268,6 +271,36 @@ nothing, and so does one naming a clipPath that is `display: none` itself,
 as Chrome, Firefox and WebKit all have it; one inside something that is
 `display: none` cuts as any other. The root `svg`'s own `clip-path` is the
 caller's, as its `opacity` and `mask` are.
+
+## Patterns
+
+A shape whose `fill` names a `<pattern>` is filled with its tile, repeated
+across the plane, as SVG 2, 14.3 has it:
+
+- the tile is `width` by `height` at `x`,`y` — fractions of the shape's
+  bounding box from its corner where `patternUnits` is `objectBoundingBox`,
+  the default, and lengths of the user space, a percentage of the viewport,
+  for `userSpaceOnUse` — and the tiles go on from it both ways, moved, turned
+  and scaled by the `patternTransform`
+- what the pattern holds is drawn in each tile from the tile's corner, cut to
+  it: in the user space for `patternContentUnits` of `userSpaceOnUse`, the
+  default, in the bounding box's for `objectBoundingBox`, or with its
+  `viewBox` fitted into the tile as `preserveAspectRatio` says
+- what a pattern does not set itself it takes from the one its
+  `href`/`xlink:href` names, and so on, and its content from the first of
+  them that has any, as a gradient does. A pattern of nothing paints
+  nothing, and one that its own content names is not drawn inside itself
+- what is in it inherits from the pattern's ancestors, not from the shape it
+  fills
+
+The tile is drawn once on a surface — `opts.surface`, or the app's, as a
+[mask](#masks)'s is — at about the size the context draws it, a whole number
+of pixels a side so that tiles side by side meet exactly; then a row of
+tiles and a block of rows, some 256 pixels a side, and the block across the
+shape. A grid of dots a window across is a few dozen draws. Where there is
+no surface, or in a luminance mask, each tile is drawn where it goes. A shape
+that would take more than 4096 blocks, or tiles, is tiled as far as the box
+the drawing is drawn into, and not at all where that is too many as well.
 
 ## Markers
 
