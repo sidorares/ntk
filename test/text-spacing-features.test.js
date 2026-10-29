@@ -87,6 +87,24 @@ test('features take effect whatever the same text was shaped with before', () =>
   assert.equal(featuredFirst._shapeCachedWhole('42', face), featuredFirst._shapeCachedWhole('42', face));
 });
 
+test('a feature asked for applies to every glyph, numr and dnom too', () => {
+  // `font-feature-settings: "numr"`, which apple.com sets its footnote
+  // markers in. fontkit plans numr and dnom for the digits around a
+  // fraction slash, and kept them there when a run asked for them, so the
+  // run's digits came out full size. HarfBuzz applies a feature asked for
+  // to the whole run, and so does the fork from 2.0.4-windowkit.4.
+  const fonts = fontsWith(readFileSync(FIXTURE));
+  const style = { family: 'Test', size: 16 };
+  const ids = (text, features) => glyphIds(new TextLayout(fonts, [{ text, features }], style));
+  // the fixture's numerator and denominator digits, as its fractions make them
+  const [numerator] = ids('1⁄2');
+  const denominator = ids('1⁄2').at(-1);
+  assert.notEqual(numerator, ids('1')[0]);
+  assert.equal(ids('1', { numr: 1 })[0], numerator);
+  assert.equal(ids('2', { dnom: 1 })[0], denominator);
+  assert.deepEqual(ids('12', ['numr']), ids('12', { numr: 1 }));
+});
+
 test('letterSpacing is added after every glyph, and a layout measures, breaks and places carets with it', () => {
   const fonts = fontsWith(readFileSync(join(katexFonts, 'KaTeX_Main-Regular.ttf')));
   const style = { family: 'Test', size: 20 };
