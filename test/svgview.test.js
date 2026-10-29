@@ -1284,6 +1284,29 @@ test('currentColor falls back to the view colour, then to black', () => {
   assert.equal(of(plain.calls, 'stroke')[0][2], '#000');
 });
 
+test('currentColor and none are keywords in any case, and a colour of currentColor is the parent\'s', () => {
+  // CSS Values 4, 2.5: Apple's pages write `fill="currentcolor"`, as CSS
+  // Color 4 serializes it, and their arrows painted nothing
+  for (const paint of ['currentcolor', 'CURRENTCOLOR', 'currentColor']) {
+    const ctx = mockCtx();
+    new SvgView(null).setSvg(ICON(paint)).draw(ctx, 0, 0, 24, 24, { color: '#e17055' });
+    assert.equal(of(ctx.calls, 'stroke')[0][2], '#e17055', paint);
+  }
+  const none = mockCtx();
+  new SvgView(null)
+    .setSvg('<svg viewBox="0 0 10 10"><rect width="10" height="10" fill="NONE" stroke="#123456"/></svg>')
+    .draw(none, 0, 0, 10, 10);
+  assert.equal(of(none.calls, 'fill').length, 0, 'NONE fills nothing');
+  assert.equal(of(none.calls, 'stroke').length, 1);
+  const inherit = mockCtx();
+  new SvgView(null)
+    .setSvg('<svg viewBox="0 0 10 10" color="#00ff00"><g color="currentcolor"><rect width="10" height="10" fill="currentColor"/></g></svg>')
+    .draw(inherit, 0, 0, 10, 10);
+  assert.equal(of(inherit.calls, 'fill')[0][3], '#00ff00', 'the parent\'s colour');
+  const view = new SvgView(null).setSvg(ICON('currentcolor'));
+  assert.equal(view.soloPaint, 'currentColor', 'one paint, the caller\'s');
+});
+
 test('a per-draw colour overrides the view colour, and does not stick', () => {
   const view = new SvgView(null, { color: '#0984e3' }).setSvg(ICON('currentColor'));
   const once = mockCtx();
