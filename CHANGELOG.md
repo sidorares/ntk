@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.26.1](https://github.com/sidorares/ntk/compare/v8.26.0...v8.26.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **svg:** currentcolor and none are paint keywords in any case ([#554](https://github.com/sidorares/ntk/issues/554)) ([ab42057](https://github.com/sidorares/ntk/commit/ab42057077fdc798c6520ced13c84173712bacfd))
+
 ## [8.26.0](https://github.com/sidorares/ntk/compare/v8.25.0...v8.26.0) (2026-10-24)
 
 
