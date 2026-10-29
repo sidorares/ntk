@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.26.2](https://github.com/sidorares/ntk/compare/v8.26.1...v8.26.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* **text:** a feature asked for applies to every glyph, numr and dnom too ([#556](https://github.com/sidorares/ntk/issues/556)) ([bf2de75](https://github.com/sidorares/ntk/commit/bf2de75d9f7e613566112d2e2c875ccb1a53646d))
+
 ## [8.26.1](https://github.com/sidorares/ntk/compare/v8.26.0...v8.26.1) (2026-10-29)
 
 
