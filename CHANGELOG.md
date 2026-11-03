@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.27.0](https://github.com/sidorares/ntk/compare/v8.26.2...v8.27.0) (2026-11-03)
+
+
+### Features
+
+* **svg:** a pattern fills a shape with its tile ([#560](https://github.com/sidorares/ntk/issues/560)) ([ba69670](https://github.com/sidorares/ntk/commit/ba69670eed71fc1bd4f32aad29c3730675a33ddf))
+
 ## [8.26.2](https://github.com/sidorares/ntk/compare/v8.26.1...v8.26.2) (2026-10-29)
 
 
