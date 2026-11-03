@@ -1680,6 +1680,140 @@ test('a marker inside something display: none is drawn nowhere, and one that is 
   assert.equal(fills.filter((c) => c[3] === '#00f').length, 1, 'the one hidden itself');
 });
 
+// --- context-fill and context-stroke ------------------------------------------
+
+/** A mock context that throws on a colour nothing knows, as ntk's does. */
+function strictCtx() {
+  const ctx = mockCtx();
+  for (const key of ['fillStyle', 'strokeStyle']) {
+    let value = null;
+    Object.defineProperty(ctx, key, {
+      get: () => value,
+      set(v) {
+        if (typeof v === 'string' && /^context-/i.test(v)) throw new Error(`Not a color: ${JSON.stringify(v)}`);
+        value = v;
+      }
+    });
+  }
+  return ctx;
+}
+
+/** Where a linear gradient filled through a matrix is along its line, at a
+ *  point of the device: 0 at its start, 1 at its end. */
+function along(fill, x, y) {
+  const g = fill[3];
+  const [ux, uy] = matApply(matInvert(fill[5]), x, y);
+  const dx = g.x2 - g.x1;
+  const dy = g.y2 - g.y1;
+  return ((ux - g.x1) * dx + (uy - g.y1) * dy) / (dx * dx + dy * dy);
+}
+
+test('context-fill and context-stroke in a marker paint the fill and the stroke of the shape it is drawn on', () => {
+  const ctx = strictCtx();
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 200 200">
+    <defs><marker id="m" markerUnits="userSpaceOnUse" markerWidth="20" markerHeight="20" overflow="visible">
+      <rect width="10" height="10" fill="context-stroke" stroke="context-fill"/></marker></defs>
+    <path d="M10 10 L50 10" fill="#0a0" stroke="#00f" marker-start="url(#m)" marker-end="url(#m)"/>
+    <path d="M10 90 L50 90" color="#a0a" fill="none" stroke="currentColor" marker-end="url(#m)"/>
+    <g color="#0aa"><marker id="n" markerUnits="userSpaceOnUse" overflow="visible">
+      <rect width="10" height="10" fill="context-stroke"/></marker></g>
+    <path d="M10 120 L50 120" color="#a0a" fill="none" stroke="currentColor" marker-end="url(#n)"/>
+    <rect y="150" width="5" height="5" fill="#123"/></svg>`);
+  view.draw(ctx, 0, 0, 200, 200);
+  const rects = of(ctx.calls, 'fill').filter((c) => c[3] === '#00f');
+  assert.equal(rects.length, 2, 'each marker of the first path fills in its stroke');
+  assert.equal(of(ctx.calls, 'stroke').filter((c) => c[2] === '#0a0').length, 2, 'and strokes in its fill');
+  // a currentColor is the colour of what paints with it, which a marker's
+  // content inherits from what the marker is in (paint-context-003)
+  assert.equal(of(ctx.calls, 'fill').filter((c) => c[3] === '#000').length, 1, 'a currentColor stroke is the marker’s colour');
+  assert.equal(of(ctx.calls, 'fill').filter((c) => c[3] === '#0aa').length, 1, 'and another marker’s, its own');
+  assert.equal(of(ctx.calls, 'fill').filter((c) => c[3] === '#a0a').length, 0, 'not the shape’s');
+  // the second path fills nothing, and its marker's stroke is nothing
+  assert.equal(of(ctx.calls, 'stroke').length, 5, 'the three paths, and the first path’s two markers');
+  assert.equal(of(ctx.calls, 'fill').filter((c) => c[3] === '#123').length, 1, 'and what comes after is drawn');
+});
+
+test('a context-fill gradient in a marker is the shape’s, laid on its box in its user space, however the marker turns', () => {
+  // Firefox's marker-context-fill-transform: the marker's rects lie inside
+  // the path, and are a part of its gradient
+  const ctx = strictCtx();
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 1600 900">
+    <defs><linearGradient id="lg"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient>
+      <marker id="marker" refX="-10" refY="-10" markerWidth="600" markerHeight="400" orient="30">
+        <rect width="200" height="100" fill="context-fill"/></marker></defs>
+    <g transform="translate(600 450) scale(1.5 0.5) rotate(-30)">
+      <path fill="url(#lg)" d="M 10 10 h 600 v 400 h -600 Z" marker-start="url(#marker)"/></g></svg>`);
+  view.draw(ctx, 0, 0, 800, 450);
+  const [path, rect] = of(ctx.calls, 'fill');
+  assert.equal(rect?.[3]?.type, 'linear', 'the marker fills with a gradient');
+  for (const [x, y] of [
+    [300, 225],
+    [420, 180],
+    [500, 300]
+  ]) {
+    assert.ok(Math.abs(along(path, x, y) - along(rect, x, y)) < 1e-9, `the same colour at ${x},${y}`);
+  }
+});
+
+test('context-fill in a use paints the use’s fill, with its box, and a nested use or marker the paint it was given', () => {
+  // paint-context-001: a use in a marker takes the shape's paints, and the
+  // rect it draws takes them from the use
+  const ctx = strictCtx();
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 200 200">
+    <defs><linearGradient id="lg"><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>
+      <rect id="r" width="2" height="2" style="fill:context-stroke;stroke:context-fill"/>
+      <marker id="m" markerWidth="2" markerHeight="2" overflow="visible">
+        <use href="#r" style="fill:context-fill;stroke:context-stroke"/></marker>
+      <g id="g" color="#0f0"><rect width="40" height="20" fill="context-fill"/>
+        <rect x="40" width="40" height="20" fill="none"/></g></defs>
+    <path d="M10 10 L50 10" fill="#00f" stroke="#0f0" marker-start="url(#m)"/>
+    <use href="#g" x="100" color="#f00" fill="currentColor"/>
+    <use href="#g" y="100" fill="url(#lg)"/></svg>`);
+  view.draw(ctx, 0, 0, 200, 200);
+  const fills = of(ctx.calls, 'fill');
+  assert.equal(fills[1][3], '#0f0', 'the marker’s rect fills in the use’s stroke, the path’s');
+  assert.equal(of(ctx.calls, 'stroke')[1][2], '#00f', 'and strokes in its fill');
+  assert.equal(fills[2][3], '#0f0', 'a currentColor fill is the group’s colour, not the use’s');
+  const gradient = fills[3][3];
+  assert.equal(gradient.type, 'linear');
+  assert.deepEqual([gradient.x1, gradient.x2], [0, 80], 'across the use’s box, not the rect’s');
+});
+
+test('context-fill and context-stroke with no context element paint nothing, and the rest of the drawing is drawn', () => {
+  const ctx = strictCtx();
+  const view = new SvgView(null);
+  view.setSvg(`<svg viewBox="0 0 100 100">
+    <rect width="10" height="10" fill="CONTEXT-FILL" stroke="context-stroke"/>
+    <text x="10" y="50" fill="context-stroke">a</text>
+    <rect x="50" width="10" height="10" fill="#0a0"/></svg>`);
+  view.draw(ctx, 0, 0, 100, 100);
+  assert.deepEqual(
+    of(ctx.calls, 'fill').map((c) => c[3]),
+    ['#0a0']
+  );
+  assert.equal(of(ctx.calls, 'stroke').length + of(ctx.calls, 'fillText').length, 0);
+});
+
+test('paint scan: a context paint is what its context element paints', () => {
+  const marked = new SvgView(null);
+  marked.setSvg(`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <defs><marker id="m"><path d="M0 0 L1 1 Z" fill="context-stroke"/></marker></defs>
+    <path d="M2 2 L20 20" marker-end="url(#m)"/></svg>`);
+  assert.equal(marked.paintKind, 'mono', 'an arrowhead in the line’s colour');
+  assert.equal(marked.soloPaint, 'currentColor');
+  const used = new SvgView(null);
+  used.setSvg(`<svg viewBox="0 0 24 24"><defs><path id="p" d="M0 0 L1 1 Z" fill="context-fill"/></defs>
+    <use href="#p" fill="#f00"/><use href="#p" fill="#00f"/></svg>`);
+  assert.equal(used.paintKind, 'multi', 'two uses of two colours');
+  const alone = new SvgView(null);
+  alone.setSvg('<svg viewBox="0 0 24 24"><path d="M0 0 L1 1 Z" fill="context-fill" stroke="#f00"/></svg>');
+  assert.equal(alone.paintKind, 'mono', 'one with no context paints nothing');
+  assert.equal(alone.soloPaint, '#f00');
+});
+
 // --- foreignObject, drawn by the caller -------------------------------------
 
 /** A drawing of `body`, `size` across a 100 by 100 viewBox, with what its
