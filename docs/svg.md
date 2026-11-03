@@ -117,7 +117,8 @@ Elements:
 
 Presentation attributes (also inside inline `style="…"`, which wins):
 
-- `fill`, `stroke` — colors, `none`, `currentColor`, `url(#gradient)`;
+- `fill`, `stroke` — colors, `none`, `currentColor`, `url(#gradient)`,
+  `context-fill` and `context-stroke` — see [Context paint](#context-paint);
   `fill` also `url(#pattern)`
 - `fill-rule` (`nonzero`/`evenodd`), `fill-opacity`, `stroke-opacity`,
   `opacity` (multiplies down the tree) — each a number or a percentage
@@ -337,6 +338,38 @@ does not apply to a marker, and Chrome and WebKit draw one that says
 reaches itself draws what it holds once. Markers count for
 [`paintKind`](#paintkind-which-documents-can-be-recoloured): a marker of
 another colour makes a drawing more than one.
+
+## Context paint
+
+`context-fill` and `context-stroke` are the fill and the stroke of an
+element's *context element* (SVG 2, 13.3), in either property: a marker's
+content takes them from the shape that draws the marker, and what a `use`
+draws from the `use`. An arrowhead in its line's colour is
+`<path fill="context-stroke"/>` in the marker.
+
+- **Nested contexts hand on what they were given**: a `use` in a marker
+  whose fill is `context-fill` paints the shape's fill, and so does a
+  `context-fill` in what that `use` draws.
+- **A gradient is the context element's**, laid against its bounding box
+  and in its user space, whatever the marker turns and scales in between:
+  a marker's rect inside a shape filled with a gradient is that part of
+  the gradient, and cannot be told from it. The space is worked out from
+  the context's `getTransform()`, so a context without one paints the
+  gradient as though the two spaces were the same.
+- **A pattern is not handed on yet**: a `context-fill` whose context is
+  filled with a `url(#pattern)` paints nothing, and the drawing goes on.
+- **A `currentColor` handed through a context is the painted element's
+  colour**, not the context element's, as Chrome and Safari have it
+  (`paint-context-003` in WPT): a `use` with `fill="currentColor"` of a
+  group with `color="green"` paints what is in it green.
+- **With no context element, they paint nothing**, and the rest of the
+  drawing is drawn. The context throws on a colour it does not know, so a
+  keyword handed to it as one gave the whole drawing up.
+
+A context paint counts for
+[`paintKind`](#paintkind-which-documents-can-be-recoloured) as the paint it
+comes to: an arrowhead of `context-stroke` on a `currentColor` line keeps a
+drawing `mono`.
 
 ## Conditional processing
 
