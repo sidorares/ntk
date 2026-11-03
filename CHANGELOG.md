@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.28.0](https://github.com/sidorares/ntk/compare/v8.27.0...v8.28.0) (2026-11-03)
+
+
+### Features
+
+* **svg:** context-fill and context-stroke paint what a marker or a use is drawn for ([#562](https://github.com/sidorares/ntk/issues/562)) ([ddcfef2](https://github.com/sidorares/ntk/commit/ddcfef2955ea8098267d5197488ff4f5261eb870))
+
 ## [8.27.0](https://github.com/sidorares/ntk/compare/v8.26.2...v8.27.0) (2026-11-03)
 
 
