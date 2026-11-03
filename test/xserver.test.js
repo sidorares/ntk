@@ -402,6 +402,79 @@ test('SvgView: a mask cuts what it masks, by alpha or by luminance, on the surfa
   wnd.destroy();
 });
 
+test('SvgView: a pattern fills with its tile, from its corner, moved by its transform, in either units', async () => {
+  // SVG 2, 14.3: a red square in the corner of each tile; the tile's
+  // content is set from its corner, x, and repeats across the plane
+  const W = 128;
+  const { wnd, ctx } = freshWindow(W, 64);
+  const square = '<rect width="4" height="4" fill="#ff0000"/>';
+  const fill = (id, attrs) =>
+    `<svg width="32" height="32"><pattern id="${id}" ${attrs}>${square}</pattern>` +
+    `<rect width="32" height="32" fill="url(#${id})"/></svg>`;
+  new SvgView(null).setSvg(fill('a', 'x="2" width="8" height="8" patternUnits="userSpaceOnUse"')).draw(ctx, 0, 0);
+  // moved by its transform
+  new SvgView(null)
+    .setSvg(fill('b', 'width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="translate(1,3)"'))
+    .draw(ctx, 32, 0);
+  // a quarter of the bounding box a side, from its corner; and the tile of
+  // one it takes after
+  new SvgView(null)
+    .setSvg(
+      `<svg width="32" height="32"><pattern id="t">${square}</pattern>` +
+        '<pattern id="c" href="#t" width=".25" height=".25"/>' +
+        '<rect x="4" y="4" width="24" height="24" fill="url(#c)"/></svg>'
+    )
+    .draw(ctx, 64, 0);
+  // drawn at twice the size: the tile with it
+  new SvgView(null)
+    .setSvg(fill('d', 'width="8" height="8" patternUnits="userSpaceOnUse"'))
+    .draw(ctx, 0, 32, 64, 64);
+  // a pattern of nothing paints nothing, and one that names itself in its
+  // content draws the rest of it
+  new SvgView(null)
+    .setSvg(
+      '<svg width="32" height="32"><pattern id="e" width="8" height="8" patternUnits="userSpaceOnUse"/>' +
+        '<pattern id="f" width="8" height="8" patternUnits="userSpaceOnUse">' +
+        `${square}<rect x="4" y="4" width="4" height="4" fill="url(#f)"/></pattern>` +
+        '<rect width="32" height="16" fill="url(#e)"/><rect y="16" width="32" height="16" fill="url(#f)"/></svg>'
+    )
+    .draw(ctx, 96, 0);
+  // a shape past the box the drawing is drawn into, as a caller that
+  // shows what overflows it draws one: filled all the way
+  new SvgView(null)
+    .setSvg(
+      '<svg width="8" height="8"><pattern id="g" width="8" height="8" patternUnits="userSpaceOnUse">' +
+        `${square}</pattern><rect width="64" height="32" fill="url(#g)"/></svg>`
+    )
+    .draw(ctx, 64, 32);
+
+  const image = await readPixels(ctx, W, 64);
+  const red = [255, 0, 0];
+  const white = [255, 255, 255];
+  const at = (x, y) => px(image, W, x, y);
+  assert.deepEqual(at(3, 1), red, 'a tile from x');
+  assert.deepEqual(at(1, 1), white, 'and not before it');
+  assert.deepEqual(at(7, 1), white, 'the rest of the tile');
+  assert.deepEqual(at(11, 1), red, 'the next tile across');
+  assert.deepEqual(at(3, 9), red, 'and down');
+  assert.deepEqual(at(3, 5), white, 'between them');
+  assert.deepEqual(at(32 + 2, 4), red, 'moved by its transform');
+  assert.deepEqual(at(32 + 0, 4), white, 'from where it moved it');
+  assert.deepEqual(at(32 + 2, 1), white, 'and down');
+  assert.deepEqual(at(64 + 5, 5), red, "from the box's corner");
+  assert.deepEqual(at(64 + 9, 5), white, 'its tile a quarter of the box');
+  assert.deepEqual(at(64 + 11, 5), red, 'the next');
+  assert.deepEqual(at(64 + 2, 2), white, 'nothing outside what it fills');
+  assert.deepEqual(at(7, 32 + 7), red, 'twice the size');
+  assert.deepEqual(at(9, 32 + 7), white, 'and the tile twice as wide');
+  assert.deepEqual(at(17, 32 + 1), red, 'the next');
+  assert.deepEqual(at(96 + 1, 1), white, 'a pattern of nothing');
+  assert.deepEqual(at(96 + 1, 17), red, 'one that names itself');
+  assert.deepEqual(at(96 + 5, 21), white, 'in its own content, nothing');
+  assert.deepEqual(at(64 + 41, 32 + 9), red, 'past the box it is drawn into');
+  wnd.destroy();
+});
+
 test('SvgView: a clip-path cuts to its clipPath, through a use as Illustrator writes one, and to the union of several shapes', async () => {
   const { wnd, ctx } = freshWindow(128, 64);
   // CSS Zen Garden 215's arm in its circle, in small: the circle in a

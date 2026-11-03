@@ -118,6 +118,36 @@ test('setSvg reads viewBox and width/height for the natural size', () => {
   assert.equal(vbOnly.naturalWidth, 24);
 });
 
+test('a pattern with no surface to draw on draws each tile where it goes, cut to the tile and to the shape', () => {
+  const view = new SvgView(null);
+  view.setSvg(
+    '<svg width="100" height="100">' +
+      '<pattern id="p" x="5" width="10" height="10" patternUnits="userSpaceOnUse">' +
+      '<circle cx="2" cy="2" r="2" fill="#00f"/></pattern>' +
+      '<rect width="30" height="20" fill="url(#p)"/></svg>'
+  );
+  const ctx = mockCtx();
+  view.draw(ctx, 0, 0);
+  // x from -5, the tile before the shape that reaches into it, to 25
+  const dots = of(ctx.calls, 'fill').map((c) => [c[5][4], c[5][5]]);
+  assert.deepEqual(dots, [
+    [-5, 0], [5, 0], [15, 0], [25, 0],
+    [-5, 10], [5, 10], [15, 10], [25, 10]
+  ]);
+  assert.ok(of(ctx.calls, 'fill').every((c) => c[3] === '#00f'), 'in its colour');
+  // the shape first, then each tile
+  assert.equal(of(ctx.calls, 'clip').length, 1 + dots.length);
+
+  // too many tiles to draw one at a time: none
+  const many = new SvgView(null).setSvg(
+    '<svg width="100" height="100"><pattern id="p" width=".01" height=".01">' +
+      '<rect width="1" height="1"/></pattern><rect width="100" height="100" fill="url(#p)"/></svg>'
+  );
+  const quiet = mockCtx();
+  many.draw(quiet, 0, 0);
+  assert.equal(of(quiet.calls, 'fill').length, 0);
+});
+
 test('rect/circle/path elements fill with inherited styles', () => {
   const view = new SvgView(null);
   view.setSvg(`<svg viewBox="0 0 100 100">
