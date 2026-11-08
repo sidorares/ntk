@@ -778,8 +778,8 @@ test('protocol: AddTraps accumulates antialiased coverage', async () => {
   Render.CreatePicture(picId, pid, Render.a8);
   Render.FillRectangles(Render.PictOp.Src, picId, [0, 0, 0, 0], [0, 0, 8, 8]);
 
-  // half-pixel-tall full-width span: expect ~50% coverage on row 2, and two
-  // adds on the same span must accumulate to ~100%
+  // half-pixel-tall full-width span: about half coverage on row 2, and two
+  // more adds on the same span must accumulate to full coverage
   const span = [0, 8, 2, 0, 8, 2.5]; // top l/r/y, bottom l/r/y
   Render.AddTraps(picId, 0, 0, span);
   const one = await new Promise((resolve, reject) =>
@@ -787,7 +787,10 @@ test('protocol: AddTraps accumulates antialiased coverage', async () => {
   );
   // depth-8 GetImage: one byte per pixel, rows padded to 4 (8 is aligned)
   const alphaAt = (img, x, y) => img.data[y * 8 + x];
-  near(alphaAt(one, 4, 2), 128, 6, 'half-covered row');
+  // RENDER's Precise grid for a8 is 17 samples by 15 rows, the rows at
+  // 1/30 + k/15 of the pixel; the top half holds 7 of them, and 7 × 17 =
+  // 119. pixman servers give exactly this, as node-x11's has since 4.3.0.
+  assert.equal(alphaAt(one, 4, 2), 119, 'half-covered row');
   assert.equal(alphaAt(one, 4, 3), 0, 'row below untouched');
 
   Render.AddTraps(picId, 0, 0, span);
