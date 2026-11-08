@@ -130,9 +130,14 @@ test('and the whole square is symmetric, at every width and join', async () => {
         square(ctx);
       });
       const { worst, where } = asymmetry(at);
-      // 1 is antialiasing rounding on the two axes; a missing join is a
-      // whole corner, which reads as 255 minus its edge coverage
-      assert.ok(worst <= 1, `${join} lineWidth ${lw}: asymmetry ${worst} at ${where}`);
+      // An odd width puts the edges on half pixels, and RENDER's Precise
+      // grid samples a pixel 17 columns by 15 rows: a half-covered pixel
+      // reads 119 or 136 along a horizontal edge, 120 or 135 along a
+      // vertical one, so the quarter turn costs up to 16 levels. XQuartz
+      // and node-x11's own server since 4.3.0 both give exactly that. A
+      // missing join is a whole corner: at least 71 levels at lineWidth 1,
+      // 255 from 2 up.
+      assert.ok(worst <= 16, `${join} lineWidth ${lw}: asymmetry ${worst} at ${where}`);
     }
   }
 });
