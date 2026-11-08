@@ -9,6 +9,32 @@ updates:
         update-types:
           - minor
           - patch
+    # These are the dependencies of the vendored fontkit build, at the ranges
+    # the windowkit fork declares: `scripts/vendor-fontkit.mjs --check` fails
+    # CI when package.json says anything else. An update inside the range only
+    # moves the lockfile and passes; one outside it has to come from the fork,
+    # through the vendor script (AGENTS.md, "The fontkit fork"). dfa 2 is why
+    # (#559): the build imports a default export that dfa 2 no longer has.
+    ignore:
+      - dependency-name: "@swc/helpers"
+        # 0.x: a minor is outside ^0.5 as a major is
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: brotli
+        update-types: ["version-update:semver-major"]
+      - dependency-name: clone
+        update-types: ["version-update:semver-major"]
+      - dependency-name: dfa
+        update-types: ["version-update:semver-major"]
+      - dependency-name: fast-deep-equal
+        update-types: ["version-update:semver-major"]
+      - dependency-name: restructure
+        update-types: ["version-update:semver-major"]
+      - dependency-name: tiny-inflate
+        update-types: ["version-update:semver-major"]
+      - dependency-name: unicode-properties
+        update-types: ["version-update:semver-major"]
+      - dependency-name: unicode-trie
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
