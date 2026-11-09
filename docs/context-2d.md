@@ -157,6 +157,14 @@ source, so a pixel half covered is half of the way to the blend. pixman runs
 floats and the rest in 8-bit integers; the in-process server matches the
 second to the bit and the first within a level.
 
+Older pixman draws the four HSL modes wrongly through a mask: Debian
+bookworm's, 0.42.2, scales green by the mask twice and blue not at all,
+where 0.46.4 is right. So on a server built on it, `hue`, `saturation`,
+`color` and `luminosity` come out off in green and blue wherever there is a
+mask: under `globalAlpha` below 1, a path clip, and the antialiased edge of
+anything but a whole-pixel rectangle or image. Nothing on the client can
+tell or correct it.
+
 ### Composite ops that clear
 
 `copy`, `source-in`, `destination-in`, `source-out` and `destination-atop`
