@@ -72,15 +72,20 @@ ctx.fillRect(0, 0, 100, 100);
 - `ctx.shadowColor`, `ctx.shadowBlur`, `ctx.shadowOffsetX`,
   `ctx.shadowOffsetY` — drop shadows, off by default (a transparent
   `shadowColor`). See **Shadows** below
-- `ctx.globalCompositeOperation` — Porter-Duff subset mapped to XRender ops:
-  `source-over` (default), `copy`, `destination-over`, `source-in`,
+- `ctx.globalCompositeOperation` — mapped to XRender ops: the Porter-Duff
+  subset, `source-over` (default), `copy`, `destination-over`, `source-in`,
   `destination-in`, `source-out`, `destination-out`, `source-atop`,
-  `destination-atop`, `xor`, `lighter`. Everything drawn takes it: fills,
+  `destination-atop`, `xor`, `lighter`, and the blend modes, `multiply`,
+  `screen`, `overlay`, `darken`, `lighten`, `color-dodge`, `color-burn`,
+  `hard-light`, `soft-light`, `difference`, `exclusion`, `hue`,
+  `saturation`, `color` and `luminosity`. Everything drawn takes it: fills,
   strokes, rectangles, images, text (`fillText`, `TextLayout.draw`) and the
   shadows they cast. The ops that write where a drawing has no ink clear the
   rest of the drawing's own box, not the surface, and no op changes a pixel
   outside the clip — see
-  [Composite ops that clear](#composite-ops-that-clear)
+  [Composite ops that clear](#composite-ops-that-clear). A name the context
+  cannot draw is ignored, as a browser ignores one it does not know, so read
+  it back to know — see [Blend modes](#blend-modes)
 - `ctx.font` — the CSS `font` shorthand (`'bold italic 40px "DejaVu Sans"'`),
   resolved through fontconfig; see [fonts.md](fonts.md). Style, weight,
   `small-caps` and a stretch keyword come in any order before the size; a
@@ -118,6 +123,47 @@ The ops that write where a drawing has no ink — `copy`, `source-in`,
 `destination-in`, `source-out` and `destination-atop` — take a rectangle or a
 region the way every other op does, and a path clip after the op rather than
 through the mask: see [Composite ops that clear](#composite-ops-that-clear).
+
+### Blend modes
+
+The blend modes are RENDER's from 0.11 (`Multiply` to `HSLLuminosity`),
+which composite as CSS's `mix-blend-mode` does: what a pixel comes to is a
+function of the colour drawn and the colour under it. A server that answered
+`QueryVersion` below 0.11 has none of them, and raises `BadPictOp` for each
+after the call has returned, so the context takes a blend mode's name only
+where the server has them and leaves the op as it was otherwise. A caller
+asks by setting one and reading it back:
+
+```js
+ctx.globalCompositeOperation = 'multiply';
+if (ctx.globalCompositeOperation !== 'multiply') {
+  // this server cannot blend: draw it some other way
+}
+```
+
+Every X.Org server since 2009 has them — Xorg, Xvfb, Xwayland, XQuartz — and
+so does node-x11's in-process one. On Xvfb and XQuartz, and wherever the
+server composites with fb, pixman draws them. glamor, under Xorg's
+modesetting driver and Xwayland, has shaders for the Porter-Duff operators
+alone, and falls back to software for these, reading what they are drawn
+over back from the GPU: a large surface drawn with one costs more there than
+one drawn `source-over`.
+
+They take the clip, `globalAlpha` and a drawing's antialiased edge as
+`source-over` does, through the mask: a transparent source leaves the
+destination as it was through every one of them, and each is linear in the
+source, so a pixel half covered is half of the way to the blend. pixman runs
+`color-dodge`, `color-burn`, `soft-light` and the four HSL modes in single
+floats and the rest in 8-bit integers; the in-process server matches the
+second to the bit and the first within a level.
+
+Older pixman draws the four HSL modes wrongly through a mask: Debian
+bookworm's, 0.42.2, scales green by the mask twice and blue not at all,
+where 0.46.4 is right. So on a server built on it, `hue`, `saturation`,
+`color` and `luminosity` come out off in green and blue wherever there is a
+mask: under `globalAlpha` below 1, a path clip, and the antialiased edge of
+anything but a whole-pixel rectangle or image. Nothing on the client can
+tell or correct it.
 
 ### Composite ops that clear
 
