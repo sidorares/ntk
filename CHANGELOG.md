@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.29.0](https://github.com/sidorares/ntk/compare/v8.28.0...v8.29.0) (2026-11-09)
+
+
+### Features
+
+* **2d:** globalCompositeOperation takes the blend modes, multiply to luminosity, where the server has RENDER 0.11 ([#567](https://github.com/sidorares/ntk/issues/567)) ([6b265c1](https://github.com/sidorares/ntk/commit/6b265c172cd9ff03040fba01a9d4204bb5233387))
+
 ## [8.28.0](https://github.com/sidorares/ntk/compare/v8.27.0...v8.28.0) (2026-11-03)
 
 
