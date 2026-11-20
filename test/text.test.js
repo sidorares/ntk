@@ -145,6 +145,26 @@ test('shapeText splits mixed-direction text into level runs', needsFonts, () => 
   assert.equal(shaped.runs[0].text.trim(), 'abc');
 });
 
+test('a right-to-left run draws a character with a mirrored form as it (UAX#9 L4)', needsFonts, () => {
+  const fonts = new FontManager();
+  const font = fonts.match('serif');
+  // an override puts `(a>` in a right-to-left run: its `(` is drawn as `)`
+  // and its `>` as `<`, and the text and its offsets stay what they were
+  const shaped = shapeText(fonts, '\u202E(a>\u202C', { font, size: 16 });
+  const rtl = shaped.runs.find((r) => r.level & 1);
+  assert.ok(rtl, 'an rtl run');
+  assert.equal(rtl.text, '(a>');
+  const ids = rtl.glyphs.map((g) => g.id).sort((a, b) => a - b);
+  const want = shapeText(fonts, ')a<', { font, size: 16 })
+    .runs[0].glyphs.map((g) => g.id)
+    .sort((a, b) => a - b);
+  assert.deepEqual(ids, want);
+  // and none where the run reads left to right
+  const ltr = shapeText(fonts, '(a>', { font, size: 16 }).runs[0];
+  const plain = ltr.glyphs.map((g) => g.id).sort((a, b) => a - b);
+  assert.notDeepEqual(plain, want);
+});
+
 test('font fallback picks a covering font for unsupported scripts', needsFonts, (t) => {
   const fonts = new FontManager();
   const base = fonts.match('Times New Roman');
