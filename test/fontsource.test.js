@@ -478,8 +478,9 @@ test('a letter the first family lacks is set in the next one the style names', (
   assert.equal(fm.match('Primary, Second').hasGlyph(A), false, 'precondition');
   assert.equal(fm.fallbackFor(A, 'Primary, Second').postscriptName, 'KaTeX_SansSerif-Regular');
   assert.equal(fm.fallbackFor(A, '"Primary", "Second"').postscriptName, 'KaTeX_SansSerif-Regular');
-  // a list that names no face with the letter still finds one registered
-  assert.equal(fm.fallbackFor(A, 'Primary').postscriptName, 'KaTeX_Main-Regular');
+  // and a list that names no face with the letter takes none of the faces
+  // it does not name: they are other text's, and the source has nothing
+  assert.equal(fm.fallbackFor(A, 'Primary'), null);
 });
 
 test('a word is shaped again for another family list after its first face', () => {
