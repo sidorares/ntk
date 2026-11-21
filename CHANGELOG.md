@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.29.1](https://github.com/sidorares/ntk/compare/v8.29.0...v8.29.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **text:** a right-to-left run draws a character with a mirrored form as it (UAX[#9](https://github.com/sidorares/ntk/issues/9) rule L4) ([#569](https://github.com/sidorares/ntk/issues/569)) ([2a453d6](https://github.com/sidorares/ntk/commit/2a453d6b8d873a72b1cb7eab4e39b8c3b4f15647))
+
 ## [8.29.0](https://github.com/sidorares/ntk/compare/v8.28.0...v8.29.0) (2026-11-09)
 
 
