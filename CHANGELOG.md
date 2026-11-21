@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.29.2](https://github.com/sidorares/ntk/compare/v8.29.1...v8.29.2) (2026-11-21)
+
+
+### Bug Fixes
+
+* **text:** a fallback takes no registered face the family list does not name ([#571](https://github.com/sidorares/ntk/issues/571)) ([76652ed](https://github.com/sidorares/ntk/commit/76652edf128411cadf10ffdfef519db853b05aae))
+
 ## [8.29.1](https://github.com/sidorares/ntk/compare/v8.29.0...v8.29.1) (2026-11-20)
 
 
