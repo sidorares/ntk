@@ -86,10 +86,13 @@ test('the space a line ends with is looked up once a face, not once a word', () 
 });
 
 test('text nothing can reverse is level 0 without the bidi pass, and the rest takes it', () => {
-  const same = (text, direction) => {
+  // bidi-js reads a character of the supplementary planes as two
+  // left-to-right letters, so it is asked about one in the letters of its
+  // class that it does read (`astralAsBmp`)
+  const same = (text, direction, asked = text) => {
     const ours = embeddingLevels(text, direction);
     const explicit = direction === 'ltr' || direction === 'rtl' ? direction : null;
-    const theirs = bidi.getEmbeddingLevels(text, explicit);
+    const theirs = bidi.getEmbeddingLevels(asked, explicit);
     assert.deepEqual([...ours.levels], [...theirs.levels], `levels of ${JSON.stringify(text)}`);
     assert.equal(
       ours.paragraphs[0]?.level ?? 0,
@@ -115,10 +118,12 @@ test('text nothing can reverse is level 0 without the bidi pass, and the rest ta
     'an RLM ‏ here',
     'an LRE ‪embedded‬ run',
     'an isolate ⁧inside⁩ it',
-    'Phoenician: 𐤀𐤁',
     'a presentation form יִ'
   ]) {
     for (const direction of ['auto', 'ltr', 'rtl']) same(text, direction);
+  }
+  for (const direction of ['auto', 'ltr', 'rtl']) {
+    same('Phoenician: \u{10900}\u{10901}', direction, 'Phoenician: \u05D0\u05D0\u05D0\u05D0');
   }
   // an explicit rtl paragraph is never the short cut, whatever it holds
   for (const text of ['plain words', '42']) same(text, 'rtl');

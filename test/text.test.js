@@ -12,7 +12,7 @@ import FontManager from '../lib/text/fontmanager.js';
 import { StaticFontSource } from '../lib/text/fontsource.js';
 import { encodeGlyphItems } from '../lib/text/glyphs.js';
 import { TextLayout } from '../lib/text/layout.js';
-import { reorderRuns, shapeText } from '../lib/text/shape.js';
+import { embeddingLevels, reorderRuns, shapeText } from '../lib/text/shape.js';
 
 let hasFontconfig = true;
 try {
@@ -143,6 +143,30 @@ test('shapeText splits mixed-direction text into level runs', needsFonts, () => 
   assert.ok(levels.includes(0), 'has ltr runs');
   // logical order preserved in .runs
   assert.equal(shaped.runs[0].text.trim(), 'abc');
+});
+
+test('a character of the supplementary planes has the level its bidi class gives it', () => {
+  // bidi-js reads a code unit at a time, and takes a surrogate for a
+  // left-to-right letter
+  const levels = (text, direction) => [...embeddingLevels(text, direction).levels];
+  // Cypriot, a right-to-left script, alone and among Latin
+  const cypriot = '\u{10800}\u{10830}';
+  assert.deepEqual(levels(cypriot), [1, 1, 1, 1]);
+  assert.equal(embeddingLevels(cypriot).paragraphs[0].level, 1);
+  assert.deepEqual(levels(`a ${cypriot} b`), [0, 0, 1, 1, 1, 1, 0, 0]);
+  // Adlam and a number after it, as Hebrew and one
+  assert.deepEqual(levels('\u{1E900} 12'), levels('\u05D0\u05D0 12'));
+  // Hanifi Rohingya, an Arabic-type letter and its own digit, as Arabic's
+  assert.deepEqual(levels('\u{10D00}\u{10D30}'), levels('\u0627\u0627\u0660\u0660'));
+  // an emoji is neutral: it does not make a Hebrew paragraph left-to-right,
+  // and two between Hebrew words are at the words' level
+  assert.equal(embeddingLevels('\u{1F600}\u05D0').paragraphs[0].level, 1);
+  assert.deepEqual(levels('\u05D0 \u{1F600}\u{1F601} \u05D1'), [1, 1, 1, 1, 1, 1, 1, 1]);
+  // and a left-to-right letter of the planes is one still
+  assert.deepEqual(levels('\u05D0 \u{1D400} \u05D1'), [1, 1, 2, 2, 1, 1]);
+  // each as long as its text, with nothing to resolve where nothing can
+  // be right-to-left
+  assert.deepEqual(levels('ab \u{1F600}'), [0, 0, 0, 0, 0]);
 });
 
 test('a right-to-left run draws a character with a mirrored form as it (UAX#9 L4)', needsFonts, () => {
