@@ -145,6 +145,77 @@ test('shapeText splits mixed-direction text into level runs', needsFonts, () => 
   assert.equal(shaped.runs[0].text.trim(), 'abc');
 });
 
+test('a line that wraps at a soft hyphen ends in a hyphen, which it has room for', () => {
+  // a monospace face, so a line's width counts its characters
+  const fonts = fixedFonts(['KaTeX_Typewriter-Regular.ttf']);
+  const style = { family: 'Test', size: 20 };
+  const ch = new TextLayout(fonts, 'x', style, {}).lines[0].width;
+  const lines = (text, chars, options = {}) =>
+    new TextLayout(fonts, text, style, { maxWidth: ch * chars + 0.01, ...options }).lines.map((line) => ({
+      // what is drawn: a soft hyphen itself is a glyph of no width
+      text: line.runs
+        .map((r) =>
+          r.run.glyphs
+            .filter((g) => g.ax > 0)
+            .map((g) => String.fromCodePoint(...g.codePoints))
+            .join('')
+        )
+        .join(''),
+      chars: Math.round((line.width / ch) * 100) / 100
+    }));
+  const dna = 'Deoxy\u00ADribo\u00ADnucleic acid';
+  // no wrap at one, no hyphen
+  assert.deepEqual(lines(dna, 30), [{ text: 'Deoxyribonucleic acid', chars: 21 }]);
+  // the hyphen fits exactly: ten characters in ten
+  assert.deepEqual(lines(dna, 10), [
+    { text: 'Deoxyribo-', chars: 10 },
+    { text: 'nucleic', chars: 7 },
+    { text: 'acid', chars: 4 }
+  ]);
+  // nine letters fit in nine and their hyphen does not: the line ends at
+  // the soft hyphen before, and the next at the one it could not
+  assert.deepEqual(lines(dna, 9), [
+    { text: 'Deoxy-', chars: 6 },
+    { text: 'ribo-', chars: 5 },
+    { text: 'nucleic', chars: 7 },
+    { text: 'acid', chars: 4 }
+  ]);
+  // a line of one token keeps it, hyphen and all, as a word too wide does
+  assert.deepEqual(lines(dna, 5)[0], { text: 'Deoxy-', chars: 6 });
+  // a soft hyphen a forced break follows, or the text ends on, shows none
+  assert.deepEqual(
+    lines('ab\u00AD\ncd\u00AD', 10).map((l) => l.text.trim()),
+    ['ab', 'cd']
+  );
+  // a span says what its hyphen is, CSS's `hyphenate-character`: a string,
+  // or none for an empty one, where the line still wraps
+  const said = (hyphen) =>
+    new TextLayout(fonts, [{ text: dna, hyphen }], style, { maxWidth: ch * 10 + 0.01 }).lines.map((line) =>
+      line.runs
+        .map((r) =>
+          r.run.glyphs
+            .filter((g) => g.ax > 0)
+            .map((g) => String.fromCodePoint(...g.codePoints))
+            .join('')
+        )
+        .join('')
+    );
+  assert.deepEqual(said('='), ['Deoxyribo=', 'nucleic', 'acid']);
+  assert.deepEqual(said(''), ['Deoxyribo', 'nucleic', 'acid']);
+  // two characters need the room of two: the line ends a soft hyphen sooner
+  assert.deepEqual(said('=>')[0], 'Deoxy=>');
+  // the hyphen is no character of the text: a point on it is where the
+  // line's letters end, before the soft hyphen
+  const layout = new TextLayout(fonts, dna, style, { maxWidth: ch * 10 + 0.01 });
+  const [first] = layout.lines;
+  const hyphen = first.runs[first.runs.length - 1];
+  assert.equal(hyphen.hyphen, true);
+  assert.equal(hyphen.start, hyphen.end);
+  assert.equal(layout.indexAt(hyphen.x + hyphen.width / 2, first.y + 1), dna.indexOf('nucleic') - 1);
+  // and a line it is on is as wide as it is drawn
+  assert.ok(Math.abs(first.width - ch * 10) < 0.01, `${first.width}`);
+});
+
 test('a right-to-left run draws a character with a mirrored form as it (UAX#9 L4)', needsFonts, () => {
   const fonts = new FontManager();
   const font = fonts.match('serif');
