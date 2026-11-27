@@ -241,6 +241,31 @@ test('a no-break space a line ends on keeps its room; spaces and tabs hang', () 
   assert.equal(width('x\t'), width('x'), 'and a tab');
 });
 
+test('a space before a zero-width space is in the line, and only the spaces after the last character hang', () => {
+  // fontkit shapes a character with no glyph of its own as a space of no
+  // advance, so U+200B after a space read as more trailing white space and
+  // took the space with it: `1. ` and a zero-width space was as wide as
+  // `1.`, where Chromium, Firefox and WebKit all keep the space.
+  const fonts = fixedFonts();
+  const style = { family: 'Test', size: 20 };
+  const width = (text) => new TextLayout(fonts, text, style).lines[0].width;
+  const space = width('x x') - 2 * width('x');
+  assert.ok(space > 0, 'the face has a space');
+  const near = (a, b, message) => assert.ok(Math.abs(a - b) < 0.01, `${message}: ${a} and ${b}`);
+  near(width('x \u200b'), width('x') + space, 'the space before it is kept');
+  near(width('x\u200b'), width('x'), 'and it is no wider for itself');
+  near(width('x \u200b '), width('x') + space, 'a space after it hangs');
+  near(width('x \u200b \u200b'), width('x') + 2 * space, 'and one before the next is kept');
+  // a bidi control is nothing to the white space around it: a space before
+  // the end of an isolate hangs as it did
+  near(width('x \u2069'), width('x'), 'a space before a bidi control hangs');
+  near(width('x \u200e '), width('x'), 'and on either side of one');
+  // a caret still walks the space that hangs
+  const hung = new TextLayout(fonts, 'x \u200b ', style).lines[0];
+  assert.equal(hung._trailing.start, 3, 'what hangs starts after the zero-width space');
+  assert.equal(hung._trailing.glyphs.length, 1);
+});
+
 test('TextLayout force-breaks tokens wider than the container', needsFonts, () => {
   const fonts = new FontManager();
   const layout = new TextLayout(
