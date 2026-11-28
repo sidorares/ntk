@@ -169,6 +169,35 @@ test('a character of the supplementary planes has the level its bidi class gives
   assert.deepEqual(levels('ab \u{1F600}'), [0, 0, 0, 0, 0]);
 });
 
+test('a right-to-left run of a face with no shaping tables is in visual order too', () => {
+  // fontkit reverses a right-to-left run in its OpenType and AAT engines,
+  // and a face with no GSUB, GPOS or morx has neither: KaTeX's, and Ahem,
+  // which the web platform tests are set in
+  const fonts = fixedFonts();
+  const font = fonts.match('Test');
+  const tables = font.fk.directory.tables;
+  assert.ok(!tables.GSUB && !tables.GPOS && !tables.morx, 'the face has none, or this tests nothing');
+  const points = (run) => run.glyphs.map((g) => String.fromCodePoint(...g.codePoints)).join('');
+  const shaped = shapeText(fonts, '\u202Eab c\u202C', { font, size: 16 });
+  const rtl = shaped.runs.find((r) => r.level & 1 && r.text === 'ab c');
+  assert.ok(rtl, 'an rtl run');
+  assert.equal(rtl.direction, 'rtl');
+  assert.equal(points(rtl), 'c ba');
+  // each glyph with its own advance
+  const ltr = shapeText(fonts, 'ab c', { font, size: 16 }).runs[0];
+  assert.equal(points(ltr), 'ab c');
+  assert.deepEqual(
+    rtl.glyphs.map((g) => g.ax),
+    ltr.glyphs.map((g) => g.ax).reverse()
+  );
+  // so the space a line ends on is found at the run's logical end, and
+  // hangs: the line is as wide as its letters
+  const style = { family: 'Test', size: 16 };
+  const line = (text) => new TextLayout(fonts, text, style, { width: 1000 }).lines[0];
+  const hung = line('\u202Eab \u202C');
+  assert.ok(Math.abs(hung.width - line('ab').width) < 0.01, `${hung.width}`);
+});
+
 test('a right-to-left run draws a character with a mirrored form as it (UAX#9 L4)', needsFonts, () => {
   const fonts = new FontManager();
   const font = fonts.match('serif');
