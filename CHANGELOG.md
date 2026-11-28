@@ -1,5 +1,19 @@
 # Changelog
 
+## [8.30.0](https://github.com/sidorares/ntk/compare/v8.29.2...v8.30.0) (2026-11-28)
+
+
+### Features
+
+* **text:** a line that wraps at a soft hyphen ends in a hyphen, which it has room for ([#575](https://github.com/sidorares/ntk/issues/575)) ([cb2b3f4](https://github.com/sidorares/ntk/commit/cb2b3f4f7948d61800285b8088118b37ace37f3a))
+
+
+### Bug Fixes
+
+* **text:** a character of the supplementary planes has the bidi level its class gives it ([#574](https://github.com/sidorares/ntk/issues/574)) ([bfed130](https://github.com/sidorares/ntk/commit/bfed130443c5e1ac53a8727268ab691c647fa13f))
+* **text:** a right-to-left run of a face with no shaping tables is in visual order ([#573](https://github.com/sidorares/ntk/issues/573)) ([c2feef2](https://github.com/sidorares/ntk/commit/c2feef21a8eb03ee4619d49362ab82f3489ca079))
+* **text:** a space before a zero-width space is in its line, and only the spaces after the last character hang ([#576](https://github.com/sidorares/ntk/issues/576)) ([95d70c5](https://github.com/sidorares/ntk/commit/95d70c55969a366f2b33670c5f737f771aebb2f7))
+
 ## [8.29.2](https://github.com/sidorares/ntk/compare/v8.29.1...v8.29.2) (2026-11-21)
 
 
