@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.30.1](https://github.com/sidorares/ntk/compare/v8.30.0...v8.30.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **text:** the soft hyphen a line wraps at is left out of the line again, and the space before one kept ([#578](https://github.com/sidorares/ntk/issues/578)) ([ca21893](https://github.com/sidorares/ntk/commit/ca21893d84abc600040f810ebf6cef8b4edc24e7))
+
 ## [8.30.0](https://github.com/sidorares/ntk/compare/v8.29.2...v8.30.0) (2026-11-28)
 
 
