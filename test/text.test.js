@@ -380,6 +380,9 @@ test('a space before a zero-width space is in the line, and only the spaces afte
   near(width('x\u200b'), width('x'), 'and it is no wider for itself');
   near(width('x \u200b '), width('x') + space, 'a space after it hangs');
   near(width('x \u200b \u200b'), width('x') + 2 * space, 'and one before the next is kept');
+  // and a space before a soft hyphen, which shows nothing where no line
+  // wraps at it
+  near(width('x \u00ad'), width('x') + space, 'a space before a soft hyphen is kept');
   // a bidi control is nothing to the white space around it: a space before
   // the end of an isolate hangs as it did
   near(width('x \u2069'), width('x'), 'a space before a bidi control hangs');
