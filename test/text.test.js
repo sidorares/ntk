@@ -12,7 +12,7 @@ import FontManager from '../lib/text/fontmanager.js';
 import { StaticFontSource } from '../lib/text/fontsource.js';
 import { encodeGlyphItems } from '../lib/text/glyphs.js';
 import { TextLayout } from '../lib/text/layout.js';
-import { reorderRuns, shapeText } from '../lib/text/shape.js';
+import { embeddingLevels, reorderRuns, shapeText } from '../lib/text/shape.js';
 
 let hasFontconfig = true;
 try {
@@ -143,6 +143,130 @@ test('shapeText splits mixed-direction text into level runs', needsFonts, () => 
   assert.ok(levels.includes(0), 'has ltr runs');
   // logical order preserved in .runs
   assert.equal(shaped.runs[0].text.trim(), 'abc');
+});
+
+test('a line that wraps at a soft hyphen ends in a hyphen, which it has room for', () => {
+  // a monospace face, so a line's width counts its characters
+  const fonts = fixedFonts(['KaTeX_Typewriter-Regular.ttf']);
+  const style = { family: 'Test', size: 20 };
+  const ch = new TextLayout(fonts, 'x', style, {}).lines[0].width;
+  const lines = (text, chars, options = {}) =>
+    new TextLayout(fonts, text, style, { maxWidth: ch * chars + 0.01, ...options }).lines.map((line) => ({
+      // what is drawn: a soft hyphen itself is a glyph of no width
+      text: line.runs
+        .map((r) =>
+          r.run.glyphs
+            .filter((g) => g.ax > 0)
+            .map((g) => String.fromCodePoint(...g.codePoints))
+            .join('')
+        )
+        .join(''),
+      chars: Math.round((line.width / ch) * 100) / 100
+    }));
+  const dna = 'Deoxy\u00ADribo\u00ADnucleic acid';
+  // no wrap at one, no hyphen
+  assert.deepEqual(lines(dna, 30), [{ text: 'Deoxyribonucleic acid', chars: 21 }]);
+  // the hyphen fits exactly: ten characters in ten
+  assert.deepEqual(lines(dna, 10), [
+    { text: 'Deoxyribo-', chars: 10 },
+    { text: 'nucleic', chars: 7 },
+    { text: 'acid', chars: 4 }
+  ]);
+  // nine letters fit in nine and their hyphen does not: the line ends at
+  // the soft hyphen before, and the next at the one it could not
+  assert.deepEqual(lines(dna, 9), [
+    { text: 'Deoxy-', chars: 6 },
+    { text: 'ribo-', chars: 5 },
+    { text: 'nucleic', chars: 7 },
+    { text: 'acid', chars: 4 }
+  ]);
+  // a line of one token keeps it, hyphen and all, as a word too wide does
+  assert.deepEqual(lines(dna, 5)[0], { text: 'Deoxy-', chars: 6 });
+  // a soft hyphen a forced break follows, or the text ends on, shows none
+  assert.deepEqual(
+    lines('ab\u00AD\ncd\u00AD', 10).map((l) => l.text.trim()),
+    ['ab', 'cd']
+  );
+  // a span says what its hyphen is, CSS's `hyphenate-character`: a string,
+  // or none for an empty one, where the line still wraps
+  const said = (hyphen) =>
+    new TextLayout(fonts, [{ text: dna, hyphen }], style, { maxWidth: ch * 10 + 0.01 }).lines.map((line) =>
+      line.runs
+        .map((r) =>
+          r.run.glyphs
+            .filter((g) => g.ax > 0)
+            .map((g) => String.fromCodePoint(...g.codePoints))
+            .join('')
+        )
+        .join('')
+    );
+  assert.deepEqual(said('='), ['Deoxyribo=', 'nucleic', 'acid']);
+  assert.deepEqual(said(''), ['Deoxyribo', 'nucleic', 'acid']);
+  // two characters need the room of two: the line ends a soft hyphen sooner
+  assert.deepEqual(said('=>')[0], 'Deoxy=>');
+  // the hyphen is no character of the text: a point on it is where the
+  // line's letters end, before the soft hyphen
+  const layout = new TextLayout(fonts, dna, style, { maxWidth: ch * 10 + 0.01 });
+  const [first] = layout.lines;
+  const hyphen = first.runs[first.runs.length - 1];
+  assert.equal(hyphen.hyphen, true);
+  assert.equal(hyphen.start, hyphen.end);
+  assert.equal(layout.indexAt(hyphen.x + hyphen.width / 2, first.y + 1), dna.indexOf('nucleic') - 1);
+  // and a line it is on is as wide as it is drawn
+  assert.ok(Math.abs(first.width - ch * 10) < 0.01, `${first.width}`);
+});
+
+test('a character of the supplementary planes has the level its bidi class gives it', () => {
+  // bidi-js reads a code unit at a time, and takes a surrogate for a
+  // left-to-right letter
+  const levels = (text, direction) => [...embeddingLevels(text, direction).levels];
+  // Cypriot, a right-to-left script, alone and among Latin
+  const cypriot = '\u{10800}\u{10830}';
+  assert.deepEqual(levels(cypriot), [1, 1, 1, 1]);
+  assert.equal(embeddingLevels(cypriot).paragraphs[0].level, 1);
+  assert.deepEqual(levels(`a ${cypriot} b`), [0, 0, 1, 1, 1, 1, 0, 0]);
+  // Adlam and a number after it, as Hebrew and one
+  assert.deepEqual(levels('\u{1E900} 12'), levels('\u05D0\u05D0 12'));
+  // Hanifi Rohingya, an Arabic-type letter and its own digit, as Arabic's
+  assert.deepEqual(levels('\u{10D00}\u{10D30}'), levels('\u0627\u0627\u0660\u0660'));
+  // an emoji is neutral: it does not make a Hebrew paragraph left-to-right,
+  // and two between Hebrew words are at the words' level
+  assert.equal(embeddingLevels('\u{1F600}\u05D0').paragraphs[0].level, 1);
+  assert.deepEqual(levels('\u05D0 \u{1F600}\u{1F601} \u05D1'), [1, 1, 1, 1, 1, 1, 1, 1]);
+  // and a left-to-right letter of the planes is one still
+  assert.deepEqual(levels('\u05D0 \u{1D400} \u05D1'), [1, 1, 2, 2, 1, 1]);
+  // each as long as its text, with nothing to resolve where nothing can
+  // be right-to-left
+  assert.deepEqual(levels('ab \u{1F600}'), [0, 0, 0, 0, 0]);
+});
+
+test('a right-to-left run of a face with no shaping tables is in visual order too', () => {
+  // fontkit reverses a right-to-left run in its OpenType and AAT engines,
+  // and a face with no GSUB, GPOS or morx has neither: KaTeX's, and Ahem,
+  // which the web platform tests are set in
+  const fonts = fixedFonts();
+  const font = fonts.match('Test');
+  const tables = font.fk.directory.tables;
+  assert.ok(!tables.GSUB && !tables.GPOS && !tables.morx, 'the face has none, or this tests nothing');
+  const points = (run) => run.glyphs.map((g) => String.fromCodePoint(...g.codePoints)).join('');
+  const shaped = shapeText(fonts, '\u202Eab c\u202C', { font, size: 16 });
+  const rtl = shaped.runs.find((r) => r.level & 1 && r.text === 'ab c');
+  assert.ok(rtl, 'an rtl run');
+  assert.equal(rtl.direction, 'rtl');
+  assert.equal(points(rtl), 'c ba');
+  // each glyph with its own advance
+  const ltr = shapeText(fonts, 'ab c', { font, size: 16 }).runs[0];
+  assert.equal(points(ltr), 'ab c');
+  assert.deepEqual(
+    rtl.glyphs.map((g) => g.ax),
+    ltr.glyphs.map((g) => g.ax).reverse()
+  );
+  // so the space a line ends on is found at the run's logical end, and
+  // hangs: the line is as wide as its letters
+  const style = { family: 'Test', size: 16 };
+  const line = (text) => new TextLayout(fonts, text, style, { width: 1000 }).lines[0];
+  const hung = line('\u202Eab \u202C');
+  assert.ok(Math.abs(hung.width - line('ab').width) < 0.01, `${hung.width}`);
 });
 
 test('a right-to-left run draws a character with a mirrored form as it (UAX#9 L4)', needsFonts, () => {
